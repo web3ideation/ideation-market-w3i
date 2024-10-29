@@ -1,0 +1,11 @@
+NOTICE
+
+This project uses the following third-party libraries:
+
+1. OpenZeppelin Contracts
+   - License: MIT
+   - Repository: https://github.com/OpenZeppelin/openzeppelin-contracts
+
+2. Forge Standard Library
+   - License: MIT
+   - Repository: https://github.com/foundry-rs/forge-std
