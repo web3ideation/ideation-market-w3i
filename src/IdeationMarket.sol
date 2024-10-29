@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "hardhat/console.sol"; // W!!! this is for debugging, right? so delete it before going mainnet
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotOwner(uint256 tokenId, address nftAddress, address nftOwner); // !!!W all those arguments might be too much unnecessary information. does it safe gas or sth if i leave it out?
@@ -103,10 +102,7 @@ contract IdeationMarket is ReentrancyGuard {
     }
 
     modifier notListed(address nftAddress, uint256 tokenId) {
-        require(
-            s_listings[nftAddress][tokenId].seller == address(0),
-            "IdeationMarket__AlreadyListed"
-        );
+        require(s_listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
         _;
     }
 
@@ -165,36 +161,18 @@ contract IdeationMarket is ReentrancyGuard {
 
         // !!!W I need to add a check that the user doesnt try to swap list agains the same nft they are listing. so if the desiredNftAddress and desiredTokenId are the same as the nftAddress and tokenId, it should revert.
 
-        require(
-            !(nftAddress == desiredNftAddress && tokenId == desiredTokenId),
-            "IdeationMarket__NoSwapForSameNft"
-        );
+        require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), "IdeationMarket__NoSwapForSameNft");
 
         // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
         s_listingId++;
-        s_listings[nftAddress][tokenId] = Listing(
-            s_listingId,
-            price,
-            msg.sender,
-            desiredNftAddress,
-            desiredTokenId
-        );
-        emit ItemListed(
-            s_listingId,
-            nftAddress,
-            tokenId,
-            true,
-            price,
-            msg.sender,
-            desiredNftAddress,
-            desiredTokenId
-        );
+        s_listings[nftAddress][tokenId] = Listing(s_listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
+        emit ItemListed(s_listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
 
         // !!!W is there a way to listen to the BasicNft event for if the approval has been revoked, to then cancel the listing automatically?
     }
 
-    function checkApproval(address nftAddress, uint tokenId) internal {
+    function checkApproval(address nftAddress, uint256 tokenId) internal {
         // !!!W would it make sense to have this being a modifier?
         nft = IERC721(nftAddress);
         if (nft.getApproved(tokenId) != address(this)) {
@@ -214,8 +192,8 @@ contract IdeationMarket is ReentrancyGuard {
 
         if (msg.value < listedItem.price) {
             revert IdeationMarket__PriceNotMet(nftAddress, tokenId, listedItem.price); // !!!W I think it would be good to add msg.value as well so its visible how much eth has actually been tried to transfer, since i guess there are gas costs and stuff...
-            // !!!W i could also do this with `require(msg.value == listedItem.price, "Incorrect Ether sent");` - is this better? like safer and or gas efficient?
-            // !!!W make this a require statement instead of an if statement(?)
+                // !!!W i could also do this with `require(msg.value == listedItem.price, "Incorrect Ether sent");` - is this better? like safer and or gas efficient?
+                // !!!W make this a require statement instead of an if statement(?)
         } else {
             uint256 fee = ((listedItem.price * ideationMarketFee) / 100000);
             uint256 newProceeds = listedItem.price - fee;
@@ -223,17 +201,14 @@ contract IdeationMarket is ReentrancyGuard {
             s_proceeds[owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
             if (listedItem.desiredNftAddress != address(0)) {
                 require( // !!!W should i have this as a modifier just like the isOwner one i use for the listItem?
-                    IERC721(listedItem.desiredNftAddress).ownerOf(listedItem.desiredTokenId) ==
-                        msg.sender,
+                    IERC721(listedItem.desiredNftAddress).ownerOf(listedItem.desiredTokenId) == msg.sender,
                     "You don't own the desired NFT for swap"
                 );
                 checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId); // !!!W this is a quick fix. cGPT said there was an issue about the approval.
 
                 // Swap the NFTs
                 IERC721(listedItem.desiredNftAddress).safeTransferFrom(
-                    msg.sender,
-                    listedItem.seller,
-                    listedItem.desiredTokenId
+                    msg.sender, listedItem.seller, listedItem.desiredTokenId
                 );
                 // !!!W In case the swapped nft had been actively listed at the time, that listing has to get canceled
                 // !!!W when implementing the swap + eth option, i need to have the s_proceeds here aswell. - i think i do already at the top...
@@ -258,10 +233,11 @@ contract IdeationMarket is ReentrancyGuard {
         }
     }
 
-    function cancelListing(
-        address nftAddress,
-        uint256 tokenId
-    ) external isListed(nftAddress, tokenId) isOwner(nftAddress, tokenId, msg.sender) {
+    function cancelListing(address nftAddress, uint256 tokenId)
+        external
+        isListed(nftAddress, tokenId)
+        isOwner(nftAddress, tokenId, msg.sender)
+    {
         Listing memory listedItem = s_listings[nftAddress][tokenId]; // what happens to this memory variable after the struct in the mapping has been deleted and after the function has been executed? does it get deleted automatically?
         delete (s_listings[nftAddress][tokenId]);
 
@@ -295,8 +271,7 @@ contract IdeationMarket is ReentrancyGuard {
         // );
 
         require(
-            !(nftAddress == newDesiredNftAddress && tokenId == newdesiredTokenId),
-            "IdeationMarket__NoSwapForSameNft"
+            !(nftAddress == newDesiredNftAddress && tokenId == newdesiredTokenId), "IdeationMarket__NoSwapForSameNft"
         );
 
         checkApproval(nftAddress, tokenId); // *** patrick didnt check if the approval is still given in his contract
@@ -325,7 +300,7 @@ contract IdeationMarket is ReentrancyGuard {
         } // !!!W make this a require statement instead of an if statement(?)
         s_proceeds[msg.sender] = 0;
         payable(msg.sender).transfer(proceeds); // *** I'm using this instead of Patricks (bool success, ) = payable(msg.sender).call{value: proceeds}(""); require(success, "IdeationMarket__TransferFailed");`bc mine reverts on its own when it doesnt succeed, and therby I consider it better!
-        // should this function also emit an event? just for being able to track when somebody withdrew?
+            // should this function also emit an event? just for being able to track when somebody withdrew?
     }
 
     function setFee(uint256 fee) external onlyOwner {
@@ -336,10 +311,7 @@ contract IdeationMarket is ReentrancyGuard {
     // getter Functions //
     //////////////////////
 
-    function getListing(
-        address nftAddress,
-        uint256 tokenId
-    ) external view returns (Listing memory) {
+    function getListing(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
         return s_listings[nftAddress][tokenId];
     }
 
