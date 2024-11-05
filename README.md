@@ -17,6 +17,11 @@ what are the DiamondLoupe functions actually used for? like ok for stuff like et
 
 libDiamond.sol also implements (also storage) governance -> change for dao!
 
+what about using arrays in the appstorage struct, like i cant edit them once impelemnted since that would mess up the storage?
+
+what about using external contracts with storage? that would set my appstorage to something else than position 0?
+
+what about having structs in my appstorage struct? can i add variables to those structs without messing up the whole storage layout? -> yes i can add variables in nested structs ✅
 
 reducing gas costs for executing functions:
 Facets can contain few external functions, reducing gas costs. Because it costs more gas to call a function in a contract with many functions than a contract with few functions.
