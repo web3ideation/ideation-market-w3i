@@ -1,9 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-struct AppStorage {
-    uint256 firstVar;
+struct Listing {
+    uint256 listingId;
+    uint256 price;
+    address seller;
+    address desiredNftAddress;
+    uint256 desiredTokenId;
 }
+
+struct AppStorage {
+    uint256 s_listingId;
+    uint256 ideationMarketFee;
+    mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
+    mapping(address => uint256) s_proceeds; // Proceeds by seller address
+    address owner;
+}
+// IERC721 nft; // Temporarily used for checks in functions // I think this is unnecessary to have as a state variable at all
 
 library LibAppStorage {
     function appStorage() internal pure returns (AppStorage storage s) {

@@ -12,14 +12,14 @@ error IdeationMarket__NoProceeds();
 error IdeationMarket__TransferFailed(); // !!!W is this even necessary? i think it reverts on its own when it fails, right? If it is necessary maybe add the error message that is given by the transfer function
 
 contract IdeationMarket is ReentrancyGuard {
-    struct Listing {
-        uint256 listingId; // *** I want that every Listing has a uinque Lising Number, just like in the real world :)
-        // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
-        uint256 price;
-        address seller;
-        address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
-        uint256 desiredTokenId; // Desired token IDs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
-    } // *** also find a way to have the seller list their nft for swap WITH additional ETH. so that they can say i want my 1ETH worth NFT to be swapped against this specific NFT AND 0.3 ETH.
+    // struct Listing {
+    //     uint256 listingId; // *** I want that every Listing has a uinque Lising Number, just like in the real world :)
+    //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
+    //     uint256 price;
+    //     address seller;
+    //     address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
+    //     uint256 desiredTokenId; // Desired token IDs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
+    // } // *** also find a way to have the seller list their nft for swap WITH additional ETH. so that they can say i want my 1ETH worth NFT to be swapped against this specific NFT AND 0.3 ETH.
 
     // !!!W maybe I should change the isListed to something like status where i have an enum with options listed, updated, canceled, bought, swapped, etc. and then i can have a function that returns all the listings of a specific status. that would be a nice feature for the frontend. But more importantly i can use this for thegraph to feed the frontend this this specific information.
     event ItemListed(
@@ -70,25 +70,24 @@ contract IdeationMarket is ReentrancyGuard {
     // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
     // !!!W add that all the info of the s_listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
     // NFT Contract address -> NFT TokenID -> Listing
-    mapping(address => mapping(uint256 => Listing)) private s_listings;
+    // mapping(address => mapping(uint256 => Listing)) private s_listings;
 
     // seller address -> amount earned
-    mapping(address => uint256) private s_proceeds;
+    // mapping(address => uint256) private s_proceeds;
 
-    address private owner; // !!!W If the diamond contract doesnt take care of that: Make sure to be give the possibility to transfer ownership
-    IERC721 nft; // !!!W test if its a problem to have this declared here and not in every function extra, if multiple users use the contracts functions at the same time. I think i actually could just declare this in each function again and again and work with the input arguments and returns to let the data flow
-    // !!!W cGPT mentioned: Declaring nft at the contract level can lead to potential issues if multiple functions are called concurrently. It's safer to declare it within each function where it's needed.
-    uint256 s_listingId;
-    uint256 public ideationMarketFee; // ***W this should also be adaptable -> variable to be set by contract owner // W*** add to the proceeds mapping the contract owner so there would be logged how much fee there is to be deducted, and with this the owner should be able to withdraw the fees - i guess i need to initilize the contract owner through the constructor then // !!!W add a way to send all eth that are in this contract to the companys wallet (or is that already there just by being the owner of the cotnract?) // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
+    // address private owner; // !!!W If the diamond contract doesnt take care of that: Make sure to be give the possibility to transfer ownership
+
+    // uint256 public ideationMarketFee; // ***W this should also be adaptable -> variable to be set by contract owner // W*** add to the proceeds mapping the contract owner so there would be logged how much fee there is to be deducted, and with this the owner should be able to withdraw the fees - i guess i need to initilize the contract owner through the constructor then // !!!W add a way to send all eth that are in this contract to the companys wallet (or is that already there just by being the owner of the cotnract?) // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
 
     /////////////////
     // Constructor //
     /////////////////
 
     constructor(uint256 fee, uint256 lastListingId) {
-        owner = msg.sender;
-        ideationMarketFee = fee; // 1000 is 1%
-        s_listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.owner = msg.sender;
+        s.ideationMarketFee = fee; // 1000 is 1%
+        s.s_listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
     }
 
     ///////////////
@@ -98,17 +97,20 @@ contract IdeationMarket is ReentrancyGuard {
     // nonReentrant Modifier is inherited
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Caller is not the owner");
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(msg.sender == s.owner, "Caller is not the owner");
         _;
     }
 
     modifier notListed(address nftAddress, uint256 tokenId) {
-        require(s_listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(s.listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
         _;
     }
 
     modifier isListed(address nftAddress, uint256 tokenId) {
-        require(s_listings[nftAddress][tokenId].seller != address(0), "IdeationMarket__NotListed");
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(s.listings[nftAddress][tokenId].seller != address(0), "IdeationMarket__NotListed");
         _;
     }
 
@@ -118,7 +120,7 @@ contract IdeationMarket is ReentrancyGuard {
         uint256 tokenId,
         address owner // !!!W rename this to nftOwner - bc it uses the same name as the contractowner variable
     ) {
-        nft = IERC721(nftAddress);
+        IERC721 nft = IERC721(nftAddress);
         if (msg.sender != nft.ownerOf(tokenId)) {
             revert IdeationMarket__NotOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
         } // !!!W make this a require statement instead of an if statement(?)
@@ -162,20 +164,22 @@ contract IdeationMarket is ReentrancyGuard {
 
         // !!!W I need to add a check that the user doesnt try to swap list agains the same nft they are listing. so if the desiredNftAddress and desiredTokenId are the same as the nftAddress and tokenId, it should revert.
 
+        AppStorage storage s = LibAppStorage.appStorage();
+
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), "IdeationMarket__NoSwapForSameNft");
 
         // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
-        s_listingId++;
-        s_listings[nftAddress][tokenId] = Listing(s_listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
-        emit ItemListed(s_listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
+        s.s_listingId++;
+        s.listings[nftAddress][tokenId] = Listing(s.s_listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
+        emit ItemListed(s.s_listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
 
         // !!!W is there a way to listen to the BasicNft event for if the approval has been revoked, to then cancel the listing automatically?
     }
 
-    function checkApproval(address nftAddress, uint256 tokenId) internal {
+    function checkApproval(address nftAddress, uint256 tokenId) internal view {
         // !!!W would it make sense to have this being a modifier?
-        nft = IERC721(nftAddress);
+        IERC721 nft = IERC721(nftAddress);
         if (nft.getApproved(tokenId) != address(this)) {
             revert IdeationMarket__NotApprovedForMarketplace();
         } // !!!W make this a require statement instead of an if statement(?)
@@ -187,36 +191,35 @@ contract IdeationMarket is ReentrancyGuard {
         address nftAddress, // !!!W should i rather work with the listingId of the struct? that seems more streamlined...
         uint256 tokenId
     ) external payable nonReentrant isListed(nftAddress, tokenId) {
+        AppStorage storage s = LibAppStorage.appStorage();
         // !!!W if two users call the function concurrently the second user will be blocked. what happens then? is there a way to not even have the user notice that and just try again?
         // checkApproval(nftAddress, tokenId); // !!!W I want to check if the ideationMarket still has the rights to transfer the nft when it is about to be bought. but i probably have to change this function sincec this time its the buyer calling it, not the seller so it needs to get the sellers addres via the listingStruct// !!!W add a test that confirms that the buyItem function fails if the approval has been revoked in the meantime!
-        Listing memory listedItem = s_listings[nftAddress][tokenId];
+        Listing memory listedItem = s.listings[nftAddress][tokenId];
 
         if (msg.value < listedItem.price) {
             revert IdeationMarket__PriceNotMet(nftAddress, tokenId, listedItem.price); // !!!W I think it would be good to add msg.value as well so its visible how much eth has actually been tried to transfer, since i guess there are gas costs and stuff...
                 // !!!W i could also do this with `require(msg.value == listedItem.price, "Incorrect Ether sent");` - is this better? like safer and or gas efficient?
                 // !!!W make this a require statement instead of an if statement(?)
         } else {
-            uint256 fee = ((listedItem.price * ideationMarketFee) / 100000);
+            // !!!W this else keyword is not necessary, should i keep it? does it make a gas difference?
+            uint256 fee = ((listedItem.price * s.ideationMarketFee) / 100000);
             uint256 newProceeds = listedItem.price - fee;
-            s_proceeds[listedItem.seller] += newProceeds;
-            s_proceeds[owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
+            s.s_proceeds[listedItem.seller] += newProceeds;
+            s.s_proceeds[s.owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
             if (listedItem.desiredNftAddress != address(0)) {
+                IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
                 require( // !!!W should i have this as a modifier just like the isOwner one i use for the listItem?
-                    IERC721(listedItem.desiredNftAddress).ownerOf(listedItem.desiredTokenId) == msg.sender,
-                    "You don't own the desired NFT for swap"
-                );
+                desiredNft.ownerOf(listedItem.desiredTokenId) == msg.sender, "You don't own the desired NFT for swap");
                 checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId); // !!!W this is a quick fix. cGPT said there was an issue about the approval.
 
                 // Swap the NFTs
-                IERC721(listedItem.desiredNftAddress).safeTransferFrom(
-                    msg.sender, listedItem.seller, listedItem.desiredTokenId
-                );
+                desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
                 // !!!W In case the swapped nft had been actively listed at the time, that listing has to get canceled
                 // !!!W when implementing the swap + eth option, i need to have the s_proceeds here aswell. - i think i do already at the top...
             } // !!!W make this a require statement instead of an if statement(?)
             // maybe its safer to not use else but start a new if with `if (!listedItem.isForSwap) {`
 
-            delete (s_listings[nftAddress][tokenId]); // W!!! cGPT said bv of reentrancy attacks i need to move this here instead of after the nft transfer. check if it still works. check if i should also consider that before transfering the swap NFT. // !!!W Ask cGPT again what else i need to do to be fully reentrancy attack proof
+            delete (s.listings[nftAddress][tokenId]); // W!!! cGPT said bv of reentrancy attacks i need to move this here instead of after the nft transfer. check if it still works. check if i should also consider that before transfering the swap NFT. // !!!W Ask cGPT again what else i need to do to be fully reentrancy attack proof
 
             IERC721(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId); // !!!W this needs an revert catch thingy bc if it fails to transfer the nft, for example because the approval has been revoked, the whole function has to be reverted.
 
@@ -239,8 +242,9 @@ contract IdeationMarket is ReentrancyGuard {
         isListed(nftAddress, tokenId)
         isOwner(nftAddress, tokenId, msg.sender)
     {
-        Listing memory listedItem = s_listings[nftAddress][tokenId]; // what happens to this memory variable after the struct in the mapping has been deleted and after the function has been executed? does it get deleted automatically?
-        delete (s_listings[nftAddress][tokenId]);
+        AppStorage storage s = LibAppStorage.appStorage();
+        Listing memory listedItem = s.listings[nftAddress][tokenId]; // what happens to this memory variable after the struct in the mapping has been deleted and after the function has been executed? does it get deleted automatically?
+        delete (s.listings[nftAddress][tokenId]);
 
         emit ItemCanceled(
             listedItem.listingId,
@@ -271,16 +275,18 @@ contract IdeationMarket is ReentrancyGuard {
         //     "IdeationMarket__PriceMustBeAboveZeroOrNoDesiredNftGiven"
         // );
 
+        AppStorage storage s = LibAppStorage.appStorage();
+
         require(
             !(nftAddress == newDesiredNftAddress && tokenId == newdesiredTokenId), "IdeationMarket__NoSwapForSameNft"
         );
 
         checkApproval(nftAddress, tokenId); // *** patrick didnt check if the approval is still given in his contract
-        Listing memory listedItem = s_listings[nftAddress][tokenId];
+        Listing memory listedItem = s.listings[nftAddress][tokenId];
         listedItem.price = newPrice;
         listedItem.desiredNftAddress = newDesiredNftAddress;
         listedItem.desiredTokenId = newdesiredTokenId;
-        s_listings[nftAddress][tokenId] = listedItem;
+        s.listings[nftAddress][tokenId] = listedItem;
         emit ItemUpdated(
             listedItem.listingId, // !!!W test if the listingId stays the same, even if between the listItem creation and the updateListing have been other listings created and deleted
             nftAddress,
@@ -295,17 +301,20 @@ contract IdeationMarket is ReentrancyGuard {
 
     // to try out the ReentrancyAttack.sol,  comment out the `nonReentrant` , move the `s_proceeds[msg.sender] = 0;` to after the ETH transfer and change the `payable(msg.sender).transfer(proceeds);` to `(bool success, ) = payable(msg.sender).call{value: proceeds, gas: 30000000}("");` because Hardhat has an issue estimating the gas for the receive fallback function... The Original should work on the testnet, tho! !!!W Try on the testnet if reentrancy attack is possible
     function withdrawProceeds() external payable nonReentrant {
-        uint256 proceeds = s_proceeds[msg.sender];
+        AppStorage storage s = LibAppStorage.appStorage();
+        uint256 proceeds = s.s_proceeds[msg.sender];
         if (proceeds <= 0) {
             revert IdeationMarket__NoProceeds();
         } // !!!W make this a require statement instead of an if statement(?)
-        s_proceeds[msg.sender] = 0;
+        s.s_proceeds[msg.sender] = 0;
         payable(msg.sender).transfer(proceeds); // *** I'm using this instead of Patricks (bool success, ) = payable(msg.sender).call{value: proceeds}(""); require(success, "IdeationMarket__TransferFailed");`bc mine reverts on its own when it doesnt succeed, and therby I consider it better!
             // should this function also emit an event? just for being able to track when somebody withdrew?
+            // !!!W throw an event!
     }
 
     function setFee(uint256 fee) external onlyOwner {
-        ideationMarketFee = fee;
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.ideationMarketFee = fee;
     }
 
     //////////////////////
@@ -313,15 +322,18 @@ contract IdeationMarket is ReentrancyGuard {
     //////////////////////
 
     function getListing(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
-        return s_listings[nftAddress][tokenId];
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.listings[nftAddress][tokenId];
     }
 
     function getProceeds(address seller) external view returns (uint256) {
-        return s_proceeds[seller];
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.s_proceeds[seller];
     }
 
     function getNextListingId() external view returns (uint256) {
-        return s_listingId; // *** With this function people can find out what the next Listing Id would be
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.s_listingId; // *** With this function people can find out what the next Listing Id would be
     }
 
     function getBalance() external view returns (uint256) {
