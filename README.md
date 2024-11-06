@@ -11,7 +11,12 @@ https://github.com/mudgen/diamond ✅
 https://github.com/alexbabits/diamond-3-foundry ✅
 and what about appstorage - seems to be an alternative to diamond storage - but which one should i use? Understand AppStorage and check alexbabits impelementation since he seems to use both -> I rather use Diamon Storage since there are not clashes if importing external contracts that also use storage ✅
 decide which implementation to base on (what about mudgens foundry implementation? on which 1 2 or 3 is it based on?) -> diamond 3 -> but which foundry implementation?? ✅
-compare the .sol files of alexbabits to the ones from nick mudge which i already imported to my repo ⬅️
+compare the .sol files of alexbabits to the ones from nick mudge which i already imported to my repo - use cGPT to compare the implementations -> 
+continue reading the last cGPT message and then scroll back up to ctrl+F "Here’s a detailed comparison between the original and Foundry implementations of diamond.sol, highlighting all changes, deletions, and additions:" and continue with comparing the files ⬅️
+
+read the documentation again for how to deploy my diamond
+
+do I need to get rid of the constructor? Since I have to store the variables in the Diamond instead of using the constructor of the IdeationMarketFacet I should create a DiamondInit / InitializationFacet with a function that would act as the constructor for the IdeationMarketFacet (and also governance inputs and other initialization stuff)
 
 what are the DiamondLoupe functions actually used for? like ok for stuff like etherscan, but other than that?? I mean would they actually even be called onchain?? 
 

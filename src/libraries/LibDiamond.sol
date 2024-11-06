@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.7;
 
 /**
  * \
@@ -8,6 +7,8 @@ pragma experimental ABIEncoderV2;
  * EIP-2535 Diamond Standard: https://eips.ethereum.org/EIPS/eip-2535
  * /*****************************************************************************
  */
+// adapted by wolf3i
+
 import "../interfaces/IDiamondCut.sol";
 
 library LibDiamond {

@@ -4,7 +4,7 @@ pragma experimental ABIEncoderV2;
 
 /**
  * \
- * Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
+ * Author: Nick Mudge <nickATperfectabstractions.com> (https://twitter.com/mudgen)
  * EIP-2535 Diamond Standard: https://eips.ethereum.org/EIPS/eip-2535
  * /*****************************************************************************
  */

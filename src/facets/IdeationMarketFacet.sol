@@ -83,12 +83,15 @@ contract IdeationMarket is ReentrancyGuard {
     // Constructor //
     /////////////////
 
-    constructor(uint256 fee, uint256 lastListingId) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        s.owner = msg.sender;
-        s.ideationMarketFee = fee; // 1000 is 1%
-        s.s_listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
-    }
+    // !!!W constructor doesnt make sense when using diamond! -> initialize through diamond
+    // !!!W the owner even tho initialized through the diamond would still be my address as the one that calls the initialization. But this should rather be the multisigwallet or something else democratically governed. (maybe the governance contract of this diamond?)
+
+    // constructor(uint256 fee, uint256 lastListingId) {
+    //     AppStorage storage s = LibAppStorage.appStorage();
+    //     s.owner = msg.sender;
+    //     s.ideationMarketFee = fee; // 1000 is 1%
+    //     s.s_listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
+    // }
 
     ///////////////
     // Modifiers //
@@ -316,6 +319,8 @@ contract IdeationMarket is ReentrancyGuard {
         AppStorage storage s = LibAppStorage.appStorage();
         s.ideationMarketFee = fee;
     }
+
+    // !!!W add transferOwnership function
 
     //////////////////////
     // getter Functions //
