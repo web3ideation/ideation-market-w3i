@@ -10,6 +10,8 @@ pragma experimental ABIEncoderV2;
  * Implementation of a diamond.
  * /*****************************************************************************
  */
+// adapted by wolf3i
+
 import "./libraries/LibDiamond.sol";
 import "./interfaces/IDiamondLoupe.sol";
 import "./interfaces/IDiamondCut.sol";

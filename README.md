@@ -12,9 +12,15 @@ https://github.com/alexbabits/diamond-3-foundry ✅
 and what about appstorage - seems to be an alternative to diamond storage - but which one should i use? Understand AppStorage and check alexbabits impelementation since he seems to use both -> I rather use Diamon Storage since there are not clashes if importing external contracts that also use storage ✅
 decide which implementation to base on (what about mudgens foundry implementation? on which 1 2 or 3 is it based on?) -> diamond 3 -> but which foundry implementation?? ✅
 compare the .sol files of alexbabits to the ones from nick mudge which i already imported to my repo - use cGPT to compare the implementations -> 
-continue reading the last cGPT message and then scroll back up to ctrl+F "Here’s a detailed comparison between the original and Foundry implementations of diamond.sol, highlighting all changes, deletions, and additions:" and continue with comparing the files ⬅️
+continue reading the last cGPT message ✅
+and then scroll back up to ctrl+F "Here’s a detailed comparison between the original and Foundry implementations of diamond.sol, highlighting all changes, deletions, and additions:" and continue with comparing the files:
+IdeationMarketDiamond.sol ✅
+Migration.sol ✅
+LibAppstorage.sol / Appstorage.sol ⬅️ ➡️ ctrl+F "The Foundry implementation you referenced has a more complex approach to AppStorage for compatibility with various OpenZeppelin (OZ) "
 
 read the documentation again for how to deploy my diamond
+
+I cannot just inherit from libraries (that use external storage / statevariables) because that would mess up my diamonds storage layout. Aavegotchi and similar projects handle this issue by manually implementing required functions from external libraries like ERC721 instead of directly inheriting them, and defining all state variables in a centralized AppStorage struct accessed at a fixed slot. This ensures facets don’t conflict over storage slots. They also use library functions to access AppStorage without inheriting external storage directly, preserving compatibility.
 
 do I need to get rid of the constructor? Since I have to store the variables in the Diamond instead of using the constructor of the IdeationMarketFacet I should create a DiamondInit / InitializationFacet with a function that would act as the constructor for the IdeationMarketFacet (and also governance inputs and other initialization stuff)
 
