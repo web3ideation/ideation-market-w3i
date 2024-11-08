@@ -14,11 +14,26 @@ decide which implementation to base on (what about mudgens foundry implementatio
 compare the .sol files of alexbabits to the ones from nick mudge which i already imported to my repo - use cGPT to compare the implementations -> 
 continue reading the last cGPT message ✅
 and then scroll back up to ctrl+F "Here’s a detailed comparison between the original and Foundry implementations of diamond.sol, highlighting all changes, deletions, and additions:" and continue with comparing the files:
+import the dieamond-3-hardhat files since they are newer and recompare the files ✅
 IdeationMarketDiamond.sol ✅
 Migration.sol ✅
-LibAppstorage.sol / Appstorage.sol ⬅️ ➡️ ctrl+F "The Foundry implementation you referenced has a more complex approach to AppStorage for compatibility with various OpenZeppelin (OZ) "
+LibAppstorage.sol / Appstorage.sol ✅
+LibDiamond.sol ⬅️
+DiamondInit.sol
+IDiamondCutFacet.sol
+IDiamondLoupeFacet.sol
+IERC20Facet.sol
+IERC165.sol
+IERC173.sol
+IERC1155Facet.sol
+DiamondCutFacet.sol
+DiamondLoupeFacet.sol
+ERC20Facet.sol
+ERC1155Facet.sol
+OwnershipFacet.sol
+deployDiamond.s.sol <-> mudgen's diamond-3-hardhat/scripts/deploy.js --> check if there are documentations for how to deploy my diamond
 
-read the documentation again for how to deploy my diamond
+change the way IdeationMarketFacet uses openzeppelin - since i cant use that dependencies external storage as is.
 
 I cannot just inherit from libraries (that use external storage / statevariables) because that would mess up my diamonds storage layout. Aavegotchi and similar projects handle this issue by manually implementing required functions from external libraries like ERC721 instead of directly inheriting them, and defining all state variables in a centralized AppStorage struct accessed at a fixed slot. This ensures facets don’t conflict over storage slots. They also use library functions to access AppStorage without inheriting external storage directly, preserving compatibility.
 
