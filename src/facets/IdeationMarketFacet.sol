@@ -2,8 +2,7 @@
 pragma solidity ^0.8.7;
 
 import "../libraries/LibAppStorage.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol"; // !!!W I can't just inherit this since it has external storage - which would clash over time when upgrading with other dependencies that use external storage
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotOwner(uint256 tokenId, address nftAddress, address nftOwner); // !!!W all those arguments might be too much unnecessary information. does it safe gas or sth if i leave it out?
@@ -11,7 +10,7 @@ error IdeationMarket__PriceNotMet(address nftAddress, uint256 tokenId, uint256 p
 error IdeationMarket__NoProceeds();
 error IdeationMarket__TransferFailed(); // !!!W is this even necessary? i think it reverts on its own when it fails, right? If it is necessary maybe add the error message that is given by the transfer function
 
-contract IdeationMarket is ReentrancyGuard {
+contract IdeationMarket {
     // struct Listing {
     //     uint256 listingId; // *** I want that every Listing has a uinque Lising Number, just like in the real world :)
     //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
@@ -68,12 +67,12 @@ contract IdeationMarket is ReentrancyGuard {
     );
 
     // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
-    // !!!W add that all the info of the s_listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
+    // !!!W add that all the info of the listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
     // NFT Contract address -> NFT TokenID -> Listing
-    // mapping(address => mapping(uint256 => Listing)) private s_listings;
+    // mapping(address => mapping(uint256 => Listing)) private listings;
 
     // seller address -> amount earned
-    // mapping(address => uint256) private s_proceeds;
+    // mapping(address => uint256) private proceeds;
 
     // address private owner; // !!!W If the diamond contract doesnt take care of that: Make sure to be give the possibility to transfer ownership
 
@@ -90,14 +89,12 @@ contract IdeationMarket is ReentrancyGuard {
     //     AppStorage storage s = LibAppStorage.appStorage();
     //     s.owner = msg.sender;
     //     s.ideationMarketFee = fee; // 1000 is 1%
-    //     s.s_listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
+    //     s.listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
     // }
 
     ///////////////
     // Modifiers //
     ///////////////
-
-    // nonReentrant Modifier is inherited
 
     modifier onlyOwner() {
         AppStorage storage s = LibAppStorage.appStorage();
@@ -128,6 +125,14 @@ contract IdeationMarket is ReentrancyGuard {
             revert IdeationMarket__NotOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
         } // !!!W make this a require statement instead of an if statement(?)
         _;
+    }
+
+    modifier nonReentrant() {
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(!s.reentrancyLock, "ReentrancyGuard: reentrant call");
+        s.reentrancyLock = true;
+        _;
+        s.reentrancyLock = false;
     }
 
     ////////////////////
@@ -173,9 +178,9 @@ contract IdeationMarket is ReentrancyGuard {
 
         // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
-        s.s_listingId++;
-        s.listings[nftAddress][tokenId] = Listing(s.s_listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
-        emit ItemListed(s.s_listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
+        s.listingId++;
+        s.listings[nftAddress][tokenId] = Listing(s.listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
+        emit ItemListed(s.listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
 
         // !!!W is there a way to listen to the BasicNft event for if the approval has been revoked, to then cancel the listing automatically?
     }
@@ -207,8 +212,8 @@ contract IdeationMarket is ReentrancyGuard {
             // !!!W this else keyword is not necessary, should i keep it? does it make a gas difference?
             uint256 fee = ((listedItem.price * s.ideationMarketFee) / 100000);
             uint256 newProceeds = listedItem.price - fee;
-            s.s_proceeds[listedItem.seller] += newProceeds;
-            s.s_proceeds[s.owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
+            s.proceeds[listedItem.seller] += newProceeds;
+            s.proceeds[s.owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
             if (listedItem.desiredNftAddress != address(0)) {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
                 require( // !!!W should i have this as a modifier just like the isOwner one i use for the listItem?
@@ -218,7 +223,7 @@ contract IdeationMarket is ReentrancyGuard {
                 // Swap the NFTs
                 desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
                 // !!!W In case the swapped nft had been actively listed at the time, that listing has to get canceled
-                // !!!W when implementing the swap + eth option, i need to have the s_proceeds here aswell. - i think i do already at the top...
+                // !!!W when implementing the swap + eth option, i need to have the proceeds here aswell. - i think i do already at the top...
             } // !!!W make this a require statement instead of an if statement(?)
             // maybe its safer to not use else but start a new if with `if (!listedItem.isForSwap) {`
 
@@ -302,14 +307,14 @@ contract IdeationMarket is ReentrancyGuard {
         );
     }
 
-    // to try out the ReentrancyAttack.sol,  comment out the `nonReentrant` , move the `s_proceeds[msg.sender] = 0;` to after the ETH transfer and change the `payable(msg.sender).transfer(proceeds);` to `(bool success, ) = payable(msg.sender).call{value: proceeds, gas: 30000000}("");` because Hardhat has an issue estimating the gas for the receive fallback function... The Original should work on the testnet, tho! !!!W Try on the testnet if reentrancy attack is possible
+    // to try out the ReentrancyAttack.sol,  comment out the `nonReentrant` , move the `proceeds[msg.sender] = 0;` to after the ETH transfer and change the `payable(msg.sender).transfer(proceeds);` to `(bool success, ) = payable(msg.sender).call{value: proceeds, gas: 30000000}("");` because Hardhat has an issue estimating the gas for the receive fallback function... The Original should work on the testnet, tho! !!!W Try on the testnet if reentrancy attack is possible
     function withdrawProceeds() external payable nonReentrant {
         AppStorage storage s = LibAppStorage.appStorage();
-        uint256 proceeds = s.s_proceeds[msg.sender];
+        uint256 proceeds = s.proceeds[msg.sender];
         if (proceeds <= 0) {
             revert IdeationMarket__NoProceeds();
         } // !!!W make this a require statement instead of an if statement(?)
-        s.s_proceeds[msg.sender] = 0;
+        s.proceeds[msg.sender] = 0;
         payable(msg.sender).transfer(proceeds); // *** I'm using this instead of Patricks (bool success, ) = payable(msg.sender).call{value: proceeds}(""); require(success, "IdeationMarket__TransferFailed");`bc mine reverts on its own when it doesnt succeed, and therby I consider it better!
             // should this function also emit an event? just for being able to track when somebody withdrew?
             // !!!W throw an event!
@@ -333,12 +338,12 @@ contract IdeationMarket is ReentrancyGuard {
 
     function getProceeds(address seller) external view returns (uint256) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.s_proceeds[seller];
+        return s.proceeds[seller];
     }
 
     function getNextListingId() external view returns (uint256) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.s_listingId; // *** With this function people can find out what the next Listing Id would be
+        return s.listingId; // *** With this function people can find out what the next Listing Id would be
     }
 
     function getBalance() external view returns (uint256) {
