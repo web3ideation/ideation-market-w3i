@@ -31,7 +31,7 @@ contract IdeationMarketDiamond {
 
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
 
-        // adding ERC165 data
+        // adding ERC165 data // !!!W maybe leave that out here and use the diamondInit.sol to do that (seems more clean that way) ...
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;

@@ -18,19 +18,19 @@ import the dieamond-3-hardhat files since they are newer and recompare the files
 IdeationMarketDiamond.sol ✅
 Migration.sol ✅
 LibAppstorage.sol / Appstorage.sol ✅
-LibDiamond.sol ⬅️
-DiamondInit.sol
+LibDiamond.sol ✅
+DiamondInit.sol ✅
+DiamondCutFacet.sol ✅ 
+DiamondLoupeFacet.sol ✅
+ERC20Facet.sol ⬅️
+ERC1155Facet.sol
+OwnershipFacet.sol
 IDiamondCutFacet.sol
 IDiamondLoupeFacet.sol
 IERC20Facet.sol
 IERC165.sol
 IERC173.sol
 IERC1155Facet.sol
-DiamondCutFacet.sol
-DiamondLoupeFacet.sol
-ERC20Facet.sol
-ERC1155Facet.sol
-OwnershipFacet.sol
 deployDiamond.s.sol <-> mudgen's diamond-3-hardhat/scripts/deploy.js --> check if there are documentations for how to deploy my diamond
 
 change the way IdeationMarketFacet uses openzeppelin - since i cant use that dependencies external storage as is.

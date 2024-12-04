@@ -23,12 +23,25 @@ contract DiamondInit {
     // You can add parameters to this function in order to pass in
     // data to set your own state variables
     function init() external {
-        // adding ERC165 data
-        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        ds.supportedInterfaces[type(IERC165).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
-        ds.supportedInterfaces[type(IERC173).interfaceId] = true;
+        // since the IdeationMarketDiamon.sol already sets these, this is redundant.
+        // // adding ERC165 data
+        // LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        // ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+        // ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
+        // ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
+        // ds.supportedInterfaces[type(IERC173).interfaceId] = true;
+
+        // !!!W depending on the contracts add supported interfaces
+        // // ERC20
+        // ds.supportedInterfaces[0x36372b07] = true; // IERC20
+        // ds.supportedInterfaces[0xa219a025] = true; // IERC20MetaData
+
+        // // ERC1155
+        // ds.supportedInterfaces[0xd9b67a26] = true; // IERC1155
+        // ds.supportedInterfaces[0x0e89341c] = true; // IERC1155MetadataURI
+
+        // Modify `init()` to initialize any extra state variables in `LibDiamond.DiamondStorage` struct during deployment.
+        // You can also add parameters to `init()` if needed to set your own state variables.
 
         // add your own state variables
         // EIP-2535 specifies that the `diamondCut` function takes two optional
