@@ -22,16 +22,17 @@ LibDiamond.sol ✅
 DiamondInit.sol ✅
 DiamondCutFacet.sol ✅ 
 DiamondLoupeFacet.sol ✅
-ERC20Facet.sol ⬅️
-ERC1155Facet.sol
-OwnershipFacet.sol
-IDiamondCutFacet.sol
-IDiamondLoupeFacet.sol
-IERC20Facet.sol
-IERC165.sol
-IERC173.sol
-IERC1155Facet.sol
+ERC20Facet.sol ✅ (not necessary but take them as examples of how to change the storage to appstorage)
+ERC1155Facet.sol ✅ (not necessary but take them as examples of how to change the storage to appstorage)
+OwnershipFacet.sol ✅
+IDiamondCutFacet.sol ✅
+IDiamondLoupeFacet.sol ✅
+IERC20Facet.sol (not necessary) ✅
+IERC165.sol ✅
+IERC173.sol ✅
+IERC1155Facet.sol (not necessary) ✅
 deployDiamond.s.sol <-> mudgen's diamond-3-hardhat/scripts/deploy.js --> check if there are documentations for how to deploy my diamond
+differs in  the constructor of the diamond.sol and which facets are getting deployed from the getgo -> so adapt alexabits script to fit my setup of the different diamond and deploying ALL facets i want - then show cGPT my repo and check again if the depolymentscript is vollständig ⬅️
 
 change the way IdeationMarketFacet uses openzeppelin - since i cant use that dependencies external storage as is.
 
@@ -48,6 +49,8 @@ what about using arrays in the appstorage struct, like i cant edit them once imp
 what about using external contracts with storage? that would set my appstorage to something else than position 0?
 
 what about having structs in my appstorage struct? can i add variables to those structs without messing up the whole storage layout? -> yes i can add variables in nested structs ✅
+
+Have my dev wallet the deployer seperated from the multisigwallet the owner (governance)
 
 reducing gas costs for executing functions:
 Facets can contain few external functions, reducing gas costs. Because it costs more gas to call a function in a contract with many functions than a contract with few functions.
