@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
-pragma experimental ABIEncoderV2;
+pragma solidity ^0.8.28;
 
 /**
  * \
@@ -13,14 +12,15 @@ pragma experimental ABIEncoderV2;
 // adapted by wolf3i
 
 import "./libraries/LibDiamond.sol";
-import "./interfaces/IDiamondLoupe.sol";
-import "./interfaces/IDiamondCut.sol";
+import "./interfaces/IDiamondLoupeFacet.sol";
+import "./interfaces/IDiamondCutFacet.sol";
 import "./interfaces/IERC173.sol";
 import "./interfaces/IERC165.sol";
 
 contract IdeationMarketDiamond {
     // more arguments are added to this struct
     // this avoids stack too deep errors
+    // !!!W really?? which ones and why?
     struct DiamondArgs {
         address owner;
     }

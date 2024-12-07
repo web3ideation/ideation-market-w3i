@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.28;
 
 /**
  * \
@@ -10,7 +10,7 @@ pragma solidity ^0.8.0;
 
 // A loupe is a small magnifying glass used to look at diamonds.
 // These functions look at diamonds
-interface IDiamondLoupe {
+interface IDiamondLoupeFacet {
     /// These functions are expected to be called frequently
     /// by tools.
 

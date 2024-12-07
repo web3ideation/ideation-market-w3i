@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol"; // !!!W I can't just inherit this since it has external storage - which would clash over time when upgrading with other dependencies that use external storage
@@ -10,7 +10,7 @@ error IdeationMarket__PriceNotMet(address nftAddress, uint256 tokenId, uint256 p
 error IdeationMarket__NoProceeds();
 error IdeationMarket__TransferFailed(); // !!!W is this even necessary? i think it reverts on its own when it fails, right? If it is necessary maybe add the error message that is given by the transfer function
 
-contract IdeationMarket {
+contract IdeationMarketFacet {
     // struct Listing {
     //     uint256 listingId; // *** I want that every Listing has a uinque Lising Number, just like in the real world :)
     //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId

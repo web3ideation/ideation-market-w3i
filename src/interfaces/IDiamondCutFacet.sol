@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.28;
 
 /**
  * \
@@ -7,7 +7,7 @@ pragma solidity ^0.8.0;
  * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
  * /*****************************************************************************
  */
-interface IDiamondCut {
+interface IDiamondCutFacet {
     enum FacetCutAction {
         Add,
         Replace,
