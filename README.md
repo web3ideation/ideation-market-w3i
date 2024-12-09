@@ -38,7 +38,7 @@ check the constructor arguments for the code that deploys the IdeationMarketDiam
 
 the IdeationMarketFacet had a constructor, which should somehow be implemented through the diamond now... ✅
 
-check all the !!!W 
+check all the exclamationmarks ✅
 
 ask cGPT with the context of the whole repo, if the diamond is correctly set up and the deploymentscript would be correct
 

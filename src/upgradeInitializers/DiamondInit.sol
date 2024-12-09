@@ -15,6 +15,8 @@ import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
 import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
+import {IERC721} from "../interfaces/IERC721.sol";
+import {IERC721Receiver} from "../interfaces/IERC721Receiver.sol";
 
 // It is expected that this contract is customized if you want to deploy your diamond
 // with data from a deployment script. Use the init function to initialize state variables
@@ -31,7 +33,11 @@ contract DiamondInit {
         ds.supportedInterfaces[type(IDiamondLoupeFacet).interfaceId] = true;
         ds.supportedInterfaces[type(IERC173).interfaceId] = true;
 
-        // !!!W depending on the contracts add supported interfaces
+        // depending on the contracts add supported interfaces
+
+        ds.supportedInterfaces[type(IERC721).interfaceId] = true;
+        ds.supportedInterfaces[type(IERC721Receiver).interfaceId] = true;
+
         // // ERC20
         // ds.supportedInterfaces[0x36372b07] = true; // IERC20
         // ds.supportedInterfaces[0xa219a025] = true; // IERC20MetaData
