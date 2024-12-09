@@ -78,20 +78,6 @@ contract IdeationMarketFacet {
 
     // uint256 public ideationMarketFee; // ***W this should also be adaptable -> variable to be set by contract owner // W*** add to the proceeds mapping the contract owner so there would be logged how much fee there is to be deducted, and with this the owner should be able to withdraw the fees - i guess i need to initilize the contract owner through the constructor then // !!!W add a way to send all eth that are in this contract to the companys wallet (or is that already there just by being the owner of the cotnract?) // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
 
-    /////////////////
-    // Constructor //
-    /////////////////
-
-    // !!!W constructor doesnt make sense when using diamond! -> initialize through diamond
-    // !!!W the owner even tho initialized through the diamond would still be my address as the one that calls the initialization. But this should rather be the multisigwallet or something else democratically governed. (maybe the governance contract of this diamond?)
-
-    // constructor(uint256 fee, uint256 lastListingId) {
-    //     AppStorage storage s = LibAppStorage.appStorage();
-    //     s.owner = msg.sender;
-    //     s.ideationMarketFee = fee; // 1000 is 1%
-    //     s.listingId = lastListingId; // when upgrading this needs to be the same as the latest listing. When deploying as a new Marketplace it needs to be 0
-    // }
-
     ///////////////
     // Modifiers //
     ///////////////

@@ -10,10 +10,11 @@ pragma solidity ^0.8.28;
  * /*****************************************************************************
  */
 import {LibDiamond} from "../libraries/LibDiamond.sol";
-import {IDiamondLoupe} from "../interfaces/IDiamondLoupeFacet.sol";
-import {IDiamondCut} from "../interfaces/IDiamondCutFacet.sol";
+import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
+import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
+import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
 
 // It is expected that this contract is customized if you want to deploy your diamond
 // with data from a deployment script. Use the init function to initialize state variables
@@ -22,14 +23,13 @@ import {IERC165} from "../interfaces/IERC165.sol";
 contract DiamondInit {
     // You can add parameters to this function in order to pass in
     // data to set your own state variables
-    function init() external {
-        // since the IdeationMarketDiamon.sol already sets these, this is redundant.
-        // // adding ERC165 data
-        // LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
-        // ds.supportedInterfaces[type(IERC165).interfaceId] = true;
-        // ds.supportedInterfaces[type(IDiamondCut).interfaceId] = true;
-        // ds.supportedInterfaces[type(IDiamondLoupe).interfaceId] = true;
-        // ds.supportedInterfaces[type(IERC173).interfaceId] = true;
+    function init(uint256 ideationMarketFee, address owner) external {
+        // adding ERC165 data
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        ds.supportedInterfaces[type(IERC165).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondCutFacet).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondLoupeFacet).interfaceId] = true;
+        ds.supportedInterfaces[type(IERC173).interfaceId] = true;
 
         // !!!W depending on the contracts add supported interfaces
         // // ERC20
@@ -39,6 +39,11 @@ contract DiamondInit {
         // // ERC1155
         // ds.supportedInterfaces[0xd9b67a26] = true; // IERC1155
         // ds.supportedInterfaces[0x0e89341c] = true; // IERC1155MetadataURI
+
+        // constructor for IdeationMarketFacet
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.owner = owner;
+        s.ideationMarketFee = ideationMarketFee;
 
         // Modify `init()` to initialize any extra state variables in `LibDiamond.DiamondStorage` struct during deployment.
         // You can also add parameters to `init()` if needed to set your own state variables.

@@ -19,6 +19,10 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 // Script to deploy a Diamond with CutFacet, LoupeFacet and OwnershipFacet
 // This Script DOES NOT upgrade the diamond with any of the example facets.
 contract DeployScript is Script {
+    // Constructor arguments
+    address owner = "0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328"; // !!!W Use appropriate address for testing
+    uint256 ideationMarketFee = 1000; // Example fee, e.g., 1000 means 1%
+
     function run() external {
         vm.startBroadcast();
 
@@ -29,12 +33,8 @@ contract DeployScript is Script {
         OwnershipFacet ownershipFacet = new OwnershipFacet();
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet(); // Pass required constructor arguments if necessary
 
-        // Preparing DiamondArgs struct for the constructor
-        IdeationMarketDiamond.DiamondArgs memory args =
-            IdeationMarketDiamond.DiamondArgs({owner: "0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328"}); // !!!W Use appropriate address for testing
-
         // Deploy the diamond with the initial facet cut for DiamondCutFacet
-        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(address(diamondCutFacet, args)); // !!!W double check if that fits to the IdeationMarketDiamond.sol
+        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(diamondCutFacet));
         console.log("Deployed Diamond.sol at address:", address(ideationMarketDiamond));
 
         // We prepare an array of `cuts` that we want to upgrade our Diamond with.
@@ -88,7 +88,7 @@ contract DeployScript is Script {
         // We call `diamondCut` with our `diamond` contract through the `IDiamondCutFacet` interface.
         // `diamondCut` takes in the `cuts` and the `DiamondInit` contract and calls its `init()` function.
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
-            cuts, address(diamondInit), abi.encodeWithSignature("init()")
+            cuts, address(diamondInit), abi.encodeWithSignature("init(uint256,address)", ideationMarketFee, owner)
         );
 
         // We use `IERC173` instead of an `IOwnershipFacet` interface for the `OwnershipFacet` with no problems

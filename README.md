@@ -34,11 +34,13 @@ IERC1155Facet.sol (not necessary) ✅
 deployDiamond.s.sol <-> mudgen's diamond-3-hardhat/scripts/deploy.js --> check if there are documentations for how to deploy my diamond
 differs in  the constructor of the diamond.sol and which facets are getting deployed from the getgo -> so adapt alexabits script to fit my setup of the different diamond and deploying ALL facets i want - then show cGPT my repo and check again if the depolymentscript is vollständig ✅
 
-check the constructor arguments for the code that deploys the IdeationMarketDiamond.sol and why that diamond needs the facetcut infos tho alexabits didnt need those⬅️
+check the constructor arguments for the code that deploys the IdeationMarketDiamond.sol and why that diamond needs the facetcut infos tho alexabits didnt need those ✅
 
-the IdeationMarketFacet had a constructor, which should somehow be implemented through the diamond now... 
+the IdeationMarketFacet had a constructor, which should somehow be implemented through the diamond now... ✅
 
-what about the deployment script of the ideationMarket.sol? if I deploy everything at once (is that even possible? I would need to know the ideationMarketFacets address right?) I need to deploy the ideationMarket.sol correctly at the same time.
+check all the !!!W 
+
+ask cGPT with the context of the whole repo, if the diamond is correctly set up and the deploymentscript would be correct
 
 change the way IdeationMarketFacet uses openzeppelin - since i cant use that dependencies external storage as is.
 
