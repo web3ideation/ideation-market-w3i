@@ -20,7 +20,7 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 // This Script DOES NOT upgrade the diamond with any of the example facets.
 contract DeployScript is Script {
     // Constructor arguments
-    address owner = "0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328"; // !!!W Use appropriate address for testing
+    address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // !!!W Use appropriate address for testing
     uint256 ideationMarketFee = 1000; // Example fee, e.g., 1000 means 1%
 
     function run() external {

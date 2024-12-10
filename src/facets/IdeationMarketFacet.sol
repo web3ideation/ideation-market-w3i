@@ -2,10 +2,12 @@
 pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol"; // !!!W I can't just inherit this since it has external storage - which would clash over time when upgrading with other dependencies that use external storage
+import "../libraries/LibDiamond.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol"; // !!!W I can't just inherit this since it has external storage - which would clash over time when upgrading with other dependencies that use external storage
+// !!!W why is this not the IERC721? I think thats the only thing i need, not the whole erc721, right?
 
 error IdeationMarket__NotApprovedForMarketplace();
-error IdeationMarket__NotOwner(uint256 tokenId, address nftAddress, address nftOwner); // !!!W all those arguments might be too much unnecessary information. does it safe gas or sth if i leave it out?
+error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner); // !!!W all those arguments might be too much unnecessary information. does it safe gas or sth if i leave it out?
 error IdeationMarket__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price);
 error IdeationMarket__NoProceeds();
 error IdeationMarket__TransferFailed(); // !!!W is this even necessary? i think it reverts on its own when it fails, right? If it is necessary maybe add the error message that is given by the transfer function
@@ -66,6 +68,10 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId
     );
 
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
+    event FeeUpdated(uint256 previousFee, uint256 newFee);
+
     // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
     // !!!W add that all the info of the listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
     // NFT Contract address -> NFT TokenID -> Listing
@@ -83,8 +89,7 @@ contract IdeationMarketFacet {
     ///////////////
 
     modifier onlyOwner() {
-        AppStorage storage s = LibAppStorage.appStorage();
-        require(msg.sender == s.owner, "Caller is not the owner");
+        LibDiamond.enforceIsContractOwner(); // Ensure caller is the diamond owner
         _;
     }
 
@@ -101,14 +106,14 @@ contract IdeationMarketFacet {
     }
 
     // !!!W isnt that a modifier only owner which i inherited from open zeplin of something?? then i could just use that instead of making my own
-    modifier isOwner(
+    modifier isNftOwner(
         address nftAddress,
         uint256 tokenId,
-        address owner // !!!W rename this to nftOwner - bc it uses the same name as the contractowner variable
+        address nftOwner // !!!W rename this to nftOwner - bc it uses the same name as the contractowner variable
     ) {
         IERC721 nft = IERC721(nftAddress);
         if (msg.sender != nft.ownerOf(tokenId)) {
-            revert IdeationMarket__NotOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
+            revert IdeationMarket__NotNftOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
         } // !!!W make this a require statement instead of an if statement(?)
         _;
     }
@@ -148,7 +153,7 @@ contract IdeationMarketFacet {
         // Hint: Use Chainlink Price Feeds to convert the price of the tokens between each other
         // !!!W address tokenPayment - challange: use chainlink pricefeed to let the user decide which currency they want to use - so the user would set his price in eur or usd (or any other available chianlink pricefeed (?) ) and the frontend would always show this currency. when the nft gets bought the buyer would pay in ETH what the useres currency is worth at that time in eth. For that it is also necessary that the withdraw proceeds happens directly so the seller gets the eth asap to convert it back to their currency at a cex of their choice ... additionally i could also integrate an cex api where the seller could register their cexs account at this nft marketplace so that everything happens automatically and the seller gets the money they asked for automatically in their currency. (since it would probaly not be exactly the amount since there are fees and a little time delay from the buyer buying to the seller getting the eur, the marketplace owner should pay up for the difference (but also take if its too much since the price of eth could also go up)) --- NO! https://fravoll.github.io/solidity-patterns/pull_over_push.ht
         notListed(nftAddress, tokenId)
-        isOwner(nftAddress, tokenId, msg.sender)
+        isNftOwner(nftAddress, tokenId, msg.sender)
     {
         // !!!W since the already listed / not listed modifiers dont use the price anymore but the seller, i dont need to check if the price is above 0 anymore. -> delte this check
         // require(
@@ -199,7 +204,7 @@ contract IdeationMarketFacet {
             uint256 fee = ((listedItem.price * s.ideationMarketFee) / 100000);
             uint256 newProceeds = listedItem.price - fee;
             s.proceeds[listedItem.seller] += newProceeds;
-            s.proceeds[s.owner] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
+            s.proceeds[LibDiamond.contractOwner()] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
             if (listedItem.desiredNftAddress != address(0)) {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
                 require( // !!!W should i have this as a modifier just like the isOwner one i use for the listItem?
@@ -234,7 +239,7 @@ contract IdeationMarketFacet {
     function cancelListing(address nftAddress, uint256 tokenId)
         external
         isListed(nftAddress, tokenId)
-        isOwner(nftAddress, tokenId, msg.sender)
+        isNftOwner(nftAddress, tokenId, msg.sender)
     {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId]; // what happens to this memory variable after the struct in the mapping has been deleted and after the function has been executed? does it get deleted automatically?
@@ -261,7 +266,7 @@ contract IdeationMarketFacet {
         uint256 newPrice,
         address newDesiredNftAddress,
         uint256 newdesiredTokenId
-    ) external isListed(nftAddress, tokenId) isOwner(nftAddress, tokenId, msg.sender) {
+    ) external isListed(nftAddress, tokenId) isNftOwner(nftAddress, tokenId, msg.sender) {
         // *** patrick didnt make sure that the updated price would be above 0 in his contract
         // !!!W since the already listed / not listed modifiers dont use the price anymore but the seller, i dont need to check if the price is above 0 anymore. -> delte this check
         // require(
@@ -306,12 +311,18 @@ contract IdeationMarketFacet {
             // !!!W throw an event!
     }
 
-    function setFee(uint256 fee) external onlyOwner {
+    function setFee(uint256 fee) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
+        uint256 previousFee = s.ideationMarketFee;
         s.ideationMarketFee = fee;
+        emit FeeUpdated(previousFee, fee);
     }
 
-    // !!!W add transferOwnership function
+    function transferOwnership(address newOwner) public onlyOwner {
+        require(newOwner != address(0), "New owner cannot be the zero address");
+        LibDiamond.setContractOwner(newOwner);
+        emit OwnershipTransferred(msg.sender, newOwner);
+    }
 
     //////////////////////
     // getter Functions //

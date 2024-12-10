@@ -14,7 +14,6 @@ struct AppStorage {
     uint256 ideationMarketFee;
     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     mapping(address => uint256) proceeds; // Proceeds by seller address
-    address owner;
     bool reentrancyLock;
 }
 // IERC721 nft; // Temporarily used for checks in functions // I think this is unnecessary to have as a state variable at all
