@@ -1,65 +1,222 @@
-how do i set a (hash) storage location in the diamond for the facets?
-whats the LibDiamondCut.sol for?
+## License
 
-read
-https://eip2535diamonds.substack.com/p/introduction-to-the-diamond-standard ✅
-https://eips.ethereum.org/EIPS/eip-2535 ✅
-https://github.com/mudgen/diamond-3?tab=readme-ov-file ✅
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Third-Party Libraries
 
-https://github.com/mudgen/diamond ✅
-https://github.com/alexbabits/diamond-3-foundry ✅
-and what about appstorage - seems to be an alternative to diamond storage - but which one should i use? Understand AppStorage and check alexbabits impelementation since he seems to use both -> I rather use Diamon Storage since there are not clashes if importing external contracts that also use storage ✅
-decide which implementation to base on (what about mudgens foundry implementation? on which 1 2 or 3 is it based on?) -> diamond 3 -> but which foundry implementation?? ✅
-compare the .sol files of alexbabits to the ones from nick mudge which i already imported to my repo - use cGPT to compare the implementations -> 
-continue reading the last cGPT message ✅
-and then scroll back up to ctrl+F "Here’s a detailed comparison between the original and Foundry implementations of diamond.sol, highlighting all changes, deletions, and additions:" and continue with comparing the files:
-import the dieamond-3-hardhat files since they are newer and recompare the files ✅
-IdeationMarketDiamond.sol ✅
-Migration.sol ✅
-LibAppstorage.sol / Appstorage.sol ✅
-LibDiamond.sol ✅
-DiamondInit.sol ✅
-DiamondCutFacet.sol ✅ 
-DiamondLoupeFacet.sol ✅
-ERC20Facet.sol ✅ (not necessary but take them as examples of how to change the storage to appstorage)
-ERC1155Facet.sol ✅ (not necessary but take them as examples of how to change the storage to appstorage)
-OwnershipFacet.sol ✅
-IDiamondCutFacet.sol ✅
-IDiamondLoupeFacet.sol ✅
-IERC20Facet.sol (not necessary) ✅
-IERC165.sol ✅
-IERC173.sol ✅
-IERC1155Facet.sol (not necessary) ✅
-deployDiamond.s.sol <-> mudgen's diamond-3-hardhat/scripts/deploy.js --> check if there are documentations for how to deploy my diamond
-differs in  the constructor of the diamond.sol and which facets are getting deployed from the getgo -> so adapt alexabits script to fit my setup of the different diamond and deploying ALL facets i want - then show cGPT my repo and check again if the depolymentscript is vollständig ✅
+This project includes code from the following open-source project(s):
 
-check the constructor arguments for the code that deploys the IdeationMarketDiamond.sol and why that diamond needs the facetcut infos tho alexabits didnt need those ✅
+- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) - Licensed under the MIT License.
+- further see the "third-party-licenses" folder
 
-the IdeationMarketFacet had a constructor, which should somehow be implemented through the diamond now... ✅
+<br><br><br><br><br>
 
-check all the exclamationmarks ✅
+# IdeationMarketDiamond
 
-ask cGPT with the context of the whole repo, if the diamond is correctly set up and the deploymentscript would be correct ✅
+A decentralized NFT marketplace built on the EIP-2535 Diamonds standard, allowing users to list, buy, sell, and swap NFTs efficiently while ensuring modularity, upgradability, and security. The repository leverages OpenZeppelin’s standards and introduces custom facets for enhanced functionality.
 
-libDiamond.sol also implements (also storage) governance -> change for dao! ✅
+## Overview
 
-whats the owner in ideationMarket.sol for? make sure it doesnt derivate from the owner of the diamond ⬅️
+The IdeationMarketDiamond implements a robust diamond structure for managing the marketplace. The diamond pattern enables modular development by splitting the contract's logic into various facets, ensuring efficient use of gas and the ability to upgrade specific components without redeploying the entire system.
 
-research again if that storage problem only happens when inheriting, not when just importing
+### Features
 
-change the way IdeationMarketFacet uses openzeppelin - since i cant use that dependencies external storage as is.
-I cannot just inherit from libraries (that use external storage / statevariables) because that would mess up my diamonds storage layout. Aavegotchi and similar projects handle this issue by manually implementing required functions from external libraries like ERC721 instead of directly inheriting them, and defining all state variables in a centralized AppStorage struct accessed at a fixed slot. This ensures facets don’t conflict over storage slots. They also use library functions to access AppStorage without inheriting external storage directly, preserving compatibility.
+- **EIP-2535 Compliant:** Modular and upgradable contract design.
+- **NFT Marketplace:** List, buy, cancel, and update NFTs.
+- **NFT Swapping:** Swap NFTs directly or with additional ETH.
+- **Marketplace Fee:** Configurable fees for transactions.
+- **Ownership Management:** Transfer ownership securely.
 
-what about using arrays in the appstorage struct, like i cant edit them once impelemnted since that would mess up the storage?
+---
 
-what about having structs in my appstorage struct? can i add variables to those structs without messing up the whole storage layout? -> yes i can add variables in nested structs ✅
+## Contracts Overview
 
-Have my dev wallet the deployer seperated from the multisigwallet the owner (governance) ✅
+### Core Contracts
 
-reducing gas costs for executing functions:
-Facets can contain few external functions, reducing gas costs. Because it costs more gas to call a function in a contract with many functions than a contract with few functions.
-The Solidity optimizer can be set to a high setting causing more bytecode to be generated but the facets will use less gas when executed
+- **`IdeationMarketDiamond.sol`**
+  The base diamond contract that acts as the central entry point for delegating calls to facets.
 
-check for Function Selector Clash when deploying
-verify contract at louper.dev instead of etherscan (if it is still not possible to verify diamond patterns there...)
+- **`DiamondInit.sol`**
+  A contract to initialize state variables during diamond deployment.
+
+### Facets
+
+- **`DiamondCutFacet.sol`**
+  Enables adding, replacing, or removing facets.
+
+- **`DiamondLoupeFacet.sol`**
+  Implements EIP-2535 loupe functions for querying facets and their functions.
+
+- **`OwnershipFacet.sol`**
+  Manages ownership of the diamond contract.
+
+- **`IdeationMarketFacet.sol`**
+  Core marketplace functionality, including:
+  - Listing NFTs
+  - Buying NFTs
+  - Canceling listings
+  - Updating listings
+  - Setting marketplace fees
+  - Managing proceeds
+
+### Libraries
+
+- **`LibDiamond.sol`**
+  Core library for managing diamond storage and functionality.
+
+- **`LibAppStorage.sol`**
+  Defines the application-specific storage structure for the marketplace.
+
+---
+
+## Deployment
+
+### Prerequisites
+
+Ensure the following tools are installed:
+
+- [Foundry](https://github.com/foundry-rs/foundry) or [Hardhat](https://hardhat.org/)
+- [Node.js](https://nodejs.org/)
+- [Solidity](https://soliditylang.org/)
+
+### Deployment Steps
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-username/IdeationMarketDiamond.git
+   cd IdeationMarketDiamond
+   ```
+
+2. Install dependencies:
+   ```bash
+   forge install
+   ```
+
+3. Deploy the diamond:
+   Update the deploy script (`script/deployDiamond.s.sol`) with the desired owner address and fee percentage. Then run:
+   ```bash
+   forge script script/deployDiamond.s.sol --broadcast
+   ```
+
+4. Verify deployment:
+   ```bash
+   forge verify-contract --chain <chain-id> <contract-address>
+   ```
+
+---
+
+## Usage
+
+### Core Functions
+
+#### Listing an NFT
+```solidity
+function listItem(
+    address nftAddress,
+    uint256 tokenId,
+    uint256 price,
+    address desiredNftAddress,
+    uint256 desiredTokenId
+) external;
+```
+List an NFT for sale or swap.
+
+#### Buying an NFT
+```solidity
+function buyItem(address nftAddress, uint256 tokenId) external payable;
+```
+Buy an NFT by sending the required ETH.
+
+#### Updating a Listing
+```solidity
+function updateListing(
+    address nftAddress,
+    uint256 tokenId,
+    uint256 newPrice,
+    address newDesiredNftAddress,
+    uint256 newDesiredTokenId
+) external;
+```
+Update the price or swap conditions of a listed NFT.
+
+#### Canceling a Listing
+```solidity
+function cancelListing(address nftAddress, uint256 tokenId) external;
+```
+Cancel an active NFT listing.
+
+#### Withdrawing Proceeds
+```solidity
+function withdrawProceeds() external;
+```
+Withdraw accumulated proceeds from sales.
+
+#### Setting Fees
+```solidity
+function setFee(uint256 fee) external;
+```
+Update the marketplace fee (only accessible by the owner).
+
+---
+
+## Security Considerations
+
+1. **Reentrancy Protection:**
+   The `nonReentrant` modifier is applied to critical functions to prevent reentrancy attacks.
+
+2. **Upgradability:**
+   Changes to the diamond structure follow EIP-2535 guidelines to ensure compatibility.
+
+3. **Ownership Management:**
+   Ownership functions are secured using the `onlyOwner` modifier.
+
+4. **Approval Validation:**
+   The marketplace ensures that NFTs are approved for transfer before completing transactions.
+
+---
+
+## Testing
+
+### Unit Tests
+
+The repository includes unit tests to validate core functionality. To run tests:
+
+```bash
+forge test
+```
+
+### Areas Tested
+
+- Listing, buying, and canceling NFTs
+- Fee calculations and updates
+- Ownership transfer
+- Reentrancy attacks
+
+---
+
+## Contributing
+
+Contributions are welcome! Please fork the repository, make changes, and submit a pull request.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+---
+
+## Contact
+
+For questions or support, please reach out to [your-email@example.com](mailto:your-email@example.com).
+
+---
+
+## Acknowledgments
+
+This project leverages:
+
+- [EIP-2535 Diamonds](https://eips.ethereum.org/EIPS/eip-2535)
+- [OpenZeppelin Contracts](https://openzeppelin.com/contracts/)
+- [Foundry](https://github.com/foundry-rs/foundry)
+

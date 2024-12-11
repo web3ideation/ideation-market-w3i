@@ -3,8 +3,7 @@ pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol"; // !!!W I can't just inherit this since it has external storage - which would clash over time when upgrading with other dependencies that use external storage
-// !!!W why is this not the IERC721? I think thats the only thing i need, not the whole erc721, right?
+import "../interfaces/IERC721.sol";
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner); // !!!W all those arguments might be too much unnecessary information. does it safe gas or sth if i leave it out?
