@@ -56,7 +56,16 @@ what about having structs in my appstorage struct? can i add variables to those 
 
 Have my dev wallet the deployer seperated from the multisigwallet the owner (governance) ✅
 
-check if the deployer and the owner are definetly seperated in my diamond structure - so that as soon as deployed only the owner has the controll like upgrading over it ⬅️
+check if the deployer and the owner are definetly seperated in my diamond structure - so that as soon as deployed only the owner has the controll like upgrading over it ✅
+
+stack to deep error bei s.listings[nftAddress][tokenId] = listedItem; ✅
+nochmal selbst mit forge built checken ✅
+
+appstorage slot zu keccak256 setzen statt 0 ⬅️
+
+add a function to transfer ownership (?)
+
+check if sourcecontroll is syncing all the changes  
 
 ToDos for the IdeationMarketFacet:
 all the !!!
