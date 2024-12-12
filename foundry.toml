@@ -5,7 +5,7 @@ libs = ["lib"]
 solc = "0.8.28"
 via_ir = true
 # optimizer = true
-# optimizer_runs = 200 (10 for cheaper deployment, 5000 for cheaper executions)
+# optimizer_runs = 5000 (uncomment for deployment to reduce execution costs -20% (but +15% deployment costs))
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 

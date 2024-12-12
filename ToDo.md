@@ -61,9 +61,9 @@ check if the deployer and the owner are definetly seperated in my diamond struct
 stack to deep error bei s.listings[nftAddress][tokenId] = listedItem; ✅
 nochmal selbst mit forge built checken ✅
 
-appstorage slot zu keccak256 setzen statt 0 ⬅️
+appstorage slot zu keccak256 setzen statt 0 ✅ 
 
-add a function to transfer ownership (?)
+add a function to transfer ownership (?) ⬅️
 
 check if sourcecontroll is syncing all the changes  
 
@@ -79,5 +79,8 @@ The Solidity optimizer can be set to a high setting causing more bytecode to be 
 check for Function Selector Clash when deploying
 verify contract at louper.dev instead of etherscan (if it is still not possible to verify diamond patterns there...)
 
+do "Struct Packing" -> storage optimization for gas savings (in appstorage)
+
 do I need getter functions for all the state variables or is it automatically possible to read the storage struct out in a whole?
 
+activate optimizer in the foundry.toml optimizer = true, optimizer_runs = 5000 (10 for cheaper deployment, 5000 for cheaper executions)

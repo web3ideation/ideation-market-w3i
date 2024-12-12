@@ -16,13 +16,15 @@ struct AppStorage {
     mapping(address => uint256) proceeds; // Proceeds by seller address
     bool reentrancyLock;
 }
-// IERC721 nft; // Temporarily used for checks in functions // I think this is unnecessary to have as a state variable at all
 
 library LibAppStorage {
+    // The unique storage position for the app storage struct.
+    bytes32 constant APP_STORAGE_POSITION = keccak256("diamond.standard.app.storage");
+
     function appStorage() internal pure returns (AppStorage storage s) {
-        // this is usually called diamondStorage - but wouldnt that clash with the LibDiamond.sol function diamondStorage()? - and how do i call this function instead of the usual appstorage internal s which wouldnt define the storage slot 0 explicitly?
+        bytes32 appStoragePosition = APP_STORAGE_POSITION;
         assembly {
-            s.slot := 0
+            s.slot := appStoragePosition
         }
     }
 }
