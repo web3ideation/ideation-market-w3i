@@ -67,8 +67,6 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId
     );
 
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
-
     event FeeUpdated(uint256 previousFee, uint256 newFee);
 
     // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
@@ -315,12 +313,6 @@ contract IdeationMarketFacet {
         uint256 previousFee = s.ideationMarketFee;
         s.ideationMarketFee = fee;
         emit FeeUpdated(previousFee, fee);
-    }
-
-    function transferOwnership(address newOwner) public onlyOwner {
-        require(newOwner != address(0), "New owner cannot be the zero address");
-        LibDiamond.setContractOwner(newOwner);
-        emit OwnershipTransferred(msg.sender, newOwner);
     }
 
     //////////////////////

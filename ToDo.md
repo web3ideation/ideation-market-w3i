@@ -63,11 +63,11 @@ nochmal selbst mit forge built checken ✅
 
 appstorage slot zu keccak256 setzen statt 0 ✅ 
 
-add a function to transfer ownership (?) ⬅️
+add a function to transfer ownership (?) already in ownershipfacet ✅
 
-check if sourcecontroll is syncing all the changes  
+check if sourcecontroll is syncing all the changes ✅ 
 
-ToDos for the IdeationMarketFacet:
+ToDos for the IdeationMarketFacet: ⬅️
 all the !!!
 google keep notes
 
