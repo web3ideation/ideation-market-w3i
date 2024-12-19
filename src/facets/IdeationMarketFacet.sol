@@ -158,7 +158,8 @@ contract IdeationMarketFacet {
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 
         require(
-            listedItem.seller == IERC721(nftAddress).ownerOf(tokenId), IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId))
+            listedItem.seller == IERC721(nftAddress).ownerOf(tokenId),
+            IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId))
         );
 
         require(msg.sender != listedItem.seller, IdeationMarket__SameBuyerAsSeller());
@@ -284,7 +285,10 @@ contract IdeationMarketFacet {
 
     function checkApproval(address nftAddress, uint256 tokenId) internal view {
         IERC721 nft = IERC721(nftAddress);
-        require(nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(nft.ownerOf(tokenId), address(this)), IdeationMarket__NotApprovedForMarketplace());
+        require(
+            nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(nft.ownerOf(tokenId), address(this)),
+            IdeationMarket__NotApprovedForMarketplace()
+        );
     }
 
     function setFee(uint256 fee) public onlyOwner {
