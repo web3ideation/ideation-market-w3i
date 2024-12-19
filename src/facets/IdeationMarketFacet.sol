@@ -21,7 +21,8 @@ contract IdeationMarketFacet {
         uint256 price,
         address seller,
         address desiredNftAddress,
-        uint256 desiredTokenId
+        uint256 desiredTokenId,
+        uint256 feeRate
     );
 
     event ItemBought(
@@ -33,7 +34,8 @@ contract IdeationMarketFacet {
         address seller,
         address buyer,
         address desiredNftAddress,
-        uint256 desiredTokenId
+        uint256 desiredTokenId,
+        uint256 feeRate
     );
 
     event ItemCanceled(
@@ -55,28 +57,27 @@ contract IdeationMarketFacet {
         uint256 price,
         address seller,
         address desiredNftAddress,
-        uint256 desiredTokenId
+        uint256 desiredTokenId,
+        uint256 feeRate
     );
 
     event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
 
-    event FeeUpdated(uint256 previousFee, uint256 newFee);
+    event IdeationMarketFeeUpdated(uint256 previousFee, uint256 newFee);
 
     // these are defined in the LibAppStorage.sol
     // struct Listing {
-    //     uint256 listingId;
-    //     uint256 price;
-    //     address seller;
-    //     address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
-    //     uint256 desiredTokenId; // Desired token IDs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
+    //      uint128 listingId;
+    //      uint96 price;
+    //      uint32 feeRate; // storing the fee at the time of listing
+    //      address seller;
+    //      address desiredNftAddress;
+    //      uint256 desiredTokenId;
     // }
 
-    // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
-    // !!!W add that all the info of the listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
-
     // these are defined in the LibAppStorage.sol
-    // uint256 listingId;
-    // uint256 ideationMarketFee; // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
+    // uint128 listingId;
+    // uint32 ideationMarketFee; // e.g., 100 = 0.1%
     // mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     // mapping(address => uint256) proceeds; // Proceeds by seller address
     // bool reentrancyLock;
@@ -129,7 +130,7 @@ contract IdeationMarketFacet {
     function listItem(
         address nftAddress,
         uint256 tokenId,
-        uint256 price,
+        uint96 price,
         address desiredNftAddress,
         uint256 desiredTokenId
     )
@@ -145,8 +146,19 @@ contract IdeationMarketFacet {
         // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
         s.listingId++;
-        s.listings[nftAddress][tokenId] = Listing(s.listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
-        emit ItemListed(s.listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
+        s.listings[nftAddress][tokenId] =
+            Listing(s.listingId, price, s.ideationMarketFee, msg.sender, desiredNftAddress, desiredTokenId);
+        emit ItemListed(
+            s.listingId,
+            nftAddress,
+            tokenId,
+            true,
+            price,
+            msg.sender,
+            desiredNftAddress,
+            desiredTokenId,
+            s.ideationMarketFee
+        );
 
         // !!!W is there a way to listen to the BasicNft event for if the approval has been revoked, to then cancel the listing automatically?
     }
@@ -169,20 +181,22 @@ contract IdeationMarketFacet {
             IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value)
         );
 
-        uint256 fee = ((listedItem.price * s.ideationMarketFee) / 100000);
+        uint256 fee = ((listedItem.price * listedItem.feeRate) / 100000);
         uint256 newProceeds = listedItem.price - fee;
         s.proceeds[listedItem.seller] += newProceeds;
-        s.proceeds[LibDiamond.contractOwner()] += fee; // !!!W check if this  is the correct way of logging/collecting the marketplace fee (including the calculation of the variable 'fee')
+        s.proceeds[LibDiamond.contractOwner()] += fee;
+
+        // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
             IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
             require(
                 desiredNft.ownerOf(listedItem.desiredTokenId) == msg.sender, "You don't own the desired NFT for swap"
             );
-            checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId); // !!!W this is a quick fix. cGPT said there was an issue about the approval.
+            checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
 
-            // Swap the NFTs
             desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
 
+            // in case the desiredNft is listed already, delete that
             if (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId].seller != address(0)) {
                 Listing memory desiredItem = s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId];
                 delete (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId]);
@@ -198,12 +212,11 @@ contract IdeationMarketFacet {
                     desiredItem.desiredTokenId
                 );
             }
-            // !!!W when implementing the swap + eth option, i need to have the proceeds here aswell. - i think i do already at the top...
         }
 
         delete (s.listings[nftAddress][tokenId]);
 
-        IERC721(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId); // !!!W this needs an revert catch thingy bc if it fails to transfer the nft, for example because the approval has been revoked, the whole function has to be reverted.
+        IERC721(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId);
 
         emit ItemBought(
             listedItem.listingId,
@@ -214,8 +227,9 @@ contract IdeationMarketFacet {
             listedItem.seller,
             msg.sender,
             listedItem.desiredNftAddress,
-            listedItem.desiredTokenId
-        ); // !!!W Patrick said that the event emitted is technically not save from reantrancy attacks. figure out how and why and make it safe.
+            listedItem.desiredTokenId,
+            listedItem.feeRate
+        );
     }
 
     function cancelListing(address nftAddress, uint256 tokenId)
@@ -245,7 +259,7 @@ contract IdeationMarketFacet {
         // take notice: when the listing gets updated the ListingId also gets updated!
         address nftAddress,
         uint256 tokenId,
-        uint256 newPrice,
+        uint96 newPrice,
         address newDesiredNftAddress,
         uint256 newdesiredTokenId
     ) external isListed(nftAddress, tokenId) isNftOwner(nftAddress, tokenId, msg.sender) {
@@ -268,7 +282,8 @@ contract IdeationMarketFacet {
             listedItem.price,
             msg.sender,
             listedItem.desiredNftAddress,
-            listedItem.desiredTokenId
+            listedItem.desiredTokenId,
+            listedItem.feeRate
         );
     }
 
@@ -291,11 +306,11 @@ contract IdeationMarketFacet {
         );
     }
 
-    function setFee(uint256 fee) public onlyOwner {
+    function setFee(uint32 fee) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 previousFee = s.ideationMarketFee;
         s.ideationMarketFee = fee;
-        emit FeeUpdated(previousFee, fee);
+        emit IdeationMarketFeeUpdated(previousFee, fee);
     }
 
     //////////////////////

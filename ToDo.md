@@ -71,7 +71,7 @@ ToDos for the IdeationMarketFacet:
 islisted als status enum - no, this is just expensive overhead in the smartcontract that can be handled by the graph or the frontend ✅
 define listings by listingId, not nft - no because then i couldnt check if an nft is already listed without gas overhead and it makes the whole code more complex in general ✅
 auto cancel when swapped ✅
-// !!!W this needs an revert catch ⬅️
+this needs an revert catch ✅ ⬅️
 fee checken und in struct integrieren
 when approval gets revoked delete the listing, inform the seller about that deletion
 all the !!!

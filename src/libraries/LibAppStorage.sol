@@ -2,16 +2,17 @@
 pragma solidity ^0.8.28;
 
 struct Listing {
-    uint256 listingId;
-    uint256 price;
+    uint128 listingId;
+    uint96 price;
+    uint32 feeRate; // storing the fee at the time of listing
     address seller;
     address desiredNftAddress;
     uint256 desiredTokenId;
 }
 
 struct AppStorage {
-    uint256 listingId;
-    uint256 ideationMarketFee;
+    uint128 listingId;
+    uint32 ideationMarketFee; // e.g., 100 = 0.1%
     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     mapping(address => uint256) proceeds; // Proceeds by seller address
     bool reentrancyLock;

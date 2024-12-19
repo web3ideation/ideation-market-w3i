@@ -48,7 +48,7 @@ contract DiamondInit {
 
         // constructor for IdeationMarketFacet
         AppStorage storage s = LibAppStorage.appStorage();
-        s.ideationMarketFee = ideationMarketFee;
+        s.ideationMarketFee = ideationMarketFee; // represents a rate in basis points (e.g., 100 = 0.1%)
 
         // Modify `init()` to initialize any extra state variables in `LibDiamond.DiamondStorage` struct during deployment.
         // You can also add parameters to `init()` if needed to set your own state variables.
