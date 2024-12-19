@@ -7,7 +7,7 @@ import "../interfaces/IERC721.sol";
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
-error IdeationMarket__PriceNotMet(address nftAddress, uint256 tokenId, uint256 price, uint256 value);
+error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
 error IdeationMarket__NoProceeds();
 error IdeationMarket__SameBuyerAsSeller();
 error IdeationMarket__NoSwapForSameNft();
@@ -65,7 +65,6 @@ contract IdeationMarketFacet {
     // these are defined in the LibAppStorage.sol
     // struct Listing {
     //     uint256 listingId;
-    //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
     //     uint256 price;
     //     address seller;
     //     address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
@@ -76,16 +75,11 @@ contract IdeationMarketFacet {
     // !!!W add that all the info of the listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
 
     // these are defined in the LibAppStorage.sol
-    // NFT Contract address -> NFT TokenID -> Listing
-    // mapping(address => mapping(uint256 => Listing)) private listings;
-
-    // seller address -> amount earned
-    // mapping(address => uint256) private proceeds;
-
     // uint256 listingId;
+    // uint256 ideationMarketFee; // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
+    // mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
+    // mapping(address => uint256) proceeds; // Proceeds by seller address
     // bool reentrancyLock;
-
-    // uint256 public ideationMarketFee;  // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
 
     ///////////////
     // Modifiers //
@@ -96,17 +90,11 @@ contract IdeationMarketFacet {
         _;
     }
 
-    modifier notListed(address nftAddress, uint256 tokenId) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        require(s.listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
-        _;
-    } // !!!W when using the status enum this needs to be changed
-
     modifier isListed(address nftAddress, uint256 tokenId) {
         AppStorage storage s = LibAppStorage.appStorage();
         require(s.listings[nftAddress][tokenId].seller != address(0), "IdeationMarket__NotListed");
         _;
-    } // !!!W when using the status enum this needs to be changed
+    }
 
     modifier isNftOwner(address nftAddress, uint256 tokenId, address nftOwner) {
         IERC721 nft = IERC721(nftAddress);
@@ -149,14 +137,13 @@ contract IdeationMarketFacet {
         // Challenge: Have this contract accept payment in a subset of tokens as well
         // Hint: Use Chainlink Price Feeds to convert the price of the tokens between each other
         // !!!W address tokenPayment - challange: use chainlink pricefeed to let the user decide which currency they want to use - so the user would set his price in eur or usd (or any other available chianlink pricefeed (?) ) and the frontend would always show this currency. when the nft gets bought the buyer would pay in ETH what the useres currency is worth at that time in eth. For that it is also necessary that the withdraw proceeds happens directly so the seller gets the eth asap to convert it back to their currency at a cex of their choice ... additionally i could also integrate an cex api where the seller could register their cexs account at this nft marketplace so that everything happens automatically and the seller gets the money they asked for automatically in their currency. (since it would probaly not be exactly the amount since there are fees and a little time delay from the buyer buying to the seller getting the eur, the marketplace owner should pay up for the difference (but also take if its too much since the price of eth could also go up)) --- NO! https://fravoll.github.io/solidity-patterns/pull_over_push.ht
-        notListed(nftAddress, tokenId)
         isNftOwner(nftAddress, tokenId, msg.sender)
     {
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
-
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(s.listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
         // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
-        AppStorage storage s = LibAppStorage.appStorage();
         s.listingId++;
         s.listings[nftAddress][tokenId] = Listing(s.listingId, price, msg.sender, desiredNftAddress, desiredTokenId);
         emit ItemListed(s.listingId, nftAddress, tokenId, true, price, msg.sender, desiredNftAddress, desiredTokenId);
@@ -165,10 +152,7 @@ contract IdeationMarketFacet {
     }
 
     // !!!W I think there should be a ~10 minute threshold of people being able to buy a newly listed nft, since it might be that the seller made a mistake and wants to use the update function. so put in something like a counter of blocks mined since the listing of that specific nft to be bought. It should be visible in the frontend aswell tho, that this nft is not yet to be bought but in ~10 minutes.
-    function buyItem(
-        address nftAddress, // !!!W should i rather work with the listingId of the struct? that seems more streamlined...
-        uint256 tokenId
-    ) external payable nonReentrant isListed(nftAddress, tokenId) {
+    function buyItem(address nftAddress, uint256 tokenId) external payable nonReentrant isListed(nftAddress, tokenId) {
         checkApproval(nftAddress, tokenId); // !!!W add a test that confirms that the buyItem function fails if the approval has been revoked in the meantime!
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
@@ -176,7 +160,8 @@ contract IdeationMarketFacet {
         require(msg.sender != listedItem.seller, IdeationMarket__SameBuyerAsSeller());
 
         require(
-            msg.value >= listedItem.price, IdeationMarket__PriceNotMet(nftAddress, tokenId, listedItem.price, msg.value)
+            msg.value >= listedItem.price,
+            IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value)
         );
 
         uint256 fee = ((listedItem.price * s.ideationMarketFee) / 100000);
@@ -192,7 +177,22 @@ contract IdeationMarketFacet {
 
             // Swap the NFTs
             desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
-            // !!!W In case the swapped nft had been actively listed at the time, that listing has to get canceled
+
+            if (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId].seller != address(0)) {
+                Listing memory desiredItem = s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId];
+                delete (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId]);
+
+                emit ItemCanceled(
+                    desiredItem.listingId,
+                    listedItem.desiredNftAddress,
+                    listedItem.desiredTokenId,
+                    false,
+                    desiredItem.price,
+                    desiredItem.seller,
+                    desiredItem.desiredNftAddress,
+                    desiredItem.desiredTokenId
+                );
+            }
             // !!!W when implementing the swap + eth option, i need to have the proceeds here aswell. - i think i do already at the top...
         }
 

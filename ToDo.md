@@ -69,8 +69,10 @@ check if sourcecontroll is syncing all the changes ✅
 
 ToDos for the IdeationMarketFacet: 
 islisted als status enum - no, this is just expensive overhead in the smartcontract that can be handled by the graph or the frontend ✅
-define listings by listingId, not nft ⬅️
-
+define listings by listingId, not nft - no because then i couldnt check if an nft is already listed without gas overhead and it makes the whole code more complex in general ✅
+⬅️
+fee checken und in struct integrieren
+when approval gets revoked delete the listing, inform the seller about that deletion
 all the !!!
 google keep notes
 
@@ -90,3 +92,11 @@ do "Struct Packing" -> storage optimization for gas savings (in appstorage)
 do I need getter functions for all the state variables or is it automatically possible to read the storage struct out in a whole?
 
 activate optimizer in the foundry.toml optimizer = true, optimizer_runs = 5000 (10 for cheaper deployment, 5000 for cheaper executions)
+
+maybe the ideation market interaction gas fees could be reduced by changing the nested listings mapping to a direct mapping by instead of querying for the nft address AND tokenId instead writing them together as an uint256 0x759941ECB2B2961566C94e4dB53ae3EeC35F980c'+'777 -> listing (cGPT estimates 3,8% gassavings)
+
+by reducing the information of emitting events i can also safe gas (7% for the cancel item function when only emitting the listing Id) but take in consideration, that the events is through thegraph the main source of information
+
+
+Changes relevanat for frontend:
+fees
