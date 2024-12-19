@@ -13,18 +13,6 @@ error IdeationMarket__SameBuyerAsSeller();
 error IdeationMarket__NoSwapForSameNft();
 
 contract IdeationMarketFacet {
-    // these are defined in the LibAppStorage.sol
-    // struct Listing {
-    //     uint256 listingId;
-    //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
-    //     uint256 price;
-    //     address seller;
-    //     address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
-    //     uint256 desiredTokenId; // Desired token IDs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
-    // }
-
-    // !!!W maybe I should change the isListed to something like status where i have an enum with options listed, updated, canceled, bought, swapped, etc. and then i can have a function that returns all the listings of a specific status. that would be a nice feature for the frontend. But more importantly i can use this for thegraph to feed the frontend this this specific information.
-
     event ItemListed(
         uint256 indexed listingId,
         address indexed nftAddress,
@@ -74,6 +62,16 @@ contract IdeationMarketFacet {
 
     event FeeUpdated(uint256 previousFee, uint256 newFee);
 
+    // these are defined in the LibAppStorage.sol
+    // struct Listing {
+    //     uint256 listingId;
+    //     // !!!W then it would make sense to just always let the functions also work if only the listingId is given in the args, also the errors should only return the listingId and not the nftAddress and tokenId
+    //     uint256 price;
+    //     address seller;
+    //     address desiredNftAddress; // Desired NFTs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
+    //     uint256 desiredTokenId; // Desired token IDs for swap !!!W find a way to have multiple desiredNftAddresses ( and / or ) - maybe by using an array here(?)
+    // }
+
     // !!!W the listing mapping could be aswell be defined by listing ID instead of NFT. That would be a more streamlined experience
     // !!!W add that all the info of the listings mapping can be returned when calling a getter function with the listingId as the parameter/argument
 
@@ -83,6 +81,9 @@ contract IdeationMarketFacet {
 
     // seller address -> amount earned
     // mapping(address => uint256) private proceeds;
+
+    // uint256 listingId;
+    // bool reentrancyLock;
 
     // uint256 public ideationMarketFee;  // !!!W when a listing is set the fee should stick to it, meaning that if the fee changes in the meantime, that listing still has the old fee. Do that by adding fee to the listing and using that for the proceeds.
 

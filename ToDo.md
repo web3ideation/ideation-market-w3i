@@ -67,12 +67,16 @@ add a function to transfer ownership (?) already in ownershipfacet ✅
 
 check if sourcecontroll is syncing all the changes ✅ 
 
-ToDos for the IdeationMarketFacet: islisted als status enum⬅️
+ToDos for the IdeationMarketFacet: 
+islisted als status enum - no, this is just expensive overhead in the smartcontract that can be handled by the graph or the frontend ✅
+define listings by listingId, not nft ⬅️
+
 all the !!!
 google keep notes
 
 
 do i have to adapt the graph?
+add graph queries for listed, updated, canceled, bought, swapped - also fee updated and proceeds withdrawn
 
 reducing gas costs for executing functions:
 Facets can contain few external functions, reducing gas costs. Because it costs more gas to call a function in a contract with many functions than a contract with few functions.
