@@ -12,3 +12,6 @@ docs/
 
 # Dotenv file
 .env
+
+# internal ToDo
+/ToDo.md
