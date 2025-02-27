@@ -46,7 +46,8 @@ contract IdeationMarketFacet {
         uint256 price,
         address seller,
         address desiredNftAddress,
-        uint256 desiredTokenId
+        uint256 desiredTokenId,
+        address triggerdBy
     );
 
     event ItemUpdated(
@@ -220,7 +221,8 @@ contract IdeationMarketFacet {
                     desiredItem.price,
                     desiredItem.seller,
                     desiredItem.desiredNftAddress,
-                    desiredItem.desiredTokenId
+                    desiredItem.desiredTokenId,
+                    address(this)
                 );
             }
         }
@@ -243,11 +245,17 @@ contract IdeationMarketFacet {
         );
     }
 
-    function cancelListing(address nftAddress, uint256 tokenId)
-        external
-        isListed(nftAddress, tokenId)
-        isNftOwner(nftAddress, tokenId, msg.sender)
-    {
+    function cancelListing(address nftAddress, uint256 tokenId) external isListed(nftAddress, tokenId) {
+        // Instantiate the NFT interface to get the current owner.
+        IERC721 nft = IERC721(nftAddress);
+        address currentOwner = nft.ownerOf(tokenId);
+        // Retrieve the diamond (contract) owner.
+        address diamondOwner = LibDiamond.contractOwner();
+
+        // Ensure that the caller is either the NFT owner or the diamond owner.
+        require(
+            msg.sender == currentOwner || msg.sender == diamondOwner, "cancelListing: Not authorized to cancel listing"
+        );
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
         delete (s.listings[nftAddress][tokenId]);
@@ -258,11 +266,11 @@ contract IdeationMarketFacet {
             tokenId,
             false,
             listedItem.price,
-            msg.sender,
+            listedItem.seller,
             listedItem.desiredNftAddress,
-            listedItem.desiredTokenId
+            listedItem.desiredTokenId,
+            msg.sender
         );
-        // nft = IERC721(nftAddress); nft.approve(address(0), tokenId); // !!!W patrick didnt revoke the approval in his contract -> I guess bc its not possible. bc that call can only come from the owner or from the approved for all, while this call here is coming from the contract which is not. But I think it would make sense if the address that is approved would be able to revoke its onw approval, check out why it is not!
     }
 
     function updateListing(
