@@ -65,6 +65,19 @@ contract IdeationMarketFacet {
 
     event IdeationMarketFeeUpdated(uint256 previousFee, uint256 newFee);
 
+    // Event emitted when a listing is canceled due to revoked approval.
+    event ItemCanceledDueToMissingApproval(
+        uint256 indexed listingId,
+        address indexed nftAddress,
+        uint256 indexed tokenId,
+        bool isListed,
+        uint256 price,
+        address seller,
+        address desiredNftAddress,
+        uint256 desiredTokenId,
+        address triggeredBy
+    );
+
     // these are defined in the LibAppStorage.sol
     // struct Listing {
     //      uint128 listingId;
@@ -159,13 +172,11 @@ contract IdeationMarketFacet {
             desiredTokenId,
             s.ideationMarketFee
         );
-
-        // !!!W is there a way to listen to the BasicNft event for if the approval has been revoked, to then cancel the listing automatically?
     }
 
     // !!!W I think there should be a ~10 minute threshold of people being able to buy a newly listed nft, since it might be that the seller made a mistake and wants to use the update function. so put in something like a counter of blocks mined since the listing of that specific nft to be bought. It should be visible in the frontend aswell tho, that this nft is not yet to be bought but in ~10 minutes.
     function buyItem(address nftAddress, uint256 tokenId) external payable nonReentrant isListed(nftAddress, tokenId) {
-        checkApproval(nftAddress, tokenId); // !!!W add a test that confirms that the buyItem function fails if the approval has been revoked in the meantime!
+        checkApproval(nftAddress, tokenId); // !!!Wt add a test that confirms that the buyItem function fails if the approval has been revoked in the meantime!
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 
@@ -275,7 +286,7 @@ contract IdeationMarketFacet {
         listedItem.desiredTokenId = newdesiredTokenId;
         s.listings[nftAddress][tokenId] = listedItem;
         emit ItemUpdated(
-            listedItem.listingId, // !!!W test if the listingId stays the same, even if between the listItem creation and the updateListing have been other listings created and deleted
+            listedItem.listingId, // !!!Wt test if the listingId stays the same, even if between the listItem creation and the updateListing have been other listings created and deleted
             nftAddress,
             tokenId,
             true,
@@ -313,6 +324,40 @@ contract IdeationMarketFacet {
         emit IdeationMarketFeeUpdated(previousFee, fee);
     }
 
+    function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {
+        // Instantiate the IERC721 interface for the given NFT contract.
+        IERC721 nft = IERC721(nftAddress);
+
+        // Get access to the diamond storage.
+        AppStorage storage s = LibAppStorage.appStorage();
+
+        // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
+        Listing memory listedItem = s.listings[nftAddress][tokenId];
+        if (listedItem.seller == address(0)) {
+            // No listing exists for this NFT, so there's nothing to cancel.
+            return;
+        }
+
+        // Check if the marketplace is still approved to transfer this NFT.
+        // We check both individual token approval and operator approval.
+        if (nft.getApproved(tokenId) != address(this) && !nft.isApprovedForAll(nft.ownerOf(tokenId), address(this))) {
+            // Approval is missing; cancel the listing by deleting it from storage.
+            delete s.listings[nftAddress][tokenId];
+
+            emit ItemCanceledDueToMissingApproval(
+                listedItem.listingId,
+                nftAddress,
+                tokenId,
+                false,
+                listedItem.price,
+                listedItem.seller,
+                listedItem.desiredNftAddress,
+                listedItem.desiredTokenId,
+                msg.sender // caller who triggered the cancellation
+            );
+        }
+    }
+
     //////////////////////
     // getter Functions //
     //////////////////////
@@ -331,16 +376,6 @@ contract IdeationMarketFacet {
         return address(this).balance;
     }
 }
-// !!!W test if the approval works as a separate function
-// !!!W test if the listingId starts with 1 and than counts up for every time the listItem function has been called
-
-// Create a decentralized NFT Marketplace:
-// !!!W 0.1. `approve`: approve the smartcontract to transfer the NFT
-// 1. `listItem`: List NFTs on the marketplace (/)
-// 2. `buyItem`: Buy NFTs
-// 3. `cancelItem`: Cancel a listing
-// 4. `updateListing`: to update the price
-// 5. `withdrawproceeds`: Withdraw payment for my bought NFTs
 
 // !!!W make a nice description/comments/documentation like the zepplin project does.
 // !!!W create a good ReadMe.md
