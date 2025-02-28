@@ -131,8 +131,6 @@ contract IdeationMarketFacet {
     // Main Functions //
     ////////////////////
 
-    // !!!W add NatSpec for every function
-
     /*
      * @notice Method for listing your NFT on the marketplace
      * @param nftAddress: Address of the NFT to be listed
@@ -147,17 +145,10 @@ contract IdeationMarketFacet {
         uint96 price,
         address desiredNftAddress,
         uint256 desiredTokenId
-    )
-        external
-        // Challenge: Have this contract accept payment in a subset of tokens as well
-        // Hint: Use Chainlink Price Feeds to convert the price of the tokens between each other
-        // !!!W address tokenPayment - challange: use chainlink pricefeed to let the user decide which currency they want to use - so the user would set his price in eur or usd (or any other available chianlink pricefeed (?) ) and the frontend would always show this currency. when the nft gets bought the buyer would pay in ETH what the useres currency is worth at that time in eth. For that it is also necessary that the withdraw proceeds happens directly so the seller gets the eth asap to convert it back to their currency at a cex of their choice ... additionally i could also integrate an cex api where the seller could register their cexs account at this nft marketplace so that everything happens automatically and the seller gets the money they asked for automatically in their currency. (since it would probaly not be exactly the amount since there are fees and a little time delay from the buyer buying to the seller getting the eur, the marketplace owner should pay up for the difference (but also take if its too much since the price of eth could also go up)) --- NO! https://fravoll.github.io/solidity-patterns/pull_over_push.ht
-        isNftOwner(nftAddress, tokenId, msg.sender)
-    {
+    ) external isNftOwner(nftAddress, tokenId, msg.sender) {
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
         AppStorage storage s = LibAppStorage.appStorage();
         require(s.listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
-        // info: approve the NFT Marketplace to transfer the NFT (that way the Owner is keeping the NFT in their wallet until someone bougt it from the marketplace)
         checkApproval(nftAddress, tokenId);
         s.listingId++;
         s.listings[nftAddress][tokenId] =
@@ -175,9 +166,8 @@ contract IdeationMarketFacet {
         );
     }
 
-    // !!!W I think there should be a ~10 minute threshold of people being able to buy a newly listed nft, since it might be that the seller made a mistake and wants to use the update function. so put in something like a counter of blocks mined since the listing of that specific nft to be bought. It should be visible in the frontend aswell tho, that this nft is not yet to be bought but in ~10 minutes.
     function buyItem(address nftAddress, uint256 tokenId) external payable nonReentrant isListed(nftAddress, tokenId) {
-        checkApproval(nftAddress, tokenId); // !!!Wt add a test that confirms that the buyItem function fails if the approval has been revoked in the meantime!
+        checkApproval(nftAddress, tokenId);
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 
@@ -208,7 +198,7 @@ contract IdeationMarketFacet {
 
             desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
 
-            // in case the desiredNft is listed already, delete that
+            // in case the desiredNft is listed already, delete that now deprecated listing
             if (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId].seller != address(0)) {
                 Listing memory desiredItem = s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId];
                 delete (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId]);
@@ -245,14 +235,12 @@ contract IdeationMarketFacet {
         );
     }
 
+    // natspec info: the nft owner is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(address nftAddress, uint256 tokenId) external isListed(nftAddress, tokenId) {
-        // Instantiate the NFT interface to get the current owner.
         IERC721 nft = IERC721(nftAddress);
         address currentOwner = nft.ownerOf(tokenId);
-        // Retrieve the diamond (contract) owner.
         address diamondOwner = LibDiamond.contractOwner();
 
-        // Ensure that the caller is either the NFT owner or the diamond owner.
         require(
             msg.sender == currentOwner || msg.sender == diamondOwner, "cancelListing: Not authorized to cancel listing"
         );
@@ -274,8 +262,6 @@ contract IdeationMarketFacet {
     }
 
     function updateListing(
-        // !!!W this needs to get adjusted for swapping nfts.
-        // take notice: when the listing gets updated the ListingId also gets updated!
         address nftAddress,
         uint256 tokenId,
         uint96 newPrice,
@@ -285,16 +271,20 @@ contract IdeationMarketFacet {
         require(
             !(nftAddress == newDesiredNftAddress && tokenId == newdesiredTokenId), IdeationMarket__NoSwapForSameNft()
         );
-        checkApproval(nftAddress, tokenId);
+        if (newDesiredNftAddress == address(0)) {
+            require(newdesiredTokenId == 0, "If no swap address, tokenId must be 0");
+        }
 
+        checkApproval(nftAddress, tokenId);
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[nftAddress][tokenId];
+        Listing storage listedItem = s.listings[nftAddress][tokenId];
         listedItem.price = newPrice;
         listedItem.desiredNftAddress = newDesiredNftAddress;
         listedItem.desiredTokenId = newdesiredTokenId;
+        listedItem.feeRate = s.ideationMarketFee;
         s.listings[nftAddress][tokenId] = listedItem;
         emit ItemUpdated(
-            listedItem.listingId, // !!!Wt test if the listingId stays the same, even if between the listItem creation and the updateListing have been other listings created and deleted
+            listedItem.listingId,
             nftAddress,
             tokenId,
             true,
@@ -333,10 +323,7 @@ contract IdeationMarketFacet {
     }
 
     function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {
-        // Instantiate the IERC721 interface for the given NFT contract.
         IERC721 nft = IERC721(nftAddress);
-
-        // Get access to the diamond storage.
         AppStorage storage s = LibAppStorage.appStorage();
 
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
@@ -347,7 +334,6 @@ contract IdeationMarketFacet {
         }
 
         // Check if the marketplace is still approved to transfer this NFT.
-        // We check both individual token approval and operator approval.
         if (nft.getApproved(tokenId) != address(this) && !nft.isApprovedForAll(nft.ownerOf(tokenId), address(this))) {
             // Approval is missing; cancel the listing by deleting it from storage.
             delete s.listings[nftAddress][tokenId];
@@ -384,8 +370,3 @@ contract IdeationMarketFacet {
         return address(this).balance;
     }
 }
-
-// !!!W make a nice description/comments/documentation like the zepplin project does.
-// !!!W create a good ReadMe.md
-
-// !!!W cGPT mentioned Security tests for edge cases. Just copy the code into cGPT again and ask it for all possible edge cases and how i can write my test for those.
