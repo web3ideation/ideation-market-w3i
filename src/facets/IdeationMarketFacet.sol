@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 import "../interfaces/IERC721.sol";
+import "../interfaces/IERC165.sol";
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
@@ -146,7 +147,11 @@ contract IdeationMarketFacet {
         address desiredNftAddress,
         uint256 desiredTokenId
     ) external isNftOwner(nftAddress, tokenId, msg.sender) {
+        require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Provided contract is not ERC721");
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
+        if (desiredNftAddress != address(0)) {
+            require(IERC165(desiredNftAddress).supportsInterface(0x80ac58cd), "Provided contract is not ERC721");
+        }
         AppStorage storage s = LibAppStorage.appStorage();
         require(s.listings[nftAddress][tokenId].seller == address(0), "IdeationMarket__AlreadyListed");
         checkApproval(nftAddress, tokenId);
@@ -266,13 +271,15 @@ contract IdeationMarketFacet {
         uint256 tokenId,
         uint96 newPrice,
         address newDesiredNftAddress,
-        uint256 newdesiredTokenId
+        uint256 newDesiredTokenId
     ) external isListed(nftAddress, tokenId) isNftOwner(nftAddress, tokenId, msg.sender) {
         require(
-            !(nftAddress == newDesiredNftAddress && tokenId == newdesiredTokenId), IdeationMarket__NoSwapForSameNft()
+            !(nftAddress == newDesiredNftAddress && tokenId == newDesiredTokenId), IdeationMarket__NoSwapForSameNft()
         );
         if (newDesiredNftAddress == address(0)) {
-            require(newdesiredTokenId == 0, "If no swap address, tokenId must be 0");
+            require(newDesiredTokenId == 0, "If no swap address, tokenId must be 0");
+        } else {
+            require(IERC165(newDesiredNftAddress).supportsInterface(0x80ac58cd), "Provided contract is not ERC721");
         }
 
         checkApproval(nftAddress, tokenId);
@@ -280,9 +287,8 @@ contract IdeationMarketFacet {
         Listing storage listedItem = s.listings[nftAddress][tokenId];
         listedItem.price = newPrice;
         listedItem.desiredNftAddress = newDesiredNftAddress;
-        listedItem.desiredTokenId = newdesiredTokenId;
+        listedItem.desiredTokenId = newDesiredTokenId;
         listedItem.feeRate = s.ideationMarketFee;
-        s.listings[nftAddress][tokenId] = listedItem;
         emit ItemUpdated(
             listedItem.listingId,
             nftAddress,
@@ -296,14 +302,15 @@ contract IdeationMarketFacet {
         );
     }
 
-    function withdrawProceeds() external payable nonReentrant {
+    function withdrawProceeds() external nonReentrant {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 proceeds = s.proceeds[msg.sender];
 
         require(proceeds > 0, IdeationMarket__NoProceeds());
 
         s.proceeds[msg.sender] = 0;
-        payable(msg.sender).transfer(proceeds);
+        (bool success,) = payable(msg.sender).call{value: proceeds}("");
+        require(success, "Transfer of proceeds failed");
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
