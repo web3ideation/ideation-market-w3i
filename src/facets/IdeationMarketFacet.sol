@@ -36,7 +36,11 @@ contract IdeationMarketFacet {
         address buyer,
         address desiredNftAddress,
         uint256 desiredTokenId,
-        uint256 feeRate
+        uint256 feeRate,
+        uint256 innovationFee,
+        uint256 founderFee1,
+        uint256 founderFee2,
+        uint256 founderFee3
     );
 
     event ItemCanceled(
@@ -92,10 +96,16 @@ contract IdeationMarketFacet {
 
     // these are defined in the LibAppStorage.sol
     // uint128 listingId;
-    // uint32 ideationMarketFee; // e.g., 100 = 0.1%
+    // uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
     // mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     // mapping(address => uint256) proceeds; // Proceeds by seller address
     // bool reentrancyLock;
+    // address founder1;
+    // address founder2;
+    // address founder3;
+    // uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
+    // uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
+    // uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
 
     ///////////////
     // Modifiers //
@@ -188,10 +198,27 @@ contract IdeationMarketFacet {
             IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value)
         );
 
-        uint256 fee = ((listedItem.price * listedItem.feeRate) / 100000);
-        uint256 newProceeds = listedItem.price - fee;
-        s.proceeds[listedItem.seller] += newProceeds;
-        s.proceeds[LibDiamond.contractOwner()] += fee;
+        // Calculate the total fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
+        uint256 totalFee = ((listedItem.price * listedItem.feeRate) / 100000);
+
+        // Calculate each founder's share based on their ratio (ratios should sum to 100)
+        uint256 founderFee1Amount = (totalFee * s.founder1Ratio) / 100000;
+        uint256 founderFee2Amount = (totalFee * s.founder2Ratio) / 100000;
+        uint256 founderFee3Amount = (totalFee * s.founder3Ratio) / 100000;
+
+        // Calculate the innovationFee that goes to the Diamond Owner / DAO Multisig Wallet
+        uint256 innovationFee = totalFee - (founderFee1Amount + founderFee2Amount + founderFee3Amount);
+
+        // Seller receives sale price minus the total fee
+        uint256 sellerProceeds = listedItem.price - totalFee;
+
+        // Update proceeds for the seller, marketplace owner, and each founder
+
+        s.proceeds[listedItem.seller] += sellerProceeds;
+        s.proceeds[LibDiamond.contractOwner()] += innovationFee;
+        s.proceeds[s.founder1] += founderFee1Amount;
+        s.proceeds[s.founder2] += founderFee2Amount;
+        s.proceeds[s.founder3] += founderFee3Amount;
 
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
@@ -236,7 +263,11 @@ contract IdeationMarketFacet {
             msg.sender,
             listedItem.desiredNftAddress,
             listedItem.desiredTokenId,
-            listedItem.feeRate
+            listedItem.feeRate,
+            innovationFee,
+            founderFee1Amount,
+            founderFee2Amount,
+            founderFee3Amount
         );
     }
 
@@ -327,6 +358,24 @@ contract IdeationMarketFacet {
         uint256 previousFee = s.ideationMarketFee;
         s.ideationMarketFee = fee;
         emit IdeationMarketFeeUpdated(previousFee, fee);
+    }
+
+    function setFounder1(address _founder1, uint8 _ratio) external onlyOwner {
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.founder1 = _founder1;
+        s.founder1Ratio = _ratio;
+    }
+
+    function setFounder2(address _founder2, uint8 _ratio) external onlyOwner {
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.founder2 = _founder2;
+        s.founder2Ratio = _ratio;
+    }
+
+    function setFounder3(address _founder3, uint8 _ratio) external onlyOwner {
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.founder3 = _founder3;
+        s.founder3Ratio = _ratio;
     }
 
     function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {

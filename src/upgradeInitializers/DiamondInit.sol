@@ -25,7 +25,15 @@ import {IERC721Receiver} from "../interfaces/IERC721Receiver.sol";
 contract DiamondInit {
     // You can add parameters to this function in order to pass in
     // data to set your own state variables
-    function init(uint32 ideationMarketFee) external {
+    function init(
+        uint32 ideationMarketFee,
+        address founder1Address,
+        address founder2Address,
+        address founder3Address,
+        uint32 founder1Ratio,
+        uint32 founder2Ratio,
+        uint32 founder3Ratio
+    ) external {
         // adding ERC165 data
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
@@ -49,6 +57,12 @@ contract DiamondInit {
         // constructor for IdeationMarketFacet
         AppStorage storage s = LibAppStorage.appStorage();
         s.ideationMarketFee = ideationMarketFee; // represents a rate in basis points (e.g., 100 = 0.1%)
+        s.founder1 = founder1Address;
+        s.founder1Ratio = founder1Ratio;
+        s.founder2 = founder2Address;
+        s.founder2Ratio = founder2Ratio;
+        s.founder3 = founder3Address;
+        s.founder3Ratio = founder3Ratio;
 
         // Modify `init()` to initialize any extra state variables in `LibDiamond.DiamondStorage` struct during deployment.
         // You can also add parameters to `init()` if needed to set your own state variables.

@@ -12,10 +12,16 @@ struct Listing {
 
 struct AppStorage {
     uint128 listingId;
-    uint32 ideationMarketFee; // e.g., 100 = 0.1%
+    uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     mapping(address => uint256) proceeds; // Proceeds by seller address
     bool reentrancyLock;
+    address founder1;
+    address founder2;
+    address founder3;
+    uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
+    uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
+    uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
 }
 
 library LibAppStorage {
