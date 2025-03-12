@@ -106,6 +106,9 @@ contract IdeationMarketFacet {
     // uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
     // uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
     // uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
+    // mapping(address => bool) whitelistedCollections;
+    // address[] whitelistedCollectionsArray;
+    // mapping(address => uint256) whitelistedCollectionsIndex;
 
     ///////////////
     // Modifiers //
@@ -138,6 +141,12 @@ contract IdeationMarketFacet {
         s.reentrancyLock = false;
     }
 
+    modifier onlyWhitelistedCollection(address nftAddress) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        require(s.whitelistedCollections[nftAddress], "Collection not whitelisted");
+        _;
+    }
+
     ////////////////////
     // Main Functions //
     ////////////////////
@@ -156,7 +165,7 @@ contract IdeationMarketFacet {
         uint96 price,
         address desiredNftAddress,
         uint256 desiredTokenId
-    ) external isNftOwner(nftAddress, tokenId, msg.sender) {
+    ) external isNftOwner(nftAddress, tokenId, msg.sender) onlyWhitelistedCollection(nftAddress) {
         require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Provided contract is not ERC721");
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
         if (desiredNftAddress != address(0)) {
@@ -303,7 +312,12 @@ contract IdeationMarketFacet {
         uint96 newPrice,
         address newDesiredNftAddress,
         uint256 newDesiredTokenId
-    ) external isListed(nftAddress, tokenId) isNftOwner(nftAddress, tokenId, msg.sender) {
+    )
+        external
+        isListed(nftAddress, tokenId)
+        isNftOwner(nftAddress, tokenId, msg.sender)
+        onlyWhitelistedCollection(nftAddress)
+    {
         require(
             !(nftAddress == newDesiredNftAddress && tokenId == newDesiredTokenId), IdeationMarket__NoSwapForSameNft()
         );
@@ -353,7 +367,7 @@ contract IdeationMarketFacet {
         );
     }
 
-    function setFee(uint32 fee) public onlyOwner {
+    function setTotalFee(uint32 fee) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 previousFee = s.ideationMarketFee;
         s.ideationMarketFee = fee;

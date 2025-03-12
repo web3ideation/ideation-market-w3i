@@ -22,6 +22,9 @@ struct AppStorage {
     uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
     uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
     uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
+    mapping(address => bool) whitelistedCollections;
+    address[] whitelistedCollectionsArray;
+    mapping(address => uint256) whitelistedCollectionsIndex;
 }
 
 library LibAppStorage {
