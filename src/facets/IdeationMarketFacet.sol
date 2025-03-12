@@ -5,6 +5,7 @@ import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 import "../interfaces/IERC721.sol";
 import "../interfaces/IERC165.sol";
+import "../interfaces/IERC2981.sol";
 
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
@@ -82,6 +83,10 @@ contract IdeationMarketFacet {
         address desiredNftAddress,
         uint256 desiredTokenId,
         address triggeredBy
+    );
+
+    event RoyaltyPaid(
+        address indexed nftAddress, uint256 indexed tokenId, address indexed royaltyReceiver, uint256 royaltyAmount
     );
 
     // these are defined in the LibAppStorage.sol
@@ -220,6 +225,18 @@ contract IdeationMarketFacet {
 
         // Seller receives sale price minus the total fee
         uint256 sellerProceeds = listedItem.price - totalFee;
+
+        // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell
+        if (IERC165(nftAddress).supportsInterface(0x2a55205a)) {
+            (address royaltyReceiver, uint256 royaltyAmount) =
+                IERC2981(nftAddress).royaltyInfo(tokenId, listedItem.price);
+            if (royaltyAmount > 0) {
+                require(sellerProceeds >= royaltyAmount, "Royalty fee exceeds proceeds");
+                sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
+                s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
+                emit RoyaltyPaid(nftAddress, tokenId, royaltyReceiver, royaltyAmount);
+            }
+        }
 
         // Update proceeds for the seller, marketplace owner, and each founder
 
