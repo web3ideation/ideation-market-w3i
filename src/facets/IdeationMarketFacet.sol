@@ -9,7 +9,7 @@ import "../interfaces/IERC2981.sol";
 import "../interfaces/IERC4907.sol";
 import "../interfaces/IERC1155.sol";
 
-// !!! check if all of these are still in use
+// !!! check if all of these are still in use and check if i can use them more (i think the erc1155 errors should also be customized error messages (it does safe gas, right?))
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
 error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
@@ -24,7 +24,6 @@ contract IdeationMarketFacet {
      * @param listingId The listing ID.
      * @param nftAddress The address of the NFT contract.
      * @param tokenId The token ID being listed.
-     * @param isListed Listing active flag.
      * @param price Listing price.
      * @param seller The address of the seller.
      * @param desiredNftAddress The desired NFT address for swaps (0 for non-swap listing).
@@ -38,7 +37,6 @@ contract IdeationMarketFacet {
         uint256 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        bool isListed,
         uint256 price,
         address seller,
         address desiredNftAddress,
@@ -53,7 +51,6 @@ contract IdeationMarketFacet {
         uint256 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        bool isListed,
         uint256 price,
         address seller,
         address buyer,
@@ -73,11 +70,7 @@ contract IdeationMarketFacet {
         uint256 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        bool isListed,
-        uint256 price,
         address seller,
-        address desiredNftAddress,
-        uint256 desiredTokenId,
         address triggerdBy
     );
 
@@ -102,11 +95,7 @@ contract IdeationMarketFacet {
         uint256 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
-        bool isListed,
-        uint256 price,
         address seller,
-        address desiredNftAddress,
-        uint256 desiredTokenId,
         address triggeredBy
     );
 
@@ -259,7 +248,6 @@ contract IdeationMarketFacet {
             s.listingId,
             nftAddress,
             tokenId,
-            true,
             price,
             msg.sender,
             desiredNftAddress,
@@ -332,15 +320,49 @@ contract IdeationMarketFacet {
         s.proceeds[s.founder3] += founderFee3Amount;
 
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
-        // check if the desired NftAddress is a 721 or 1155 through the erc165 and have two different paths of swapping for them
+        // !!! check if the desired NftAddress is a 721 or 1155 through the erc165 and have two different paths of swapping for them
         if (listedItem.desiredNftAddress != address(0)) {
-            IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
-            require(
-                desiredNft.ownerOf(listedItem.desiredTokenId) == msg.sender, "You don't own the desired NFT for swap"
-            );
-            checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
+            // Detect the desired token's standard using ERC165 interface checks.
+            TokenStandard desiredTokenStandard;
+            if (IERC165(listedItem.desiredNftAddress).supportsInterface(0xd9b67a26)) {
+                desiredTokenStandard = TokenStandard.ERC1155;
+            } else if (IERC165(listedItem.desiredNftAddress).supportsInterface(0xad092b5c)) {
+                desiredTokenStandard = TokenStandard.ERC4907;
+            } else if (IERC165(listedItem.desiredNftAddress).supportsInterface(0x80ac58cd)) {
+                desiredTokenStandard = TokenStandard.ERC721;
+            } else {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
 
-            desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
+            if (desiredTokenStandard == TokenStandard.ERC1155) {
+                // For ERC1155: Check that msg.sender holds at least 1 unit of the token.
+                require(
+                    IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId) > 0,
+                    "You don't own the desired token for swap"
+                );
+
+                // Check approval
+                check1155Approval(nftAddress, tokenId, msg.sender);
+
+                // Perform the safe transfer of 1 unit from buyer to seller.
+                IERC1155(listedItem.desiredNftAddress).safeTransferFrom(
+                    msg.sender,
+                    listedItem.seller,
+                    listedItem.desiredTokenId,
+                    0, /*listedItem.desiredQuantity,*/
+                    "" //!!! listedItem.desiredQuantity und vlt auch expirity muss im struct und beim listing (und auch updaten) hinzugefügt werden
+                );
+            } else {
+                IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
+                // For ERC721 and ERC4907: Check ownership.
+                require(
+                    desiredNft.ownerOf(listedItem.desiredTokenId) == msg.sender,
+                    "You don't own the desired NFT for swap"
+                );
+                checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
+
+                desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
+            }
 
             // in case the desiredNft is listed already, delete that now deprecated listing
             if (s.listings[listedItem.desiredNftAddress][listedItem.desiredTokenId].seller != address(0)) {
@@ -351,12 +373,8 @@ contract IdeationMarketFacet {
                     desiredItem.listingId,
                     listedItem.desiredNftAddress,
                     listedItem.desiredTokenId,
-                    false,
-                    desiredItem.price,
                     desiredItem.seller,
-                    desiredItem.desiredNftAddress,
-                    desiredItem.desiredTokenId,
-                    address(this)
+                    address(this) // !!! check if this is the address of the cancelation triggering entity
                 );
             }
         }
@@ -376,7 +394,6 @@ contract IdeationMarketFacet {
             listedItem.listingId,
             nftAddress,
             tokenId,
-            false,
             listedItem.price,
             listedItem.seller,
             msg.sender,
@@ -406,17 +423,7 @@ contract IdeationMarketFacet {
         Listing memory listedItem = s.listings[nftAddress][tokenId];
         delete (s.listings[nftAddress][tokenId]);
 
-        emit ItemCanceled(
-            listedItem.listingId,
-            nftAddress,
-            tokenId,
-            false,
-            listedItem.price,
-            listedItem.seller,
-            listedItem.desiredNftAddress,
-            listedItem.desiredTokenId,
-            msg.sender
-        );
+        emit ItemCanceled(listedItem.listingId, nftAddress, tokenId, listedItem.seller, msg.sender);
     }
 
     // !!! maybe make it impossible to change the nftAddress and tokenId ?
@@ -534,15 +541,7 @@ contract IdeationMarketFacet {
             delete s.listings[nftAddress][tokenId];
 
             emit ItemCanceledDueToMissingApproval(
-                listedItem.listingId,
-                nftAddress,
-                tokenId,
-                false,
-                listedItem.price,
-                listedItem.seller,
-                listedItem.desiredNftAddress,
-                listedItem.desiredTokenId,
-                msg.sender // caller who triggered the cancellation
+                listedItem.listingId, nftAddress, tokenId, listedItem.seller, msg.sender
             );
         }
     }
