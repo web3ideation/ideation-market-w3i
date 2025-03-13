@@ -97,6 +97,9 @@ contract IdeationMarketFacet {
     //      address seller;
     //      address desiredNftAddress;
     //      uint256 desiredTokenId;
+    //      TokenStandard tokenStandard;
+    //      uint256 quantity;            // For ERC1155 (should be 1 for ERC721/ERC4907)
+    //      uint256 rentalExpiry;        // For ERC4907 tokens (0 if not a rental)
     // }
 
     // these are defined in the LibAppStorage.sol
