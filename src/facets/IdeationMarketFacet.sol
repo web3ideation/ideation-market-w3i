@@ -190,21 +190,21 @@ contract IdeationMarketFacet {
         if (desiredNftAddress == address(0)) {
             require(desiredTokenId == 0, "If no swap address, tokenId must be 0");
         } else if (desiredNftAddress != address(0) && desiredQuantity > 0) {
-            require(IERC165(desiredNftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
+            require(IERC165(desiredNftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
         } else if (desiredNftAddress != address(0) && desiredQuantity == 0) {
-            require(IERC165(desiredNftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
+            require(IERC165(desiredNftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
         } //else: no swap listing
 
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (quantity > 0) {
             // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
+            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
             require(balance >= quantity, "Insufficient token balance");
             check1155Approval(nftAddress, msg.sender);
         } else {
             // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
+            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
             require(IERC721(nftAddress).ownerOf(tokenId) == msg.sender, "Not NFT owner");
             checkApproval(nftAddress, tokenId);
         }
@@ -260,13 +260,13 @@ contract IdeationMarketFacet {
         // Use interface check to ensure the token supports the expected standard.
         if (listedItem.quantity > 0) {
             // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
+            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
             uint256 balance = IERC1155(nftAddress).balanceOf(listedItem.seller, tokenId);
             require(balance >= listedItem.quantity, "Insufficient token balance");
             check1155Approval(nftAddress, listedItem.seller);
         } else {
             // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
+            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
             require(IERC721(nftAddress).ownerOf(tokenId) == listedItem.seller, "Not NFT owner");
             checkApproval(nftAddress, tokenId);
         }
@@ -286,7 +286,7 @@ contract IdeationMarketFacet {
         uint256 sellerProceeds = listedItem.price - totalFee;
 
         // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell
-        if (IERC165(nftAddress).supportsInterface(0x2a55205a)) {
+        if (IERC165(nftAddress).supportsInterface(type(IERC2981).interfaceId)) {
             (address royaltyReceiver, uint256 royaltyAmount) =
                 IERC2981(nftAddress).royaltyInfo(tokenId, listedItem.price);
             if (royaltyAmount > 0) {
@@ -421,9 +421,9 @@ contract IdeationMarketFacet {
         if (newDesiredNftAddress == address(0)) {
             require(newDesiredTokenId == 0, "If no swap address, tokenId must be 0");
         } else if (newDesiredNftAddress != address(0) && newDesiredQuantity > 0) {
-            require(IERC165(newDesiredNftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
+            require(IERC165(newDesiredNftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
         } else if (newDesiredNftAddress != address(0) && newDesiredQuantity == 0) {
-            require(IERC165(newDesiredNftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
+            require(IERC165(newDesiredNftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
         } //else: no swap listing
 
         AppStorage storage s = LibAppStorage.appStorage();
@@ -432,13 +432,13 @@ contract IdeationMarketFacet {
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (newQuantity > 0) {
             // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
+            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
             require(balance >= newQuantity, "Insufficient token balance");
             check1155Approval(nftAddress, msg.sender);
         } else {
             // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
+            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
             require(IERC721(nftAddress).ownerOf(tokenId) == msg.sender, "Not NFT owner");
             checkApproval(nftAddress, tokenId);
         }
