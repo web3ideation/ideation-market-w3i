@@ -261,13 +261,13 @@ contract IdeationMarketFacet {
         if (listedItem.quantity > 0) {
             // Assume this is an ERC1155 listing.
             require(IERC165(nftAddress).supportsInterface(0xd9b67a26), "Token is not ERC1155");
-            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
+            uint256 balance = IERC1155(nftAddress).balanceOf(listedItem.seller, tokenId);
             require(balance >= listedItem.quantity, "Insufficient token balance");
-            check1155Approval(nftAddress, msg.sender);
+            check1155Approval(nftAddress, listedItem.seller);
         } else {
             // For quantity==0, assume an ERC721 token.
             require(IERC165(nftAddress).supportsInterface(0x80ac58cd), "Token is not ERC721");
-            require(IERC721(nftAddress).ownerOf(tokenId) == msg.sender, "Not NFT owner");
+            require(IERC721(nftAddress).ownerOf(tokenId) == listedItem.seller, "Not NFT owner");
             checkApproval(nftAddress, tokenId);
         }
 
@@ -446,6 +446,8 @@ contract IdeationMarketFacet {
         listedItem.price = newPrice;
         listedItem.desiredNftAddress = newDesiredNftAddress;
         listedItem.desiredTokenId = newDesiredTokenId;
+        listedItem.desiredQuantity = newDesiredQuantity;
+        listedItem.quantity = newQuantity;
         listedItem.feeRate = s.ideationMarketFee;
 
         emit ItemUpdated(
