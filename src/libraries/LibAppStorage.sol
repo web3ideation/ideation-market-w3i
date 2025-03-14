@@ -1,23 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-enum TokenStandard {
-    ERC721, // 0
-    ERC1155, // 1
-    ERC4907 // 2
-
-}
-
 struct Listing {
     uint128 listingId;
     uint96 price;
     uint32 feeRate; // storing the fee at the time of listing
     address seller;
-    address desiredNftAddress;
+    address desiredNftAddress; // For swap Listing !=address(0)
     uint256 desiredTokenId;
-    TokenStandard tokenStandard; // distinguishes the NFT type
-    uint256 quantity; // For ERC1155 (should be 1 for ERC721/ERC4907)
-    uint256 rentalExpiry; // For ERC4907 tokens (0 if not a rental)
+    uint256 quantity; // For ERC1155 >1 and for ERC721 ==0
 }
 
 struct AppStorage {
