@@ -534,22 +534,5 @@ contract IdeationMarketFacet {
             );
         }
     }
-
-    //////////////////////
-    // getter Functions //
-    //////////////////////
-
-    function getListing(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        return s.listings[nftAddress][tokenId];
-    }
-
-    function getProceeds(address seller) external view returns (uint256) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        return s.proceeds[seller];
-    }
-
-    function getBalance() external view returns (uint256) {
-        return address(this).balance;
-    }
+    // find getter functions in the GetterFacet.sol
 }

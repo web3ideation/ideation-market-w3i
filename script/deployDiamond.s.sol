@@ -65,6 +65,8 @@ contract DeployScript is Script {
         marketSelectors[8] = bytes4(keccak256("getNextListingId()"));
         marketSelectors[9] = bytes4(keccak256("getBalance()"));
 
+        // !!! add whtielistfacet and getterfacet
+
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(diamondLoupeFacet),
