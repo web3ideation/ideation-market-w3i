@@ -2,7 +2,6 @@
 pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
-// import "../libraries/LibDiamond.sol"; // Include if needed for access control.
 
 contract BuyerWhitelistFacet {
     // these are relevant storage Variables defined in the LibAppStorage.sol
@@ -12,7 +11,6 @@ contract BuyerWhitelistFacet {
     // mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
     // uint256 buyerWhitelistMaxBatchSize; // should be 300
 
-    // --- Events ---
     event BuyerWhitelisted(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);
     event BuyerRemovedFromWhitelist(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);
 
