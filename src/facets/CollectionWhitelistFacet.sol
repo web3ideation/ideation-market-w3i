@@ -4,31 +4,10 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
-// these are defined in the LibAppStorage.sol
-// struct Listing {
-//      uint128 listingId;
-//      uint96 price;
-//      uint32 feeRate; // storing the fee at the time of listing
-//      address seller;
-//      address desiredNftAddress;
-//      uint256 desiredTokenId;
-// }
-
-// these are defined in the LibAppStorage.sol
-// uint128 listingId;
-// uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
-// mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
-// mapping(address => uint256) proceeds; // Proceeds by seller address
-// bool reentrancyLock;
-// address founder1;
-// address founder2;
-// address founder3;
-// uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
-// uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
-// uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
-// mapping(address => bool) whitelistedCollections;
-// address[] whitelistedCollectionsArray;
-// mapping(address => uint256) whitelistedCollectionsIndex;
+// these are relevant storage Variables defined in the LibAppStorage.sol
+// mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+// address[] whitelistedCollectionsArray; // for lookups
+// mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
 
 contract WhitelistFacet {
     // Only diamond owner can update the whitelist.
@@ -48,6 +27,7 @@ contract WhitelistFacet {
         s.whitelistedCollectionsArray.push(nftAddress);
     }
 
+    // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Removes a single NFT contract address from the whitelist.
     /// @param nftAddress The NFT contract address to remove.
     function removeWhitelistedCollection(address nftAddress) public onlyOwner {
@@ -71,7 +51,6 @@ contract WhitelistFacet {
         s.whitelistedCollections[nftAddress] = false;
     }
 
-    // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Batch adds multiple NFT contract addresses to the whitelist.
     /// @param nftAddresses Array of NFT contract addresses to whitelist.
     function addWhitelistedCollections(address[] calldata nftAddresses) external onlyOwner {

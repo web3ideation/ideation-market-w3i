@@ -40,7 +40,8 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId,
         uint256 desiredQuantity,
         uint256 feeRate,
-        uint256 quantity
+        uint256 quantity,
+        bool buyerWhitelistEnabled
     );
 
     event ItemBought(
@@ -109,23 +110,27 @@ contract IdeationMarketFacet {
     //     uint256 desiredTokenId;
     //     uint256 desiredQuantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
     //     uint256 quantity; // For ERC1155 >1 and for ERC721 ==0
+    //     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
     // }
 
-    // these are defined in the LibAppStorage.sol
-    // uint128 listingId;
-    // uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
-    // mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
-    // mapping(address => uint256) proceeds; // Proceeds by seller address
-    // bool reentrancyLock;
-    // address founder1;
-    // address founder2;
-    // address founder3;
-    // uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
-    // uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
-    // uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
-    // mapping(address => bool) whitelistedCollections;
-    // address[] whitelistedCollectionsArray;
-    // mapping(address => uint256) whitelistedCollectionsIndex;
+    // struct AppStorage {
+    //     uint128 listingId;
+    //     uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
+    //     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
+    //     mapping(address => uint256) proceeds; // Proceeds by seller address
+    //     bool reentrancyLock;
+    //     address founder1;
+    //     address founder2;
+    //     address founder3;
+    //     uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
+    //     uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
+    //     uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
+    //     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+    //     address[] whitelistedCollectionsArray; // for lookups
+    //     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+    //     mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+    //     uint256 buyerWhitelistMaxBatchSize; // should be
+    // }
 
     ///////////////
     // Modifiers //
@@ -164,6 +169,18 @@ contract IdeationMarketFacet {
         _;
     }
 
+    modifier onlyWhitelistedBuyer(address nftAddress, uint256 tokenId) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        Listing storage listedItem = s.listings[nftAddress][tokenId];
+        if (listedItem.buyerWhitelistEnabled) {
+            require(
+                s.whitelistedBuyersByNFT[nftAddress][tokenId][msg.sender],
+                "BuyerWhitelistFacet: Buyer is not whitelisted for this listing"
+            );
+        }
+        _;
+    }
+
     ////////////////////
     // Main Functions //
     ////////////////////
@@ -183,7 +200,8 @@ contract IdeationMarketFacet {
         address desiredNftAddress,
         uint256 desiredTokenId,
         uint256 desiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-        uint256 quantity // >0 for ERC1155, 0 for only ERC721
+        uint256 quantity, // >0 for ERC1155, 0 for only ERC721
+        bool buyerWhitelistEnabled
     ) external isNftOwner(nftAddress, tokenId, msg.sender) onlyWhitelistedCollection(nftAddress) {
         // Swap-specific check
         require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
@@ -221,7 +239,8 @@ contract IdeationMarketFacet {
             desiredNftAddress: desiredNftAddress,
             desiredTokenId: desiredTokenId,
             desiredQuantity: desiredQuantity,
-            quantity: quantity
+            quantity: quantity,
+            buyerWhitelistEnabled: buyerWhitelistEnabled
         });
 
         emit ItemListed(
@@ -234,11 +253,18 @@ contract IdeationMarketFacet {
             desiredTokenId,
             desiredQuantity,
             s.ideationMarketFee,
-            quantity
+            quantity,
+            buyerWhitelistEnabled
         );
     }
 
-    function buyItem(address nftAddress, uint256 tokenId) external payable nonReentrant isListed(nftAddress, tokenId) {
+    function buyItem(address nftAddress, uint256 tokenId)
+        external
+        payable
+        nonReentrant
+        isListed(nftAddress, tokenId)
+        onlyWhitelistedBuyer(nftAddress, tokenId)
+    {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 

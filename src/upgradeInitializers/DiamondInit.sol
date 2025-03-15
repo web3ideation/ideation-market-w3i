@@ -27,7 +27,8 @@ contract DiamondInit {
         address founder3Address,
         uint32 founder1Ratio,
         uint32 founder2Ratio,
-        uint32 founder3Ratio
+        uint32 founder3Ratio,
+        uint256 buyerWhitelistMxBatchSize
     ) external {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
 
@@ -51,5 +52,6 @@ contract DiamondInit {
         s.founder2Ratio = founder2Ratio;
         s.founder3 = founder3Address;
         s.founder3Ratio = founder3Ratio;
+        s.buyerWhitelistMaxBatchSize = buyerWhitelistMxBatchSize;
     }
 }

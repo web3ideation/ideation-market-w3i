@@ -10,6 +10,7 @@ struct Listing {
     uint256 desiredTokenId;
     uint256 desiredQuantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
     uint256 quantity; // For ERC1155 >1 and for ERC721 ==0
+    bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
 }
 
 struct AppStorage {
@@ -24,9 +25,11 @@ struct AppStorage {
     uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
     uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
     uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
-    mapping(address => bool) whitelistedCollections;
-    address[] whitelistedCollectionsArray;
-    mapping(address => uint256) whitelistedCollectionsIndex;
+    mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+    address[] whitelistedCollectionsArray; // for lookups
+    mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+    mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+    uint256 buyerWhitelistMaxBatchSize; // should be
 }
 
 library LibAppStorage {
