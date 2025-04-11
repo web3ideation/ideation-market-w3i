@@ -9,7 +9,7 @@ import "../libraries/LibDiamond.sol";
 // address[] whitelistedCollectionsArray; // for lookups
 // mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
 
-contract WhitelistFacet {
+contract CollectionWhitelistFacet {
     // Only diamond owner can update the whitelist.
     modifier onlyOwner() {
         LibDiamond.enforceIsContractOwner();
@@ -72,10 +72,5 @@ contract WhitelistFacet {
                 removeWhitelistedCollection(nftAddresses[i]);
             }
         }
-    }
-
-    /// @notice Returns the list of all whitelisted NFT collection addresses.
-    function getWhitelistedCollections() external view returns (address[] memory) {
-        return LibAppStorage.appStorage().whitelistedCollectionsArray;
     }
 }

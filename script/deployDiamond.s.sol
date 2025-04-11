@@ -10,6 +10,9 @@ import {DiamondCutFacet} from "../src/facets/DiamondCutFacet.sol";
 import {DiamondLoupeFacet} from "../src/facets/DiamondLoupeFacet.sol";
 import {OwnershipFacet} from "../src/facets/OwnershipFacet.sol";
 import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
+import {CollectionWhitelistFacet} from "../src/facets/CollectionWhitelistFacet.sol";
+import {BuyerWhitelistFacet} from "../src/facets/BuyerWhitelistFacet.sol";
+import {GetterFacet} from "../src/facets/GetterFacet.sol";
 
 import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -32,14 +35,16 @@ contract DeployScript is Script {
         DiamondLoupeFacet diamondLoupeFacet = new DiamondLoupeFacet();
         OwnershipFacet ownershipFacet = new OwnershipFacet();
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet(); // Pass required constructor arguments if necessary
+        CollectionWhitelistFacet collectionWhitelistFacet = new CollectionWhitelistFacet();
+        BuyerWhitelistFacet buyerWhitelistFacet = new BuyerWhitelistFacet();
+        GetterFacet getterFacet = new GetterFacet();
 
         // Deploy the diamond with the initial facet cut for DiamondCutFacet
         IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(diamondCutFacet));
         console.log("Deployed Diamond.sol at address:", address(ideationMarketDiamond));
 
         // We prepare an array of `cuts` that we want to upgrade our Diamond with.
-        // The remaining cuts that we want the diamond to have are the Loupe, Ownership, and IdeationMarket facets.
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](3);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
 
         // We create and populate array of function selectors needed for FacetCut Structs
         bytes4[] memory loupeSelectors = new bytes4[](5);
@@ -53,19 +58,34 @@ contract DeployScript is Script {
         ownershipSelectors[0] = IERC173.owner.selector; // IERC173 has all the ownership functions needed.
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
 
-        bytes4[] memory marketSelectors = new bytes4[](10);
+        bytes4[] memory marketSelectors = new bytes4[](6);
         marketSelectors[0] = bytes4(keccak256("listItem(address,uint256,uint256,address,uint256)"));
         marketSelectors[1] = bytes4(keccak256("buyItem(address,uint256)"));
         marketSelectors[2] = bytes4(keccak256("cancelListing(address,uint256)"));
         marketSelectors[3] = bytes4(keccak256("updateListing(address,uint256,uint256,address,uint256)"));
         marketSelectors[4] = bytes4(keccak256("withdrawProceeds()"));
         marketSelectors[5] = bytes4(keccak256("setFee(uint256)"));
-        marketSelectors[6] = bytes4(keccak256("getListing(address,uint256)"));
-        marketSelectors[7] = bytes4(keccak256("getProceeds(address)"));
-        marketSelectors[8] = bytes4(keccak256("getNextListingId()"));
-        marketSelectors[9] = bytes4(keccak256("getBalance()"));
 
-        // !!! add collectionWhtielistfacet, BuyerWhitelistFacet and getterfacet
+        bytes4[] memory collectionWhitelistSelectors = new bytes4[](4);
+        collectionWhitelistSelectors[0] = bytes4(keccak256("addWhitelistedCollection(address)"));
+        collectionWhitelistSelectors[1] = bytes4(keccak256("removeWhitelistedCollection(address)"));
+        collectionWhitelistSelectors[2] = bytes4(keccak256("addWhitelistedCollections(address[])"));
+        collectionWhitelistSelectors[3] = bytes4(keccak256("removeWhitelistedCollections(address[])"));
+
+        bytes4[] memory buyerWhitelistSelectors = new bytes4[](2);
+        buyerWhitelistSelectors[0] = bytes4(keccak256("addBuyerWhitelistAddresses(address,uint256,address[])"));
+        buyerWhitelistSelectors[1] = bytes4(keccak256("removeBuyerWhitelistAddresses(address,uint256,address[])"));
+
+        bytes4[] memory getterSelectors = new bytes4[](9);
+        getterSelectors[0] = bytes4(keccak256("getListing(address,uint256)"));
+        getterSelectors[1] = bytes4(keccak256("getProceeds(address)"));
+        getterSelectors[2] = bytes4(keccak256("getBalance()"));
+        getterSelectors[3] = bytes4(keccak256("getFeeValues()"));
+        getterSelectors[4] = bytes4(keccak256("getCurrentListingId()"));
+        getterSelectors[5] = bytes4(keccak256("isCollectionWhitelisted(address)"));
+        getterSelectors[6] = bytes4(keccak256("getWhitelistedCollections()"));
+        getterSelectors[7] = bytes4(keccak256("getContractOwner()"));
+        getterSelectors[8] = bytes4(keccak256("isBuyerWhitelisted(address,uint256,address)"));
 
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
@@ -84,6 +104,24 @@ contract DeployScript is Script {
             facetAddress: address(ideationMarketFacet),
             action: IDiamondCutFacet.FacetCutAction.Add,
             functionSelectors: marketSelectors
+        });
+
+        cuts[3] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(collectionWhitelistFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: collectionWhitelistSelectors
+        });
+
+        cuts[4] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(buyerWhitelistFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: buyerWhitelistSelectors
+        });
+
+        cuts[5] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(getterFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: getterSelectors
         });
 
         // After we have all the cuts setup how we want, we can upgrade the diamond to include these facets.

@@ -107,4 +107,6 @@ contract GetterFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer];
     }
+
+    // !!!W should i add the getNextListingId? I deleted this from the marketplace facet, maybe because its obsolete?
 }
