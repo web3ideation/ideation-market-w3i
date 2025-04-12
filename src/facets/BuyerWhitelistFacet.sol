@@ -3,6 +3,11 @@ pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
 
+error BuyerWhitelist__ListingDoesNotExist();
+error BuyerWhitelist__NotListingSeller();
+error BuyerWhitelist__ExceedsMaxBatchSize();
+error BuyerWhitelist__ZeroAddress();
+
 contract BuyerWhitelistFacet {
     // these are relevant storage Variables defined in the LibAppStorage.sol
     // struct Listing {
@@ -21,13 +26,13 @@ contract BuyerWhitelistFacet {
     function addBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
-        require(listedItem.seller != address(0), "BuyerWhitelistFacet: Listing does not exist");
-        require(listedItem.seller == msg.sender, "BuyerWhitelistFacet: Not listing seller");
-        require(buyers.length <= s.buyerWhitelistMaxBatchSize, "BuyerWhitelistFacet: Exceeds max batch size");
+        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+        if (listedItem.seller != msg.sender) revert BuyerWhitelist__NotListingSeller();
+        if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
             address buyer = buyers[i];
-            require(buyer != address(0), "BuyerWhitelistFacet: Cannot add zero address");
+            if (buyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
             if (!s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer]) {
                 s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer] = true;
@@ -46,9 +51,9 @@ contract BuyerWhitelistFacet {
     function removeBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
-        require(listedItem.seller != address(0), "BuyerWhitelistFacet: Listing does not exist");
-        require(listedItem.seller == msg.sender, "BuyerWhitelistFacet: Not listing seller");
-        require(buyers.length <= s.buyerWhitelistMaxBatchSize, "BuyerWhitelistFacet: Exceeds max batch size");
+        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+        if (listedItem.seller != msg.sender) revert BuyerWhitelist__NotListingSeller();
+        if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
             address buyer = buyers[i];

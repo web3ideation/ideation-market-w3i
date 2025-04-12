@@ -4,6 +4,9 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
+error CollectionWhitelist__AlreadyWhitelisted();
+error CollectionWhitelist__NotWhitelisted();
+
 // these are relevant storage Variables defined in the LibAppStorage.sol
 // mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
 // address[] whitelistedCollectionsArray; // for lookups
@@ -20,7 +23,7 @@ contract CollectionWhitelistFacet {
     /// @param nftAddress The NFT contract address to whitelist.
     function addWhitelistedCollection(address nftAddress) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
-        require(!s.whitelistedCollections[nftAddress], "Collection already whitelisted");
+        if (s.whitelistedCollections[nftAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
 
         s.whitelistedCollections[nftAddress] = true;
         s.whitelistedCollectionsIndex[nftAddress] = s.whitelistedCollectionsArray.length;
@@ -32,7 +35,7 @@ contract CollectionWhitelistFacet {
     /// @param nftAddress The NFT contract address to remove.
     function removeWhitelistedCollection(address nftAddress) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
-        require(s.whitelistedCollections[nftAddress], "Collection not whitelisted");
+        if (!s.whitelistedCollections[nftAddress]) revert CollectionWhitelist__NotWhitelisted();
 
         // Get the index of the element to remove.
         uint256 index = s.whitelistedCollectionsIndex[nftAddress];
