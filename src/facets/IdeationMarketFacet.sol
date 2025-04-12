@@ -8,7 +8,6 @@ import "../interfaces/IERC165.sol";
 import "../interfaces/IERC2981.sol";
 import "../interfaces/IERC1155.sol";
 
-// !!! check if all of these are still in use and check if i can use them more (i think the erc1155 errors should also be customized error messages (it does safe gas, right?))
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
 error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
@@ -16,6 +15,18 @@ error IdeationMarket__NoProceeds();
 error IdeationMarket__SameBuyerAsSeller();
 error IdeationMarket__NoSwapForSameNft();
 error IdeationMarket__NotSupportedTokenStandard();
+error IdeationMarket__NotListed();
+error IdeationMarket__Reentrant();
+error IdeationMarket__CollectionNotWhitelisted(address nftAddress);
+error IdeationMarket__BuyerNotWhitelisted(address nftAddress, uint256 tokenId, address buyer);
+error IdeationMarket__InvalidNoSwapTokenId();
+error IdeationMarket__InsufficientTokenBalance(uint256 required, uint256 available);
+error IdeationMarket__RoyaltyFeeExceedsProceeds();
+error IdeationMarket__NotAuthorizedToCancel();
+error IdeationMarket__NotOwnerOfDesiredSwap();
+error IdeationMarket__MarketplaceNotApprovedForERC1155();
+error IdeationMarket__TransferFailed();
+error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 available);
 
 contract IdeationMarketFacet {
     /**
@@ -143,21 +154,21 @@ contract IdeationMarketFacet {
 
     modifier isListed(address nftAddress, uint256 tokenId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        require(s.listings[nftAddress][tokenId].seller != address(0), "IdeationMarket__NotListed");
+        if (s.listings[nftAddress][tokenId].seller == address(0)) revert IdeationMarket__NotListed();
         _;
     }
 
     modifier isNftOwner(address nftAddress, uint256 tokenId, address nftOwner) {
         IERC721 nft = IERC721(nftAddress);
-        require(
-            msg.sender == nft.ownerOf(tokenId), IdeationMarket__NotNftOwner(tokenId, nftAddress, nft.ownerOf(tokenId))
-        );
+        if (msg.sender != nft.ownerOf(tokenId)) {
+            revert IdeationMarket__NotNftOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
+        }
         _;
     }
 
     modifier nonReentrant() {
         AppStorage storage s = LibAppStorage.appStorage();
-        require(!s.reentrancyLock, "ReentrancyGuard: reentrant call");
+        if (s.reentrancyLock) revert IdeationMarket__Reentrant();
         s.reentrancyLock = true;
         _;
         s.reentrancyLock = false;
@@ -165,7 +176,7 @@ contract IdeationMarketFacet {
 
     modifier onlyWhitelistedCollection(address nftAddress) {
         AppStorage storage s = LibAppStorage.appStorage();
-        require(s.whitelistedCollections[nftAddress], "Collection not whitelisted");
+        if (!s.whitelistedCollections[nftAddress]) revert IdeationMarket__CollectionNotWhitelisted(nftAddress);
         _;
     }
 
@@ -173,10 +184,9 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
         if (listedItem.buyerWhitelistEnabled) {
-            require(
-                s.whitelistedBuyersByNFT[nftAddress][tokenId][msg.sender],
-                "BuyerWhitelistFacet: Buyer is not whitelisted for this listing"
-            );
+            if (!s.whitelistedBuyersByNFT[nftAddress][tokenId][msg.sender]) {
+                revert IdeationMarket__BuyerNotWhitelisted(nftAddress, tokenId, msg.sender);
+            }
         }
         _;
     }
@@ -204,26 +214,36 @@ contract IdeationMarketFacet {
         bool buyerWhitelistEnabled
     ) external isNftOwner(nftAddress, tokenId, msg.sender) onlyWhitelistedCollection(nftAddress) {
         // Swap-specific check
-        require(!(nftAddress == desiredNftAddress && tokenId == desiredTokenId), IdeationMarket__NoSwapForSameNft());
+        if (nftAddress == desiredNftAddress && tokenId == desiredTokenId) {
+            revert IdeationMarket__NoSwapForSameNft();
+        }
         if (desiredNftAddress == address(0)) {
-            require(desiredTokenId == 0, "If no swap address, tokenId must be 0");
+            if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapTokenId();
         } else if (desiredNftAddress != address(0) && desiredQuantity > 0) {
-            require(IERC165(desiredNftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
+            if (!IERC165(desiredNftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
         } else if (desiredNftAddress != address(0) && desiredQuantity == 0) {
-            require(IERC165(desiredNftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
+            if (!IERC165(desiredNftAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
         } //else: no swap listing
 
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (quantity > 0) {
-            // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            require(balance >= quantity, "Insufficient token balance");
+            if (balance < quantity) revert IdeationMarket__InsufficientTokenBalance(quantity, balance);
             check1155Approval(nftAddress, msg.sender);
         } else {
-            // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
-            require(IERC721(nftAddress).ownerOf(tokenId) == msg.sender, "Not NFT owner");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+            if (IERC721(nftAddress).ownerOf(tokenId) != msg.sender) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            }
             checkApproval(nftAddress, tokenId);
         }
 
@@ -276,24 +296,31 @@ contract IdeationMarketFacet {
         // listedItem.desiredQuantity,
         // listedItem.feeRate,
 
-        require(msg.sender != listedItem.seller, IdeationMarket__SameBuyerAsSeller());
+        if (msg.sender == listedItem.seller) {
+            revert IdeationMarket__SameBuyerAsSeller();
+        }
 
-        require(
-            msg.value >= listedItem.price,
-            IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value)
-        );
+        if (msg.value < listedItem.price) {
+            revert IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value);
+        }
 
         // Use interface check to ensure the token supports the expected standard.
         if (listedItem.quantity > 0) {
-            // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
             uint256 balance = IERC1155(nftAddress).balanceOf(listedItem.seller, tokenId);
-            require(balance >= listedItem.quantity, "Insufficient token balance");
+            if (balance < listedItem.quantity) {
+                revert IdeationMarket__InsufficientTokenBalance(listedItem.quantity, balance);
+            }
             check1155Approval(nftAddress, listedItem.seller);
         } else {
-            // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
-            require(IERC721(nftAddress).ownerOf(tokenId) == listedItem.seller, "Not NFT owner");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+            if (IERC721(nftAddress).ownerOf(tokenId) != listedItem.seller) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            }
             checkApproval(nftAddress, tokenId);
         }
 
@@ -316,7 +343,7 @@ contract IdeationMarketFacet {
             (address royaltyReceiver, uint256 royaltyAmount) =
                 IERC2981(nftAddress).royaltyInfo(tokenId, listedItem.price);
             if (royaltyAmount > 0) {
-                require(sellerProceeds >= royaltyAmount, "Royalty fee exceeds proceeds");
+                if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
                 sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
                 emit RoyaltyPaid(nftAddress, tokenId, royaltyReceiver, royaltyAmount);
@@ -337,11 +364,15 @@ contract IdeationMarketFacet {
 
             if (listedItem.desiredQuantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
-                require(
+                if (
                     IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId)
-                        >= listedItem.desiredQuantity,
-                    "Insufficient swap token balance"
-                );
+                        < listedItem.desiredQuantity
+                ) {
+                    revert IdeationMarket__InsufficientSwapTokenBalance(
+                        listedItem.desiredQuantity,
+                        IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId)
+                    );
+                }
 
                 // Check approval
                 check1155Approval(listedItem.desiredNftAddress, msg.sender);
@@ -353,10 +384,9 @@ contract IdeationMarketFacet {
             } else {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress); // !!! this sturcture safes a bit of gas because the listedItem.desiredNFTAddress gets loaded into memory so it doesnt have to be loaded from storage so often - i should do that everywhere applicable - but doublcheck with cGPT!
                 // For ERC721: Check ownership.
-                require(
-                    desiredNft.ownerOf(listedItem.desiredTokenId) == msg.sender,
-                    "You don't own the desired NFT for swap"
-                );
+                if (desiredNft.ownerOf(listedItem.desiredTokenId) != msg.sender) {
+                    revert IdeationMarket__NotOwnerOfDesiredSwap();
+                }
 
                 // Check approval
                 checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
@@ -416,9 +446,8 @@ contract IdeationMarketFacet {
         address currentOwner = nft.ownerOf(tokenId);
         address diamondOwner = LibDiamond.contractOwner();
 
-        require(
-            msg.sender == currentOwner || msg.sender == diamondOwner, "cancelListing: Not authorized to cancel listing"
-        );
+        if (msg.sender != currentOwner && msg.sender != diamondOwner) revert IdeationMarket__NotAuthorizedToCancel();
+
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
         delete (s.listings[nftAddress][tokenId]);
@@ -441,16 +470,21 @@ contract IdeationMarketFacet {
         onlyWhitelistedCollection(nftAddress)
     {
         // Swap-specific check
-        require(
-            !(nftAddress == newDesiredNftAddress && tokenId == newDesiredTokenId), IdeationMarket__NoSwapForSameNft()
-        );
+        if (nftAddress == newDesiredNftAddress && tokenId == newDesiredTokenId) {
+            revert IdeationMarket__NoSwapForSameNft();
+        }
         if (newDesiredNftAddress == address(0)) {
-            require(newDesiredTokenId == 0, "If no swap address, tokenId must be 0");
-        } else if (newDesiredNftAddress != address(0) && newDesiredQuantity > 0) {
-            require(IERC165(newDesiredNftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
-        } else if (newDesiredNftAddress != address(0) && newDesiredQuantity == 0) {
-            require(IERC165(newDesiredNftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
-        } //else: no swap listing
+            if (newDesiredTokenId != 0) revert IdeationMarket__InvalidNoSwapTokenId();
+        } else if (newDesiredQuantity > 0) {
+            if (!IERC165(newDesiredNftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+        } else {
+            if (!IERC165(newDesiredNftAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+        }
+        //else: no swap listing
 
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
@@ -458,14 +492,20 @@ contract IdeationMarketFacet {
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (newQuantity > 0) {
             // Assume this is an ERC1155 listing.
-            require(IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId), "Token is not ERC1155");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            require(balance >= newQuantity, "Insufficient token balance");
+            if (balance < newQuantity) revert IdeationMarket__InsufficientTokenBalance(newQuantity, balance);
             check1155Approval(nftAddress, msg.sender);
         } else {
             // For quantity==0, assume an ERC721 token.
-            require(IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId), "Token is not ERC721");
-            require(IERC721(nftAddress).ownerOf(tokenId) == msg.sender, "Not NFT owner");
+            if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+            if (IERC721(nftAddress).ownerOf(tokenId) != msg.sender) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            }
             checkApproval(nftAddress, tokenId);
         }
 
@@ -494,24 +534,29 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 proceeds = s.proceeds[msg.sender];
 
-        require(proceeds > 0, IdeationMarket__NoProceeds());
+        if (proceeds == 0) {
+            revert IdeationMarket__NoProceeds();
+        }
 
         s.proceeds[msg.sender] = 0;
         (bool success,) = payable(msg.sender).call{value: proceeds}("");
-        require(success, "Transfer of proceeds failed");
+        if (!success) {
+            revert IdeationMarket__TransferFailed();
+        }
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
     function checkApproval(address nftAddress, uint256 tokenId) internal view {
         IERC721 nft = IERC721(nftAddress);
-        require(
-            nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(nft.ownerOf(tokenId), address(this)),
-            IdeationMarket__NotApprovedForMarketplace()
-        );
+        if (!(nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(nft.ownerOf(tokenId), address(this)))) {
+            revert IdeationMarket__NotApprovedForMarketplace();
+        }
     }
 
     function check1155Approval(address nftAddress, address nftOwner) internal view {
-        require(IERC1155(nftAddress).isApprovedForAll(nftOwner, address(this)), "Marketplace not approved for ERC1155");
+        if (!IERC1155(nftAddress).isApprovedForAll(nftOwner, address(this))) {
+            revert IdeationMarket__MarketplaceNotApprovedForERC1155();
+        }
     }
 
     function setTotalFee(uint32 fee) public onlyOwner {
