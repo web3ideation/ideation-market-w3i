@@ -81,7 +81,7 @@ contract DeployScript is Script {
         getterSelectors[1] = bytes4(keccak256("getProceeds(address)"));
         getterSelectors[2] = bytes4(keccak256("getBalance()"));
         getterSelectors[3] = bytes4(keccak256("getFeeValues()"));
-        getterSelectors[4] = bytes4(keccak256("getCurrentListingId()"));
+        getterSelectors[4] = bytes4(keccak256("getNextListingId()"));
         getterSelectors[5] = bytes4(keccak256("isCollectionWhitelisted(address)"));
         getterSelectors[6] = bytes4(keccak256("getWhitelistedCollections()"));
         getterSelectors[7] = bytes4(keccak256("getContractOwner()"));

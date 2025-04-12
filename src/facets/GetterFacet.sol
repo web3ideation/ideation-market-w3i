@@ -63,12 +63,12 @@ contract GetterFacet {
     }
 
     /**
-     * @notice Returns the current listing ID counter.
-     * @return The current listing ID.
+     * @notice Returns the upcoming listing ID, the current counter + 1.
+     * @return The next listing ID.
      */
-    function getCurrentListingId() external view returns (uint128) {
+    function getNextListingId() external view returns (uint128) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.listingId;
+        return s.listingId + 1;
     }
 
     /**
@@ -107,6 +107,4 @@ contract GetterFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer];
     }
-
-    // !!!W should i add the getNextListingId? I deleted this from the marketplace facet, maybe because its obsolete?
 }
