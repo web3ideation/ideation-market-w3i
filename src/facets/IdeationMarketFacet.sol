@@ -160,8 +160,9 @@ contract IdeationMarketFacet {
 
     modifier isNftOwner(address nftAddress, uint256 tokenId, address nftOwner) {
         IERC721 nft = IERC721(nftAddress);
-        if (msg.sender != nft.ownerOf(tokenId)) {
-            revert IdeationMarket__NotNftOwner(tokenId, nftAddress, nft.ownerOf(tokenId));
+        address ownerToken = nft.ownerOf(tokenId);
+        if (msg.sender != ownerToken) {
+            revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
         }
         _;
     }
@@ -241,8 +242,9 @@ contract IdeationMarketFacet {
             if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-            if (IERC721(nftAddress).ownerOf(tokenId) != msg.sender) {
-                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (ownerToken != msg.sender) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
             checkApproval(nftAddress, tokenId);
         }
@@ -288,14 +290,6 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 
-        // !!! maybe load all these into memory to safe on storage access?
-        // listedItem.price,
-        // listedItem.seller,
-        // listedItem.desiredNftAddress,
-        // listedItem.desiredTokenId,
-        // listedItem.desiredQuantity,
-        // listedItem.feeRate,
-
         if (msg.sender == listedItem.seller) {
             revert IdeationMarket__SameBuyerAsSeller();
         }
@@ -318,8 +312,9 @@ contract IdeationMarketFacet {
             if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-            if (IERC721(nftAddress).ownerOf(tokenId) != listedItem.seller) {
-                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (ownerToken != listedItem.seller) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
             checkApproval(nftAddress, tokenId);
         }
@@ -442,11 +437,11 @@ contract IdeationMarketFacet {
 
     // natspec info: the nft owner is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(address nftAddress, uint256 tokenId) external isListed(nftAddress, tokenId) {
-        IERC721 nft = IERC721(nftAddress);
-        address currentOwner = nft.ownerOf(tokenId);
         address diamondOwner = LibDiamond.contractOwner();
 
-        if (msg.sender != currentOwner && msg.sender != diamondOwner) revert IdeationMarket__NotAuthorizedToCancel();
+        if (msg.sender != IERC721(nftAddress).ownerOf(tokenId) && msg.sender != diamondOwner) {
+            revert IdeationMarket__NotAuthorizedToCancel();
+        }
 
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
@@ -503,8 +498,9 @@ contract IdeationMarketFacet {
             if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-            if (IERC721(nftAddress).ownerOf(tokenId) != msg.sender) {
-                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, IERC721(nftAddress).ownerOf(tokenId));
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (ownerToken != msg.sender) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
             checkApproval(nftAddress, tokenId);
         }
