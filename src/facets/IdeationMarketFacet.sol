@@ -359,14 +359,10 @@ contract IdeationMarketFacet {
 
             if (listedItem.desiredQuantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
-                if (
-                    IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId)
-                        < listedItem.desiredQuantity
-                ) {
-                    revert IdeationMarket__InsufficientSwapTokenBalance(
-                        listedItem.desiredQuantity,
-                        IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId)
-                    );
+                uint256 swapBalance =
+                    IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId);
+                if (swapBalance < listedItem.desiredQuantity) {
+                    revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredQuantity, swapBalance);
                 }
 
                 // Check approval
@@ -377,7 +373,7 @@ contract IdeationMarketFacet {
                     msg.sender, listedItem.seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
                 );
             } else {
-                IERC721 desiredNft = IERC721(listedItem.desiredNftAddress); // !!! this sturcture safes a bit of gas because the listedItem.desiredNFTAddress gets loaded into memory so it doesnt have to be loaded from storage so often - i should do that everywhere applicable - but doublcheck with cGPT!
+                IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
                 // For ERC721: Check ownership.
                 if (desiredNft.ownerOf(listedItem.desiredTokenId) != msg.sender) {
                     revert IdeationMarket__NotOwnerOfDesiredSwap();
