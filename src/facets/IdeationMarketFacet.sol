@@ -78,7 +78,7 @@ contract IdeationMarketFacet {
         address indexed nftAddress,
         uint256 indexed tokenId,
         address seller,
-        address triggerdBy
+        address triggeredBy
     );
 
     event ItemUpdated(
@@ -396,14 +396,12 @@ contract IdeationMarketFacet {
                     listedItem.desiredNftAddress,
                     listedItem.desiredTokenId,
                     desiredItem.seller,
-                    address(this) // !!! check if this is the address of the cancelation triggering entity
+                    address(this)
                 );
             }
         }
 
         delete (s.listings[nftAddress][tokenId]);
-
-        /// !!! does this also set the seller parameter to 0?
 
         // Transfer tokens based on the token standard.
         if (listedItem.quantity > 0) {
