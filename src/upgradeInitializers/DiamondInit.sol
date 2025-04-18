@@ -20,16 +20,7 @@ import {IERC1155} from "../interfaces/IERC1155.sol";
 import {IERC2981} from "../interfaces/IERC2981.sol";
 
 contract DiamondInit {
-    function init(
-        uint32 ideationMarketFee,
-        address founder1Address,
-        address founder2Address,
-        address founder3Address,
-        uint32 founder1Ratio,
-        uint32 founder2Ratio,
-        uint32 founder3Ratio,
-        uint256 buyerWhitelistMxBatchSize
-    ) external {
+    function init(uint32 innovationFee, uint256 buyerWhitelistMaxBatchSize) external {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
 
         // Diamond and ERC165 interfaces
@@ -45,13 +36,7 @@ contract DiamondInit {
 
         // Initialize marketplace state variables. / Constructor for IdeationMarketFacet.
         AppStorage storage s = LibAppStorage.appStorage();
-        s.ideationMarketFee = ideationMarketFee; // represents a rate in basis points (e.g., 100 = 0.1%)
-        s.founder1 = founder1Address;
-        s.founder1Ratio = founder1Ratio;
-        s.founder2 = founder2Address;
-        s.founder2Ratio = founder2Ratio;
-        s.founder3 = founder3Address;
-        s.founder3Ratio = founder3Ratio;
-        s.buyerWhitelistMaxBatchSize = buyerWhitelistMxBatchSize;
+        s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)
+        s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
     }
 }

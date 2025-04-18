@@ -34,32 +34,10 @@ contract GetterFacet {
         return address(this).balance;
     }
 
-    /**
-     * @notice Returns the fee configuration details.
-     * @return ideationMarketFee The total marketplace fee.
-     * @return founder1 The first founder's address.
-     * @return founder1Ratio The fee ratio for founder1.
-     * @return founder2 The second founder's address.
-     * @return founder2Ratio The fee ratio for founder2.
-     * @return founder3 The third founder's address.
-     * @return founder3Ratio The fee ratio for founder3.
-     */
-    function getFeeValues()
-        external
-        view
-        returns (
-            uint256 ideationMarketFee,
-            address founder1,
-            uint32 founder1Ratio,
-            address founder2,
-            uint32 founder2Ratio,
-            address founder3,
-            uint32 founder3Ratio
-        )
-    {
+    // add natspec
+    function getInnovationFee() external view returns (uint32 innovationFee) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return
-            (s.ideationMarketFee, s.founder1, s.founder1Ratio, s.founder2, s.founder2Ratio, s.founder3, s.founder3Ratio);
+        return s.innovationFee;
     }
 
     /**

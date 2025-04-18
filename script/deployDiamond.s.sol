@@ -21,10 +21,11 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 
 // Script to deploy a Diamond with CutFacet, LoupeFacet and OwnershipFacet
 // This Script DOES NOT upgrade the diamond with any of the example facets.
-contract DeployScript is Script {
+contract DeployDiamond is Script {
     // Constructor arguments
     address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // !!!W Use appropriate address for testing
-    uint256 ideationMarketFee = 1000; // Example fee, e.g., 1000 means 1%
+    uint32 innovationFee = 1000; // Example fee, e.g., 1000 means 1%
+    uint256 buyerWhitelistMaxBatchSize = 300;
 
     function run() external {
         vm.startBroadcast();
@@ -59,12 +60,12 @@ contract DeployScript is Script {
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
 
         bytes4[] memory marketSelectors = new bytes4[](6);
-        marketSelectors[0] = bytes4(keccak256("listItem(address,uint256,uint256,address,uint256)"));
+        marketSelectors[0] = bytes4(keccak256("listItem(address,uint256,uint96,address,uint256,uint256,uint256,bool)"));
         marketSelectors[1] = bytes4(keccak256("buyItem(address,uint256)"));
         marketSelectors[2] = bytes4(keccak256("cancelListing(address,uint256)"));
-        marketSelectors[3] = bytes4(keccak256("updateListing(address,uint256,uint256,address,uint256)"));
+        marketSelectors[3] = bytes4(keccak256("updateListing(address,uint256,uint96,address,uint256,uint256,uint256)"));
         marketSelectors[4] = bytes4(keccak256("withdrawProceeds()"));
-        marketSelectors[5] = bytes4(keccak256("setFee(uint256)"));
+        marketSelectors[5] = bytes4(keccak256("setInnovationFee(uint32)"));
 
         bytes4[] memory collectionWhitelistSelectors = new bytes4[](4);
         collectionWhitelistSelectors[0] = bytes4(keccak256("addWhitelistedCollection(address)"));
@@ -80,7 +81,7 @@ contract DeployScript is Script {
         getterSelectors[0] = bytes4(keccak256("getListing(address,uint256)"));
         getterSelectors[1] = bytes4(keccak256("getProceeds(address)"));
         getterSelectors[2] = bytes4(keccak256("getBalance()"));
-        getterSelectors[3] = bytes4(keccak256("getFeeValues()"));
+        getterSelectors[3] = bytes4(keccak256("getInnovationFee()"));
         getterSelectors[4] = bytes4(keccak256("getNextListingId()"));
         getterSelectors[5] = bytes4(keccak256("isCollectionWhitelisted(address)"));
         getterSelectors[6] = bytes4(keccak256("getWhitelistedCollections()"));
@@ -128,7 +129,9 @@ contract DeployScript is Script {
         // We call `diamondCut` with our `diamond` contract through the `IDiamondCutFacet` interface.
         // `diamondCut` takes in the `cuts` and the `DiamondInit` contract and calls its `init()` function.
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
-            cuts, address(diamondInit), abi.encodeWithSignature("init(uint256,address)", ideationMarketFee, owner)
+            cuts,
+            address(diamondInit),
+            abi.encodeWithSignature("init(uint32,uint256)", innovationFee, buyerWhitelistMaxBatchSize)
         );
 
         // We use `IERC173` instead of an `IOwnershipFacet` interface for the `OwnershipFacet` with no problems

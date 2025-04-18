@@ -67,9 +67,6 @@ contract IdeationMarketFacet {
         uint256 desiredQuantity,
         uint256 feeRate,
         uint256 innovationFee,
-        uint256 founderFee1,
-        uint256 founderFee2,
-        uint256 founderFee3,
         uint256 quantity
     );
 
@@ -96,7 +93,7 @@ contract IdeationMarketFacet {
 
     event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
 
-    event IdeationMarketFeeUpdated(uint256 previousFee, uint256 newFee);
+    event InnovationFeeUpdated(uint256 previousFee, uint256 newFee);
 
     // Event emitted when a listing is canceled due to revoked approval.
     event ItemCanceledDueToMissingApproval(
@@ -126,21 +123,15 @@ contract IdeationMarketFacet {
 
     // struct AppStorage {
     //     uint128 listingId;
-    //     uint32 ideationMarketFee; // e.g., 2000 = 2% // this is the total fee (excluding gascosts) for each sale, including founderFee and innovationFee
+    //     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale, including innovationFee
     //     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     //     mapping(address => uint256) proceeds; // Proceeds by seller address
     //     bool reentrancyLock;
-    //     address founder1;
-    //     address founder2;
-    //     address founder3;
-    //     uint32 founder1Ratio; // e.g., 25500 for 25,5% of the total ideationMarketFee
-    //     uint32 founder2Ratio; // e.g., 17000 for 17% of the total ideationMarketFee
-    //     uint32 founder3Ratio; // e.g., 7500 for 7,5% of the total ideationMarketFee
     //     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
     //     address[] whitelistedCollectionsArray; // for lookups
     //     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
     //     mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
-    //     uint256 buyerWhitelistMaxBatchSize; // should be
+    //     uint256 buyerWhitelistMaxBatchSize; // should be 300
     // }
 
     ///////////////
@@ -256,7 +247,7 @@ contract IdeationMarketFacet {
         s.listings[nftAddress][tokenId] = Listing({
             listingId: s.listingId,
             price: price,
-            feeRate: s.ideationMarketFee,
+            feeRate: s.innovationFee,
             seller: msg.sender,
             desiredNftAddress: desiredNftAddress,
             desiredTokenId: desiredTokenId,
@@ -274,7 +265,7 @@ contract IdeationMarketFacet {
             desiredNftAddress,
             desiredTokenId,
             desiredQuantity,
-            s.ideationMarketFee,
+            s.innovationFee,
             quantity,
             buyerWhitelistEnabled
         );
@@ -319,20 +310,11 @@ contract IdeationMarketFacet {
             checkApproval(nftAddress, tokenId);
         }
 
-        // Calculate the total fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
-        uint256 totalFee = ((listedItem.price * listedItem.feeRate) / 100000);
+        // Calculate the innovation fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
+        uint256 innovationFee = ((listedItem.price * listedItem.feeRate) / 100000);
 
-        // Calculate each founder's share based on their ratio (ratios should sum to 100)
-
-        uint256 founderFee1Amount = (totalFee * s.founder1Ratio) / 100000;
-        uint256 founderFee2Amount = (totalFee * s.founder2Ratio) / 100000;
-        uint256 founderFee3Amount = (totalFee * s.founder3Ratio) / 100000;
-
-        // Calculate the innovationFee that goes to the Diamond Owner / DAO Multisig Wallet
-        uint256 innovationFee = totalFee - (founderFee1Amount + founderFee2Amount + founderFee3Amount);
-
-        // Seller receives sale price minus the total fee
-        uint256 sellerProceeds = listedItem.price - totalFee;
+        // Seller receives sale price minus the innovation fee
+        uint256 sellerProceeds = listedItem.price - innovationFee;
 
         // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell
         if (IERC165(nftAddress).supportsInterface(type(IERC2981).interfaceId)) {
@@ -346,13 +328,10 @@ contract IdeationMarketFacet {
             }
         }
 
-        // Update proceeds for the seller, marketplace owner, and each founder
+        // Update proceeds for the seller and marketplace owner
 
         s.proceeds[listedItem.seller] += sellerProceeds;
         s.proceeds[LibDiamond.contractOwner()] += innovationFee;
-        s.proceeds[s.founder1] += founderFee1Amount;
-        s.proceeds[s.founder2] += founderFee2Amount;
-        s.proceeds[s.founder3] += founderFee3Amount;
 
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
@@ -423,9 +402,6 @@ contract IdeationMarketFacet {
             listedItem.desiredQuantity,
             listedItem.feeRate,
             innovationFee,
-            founderFee1Amount,
-            founderFee2Amount,
-            founderFee3Amount,
             listedItem.quantity
         );
     }
@@ -505,7 +481,7 @@ contract IdeationMarketFacet {
         listedItem.desiredTokenId = newDesiredTokenId;
         listedItem.desiredQuantity = newDesiredQuantity;
         listedItem.quantity = newQuantity;
-        listedItem.feeRate = s.ideationMarketFee;
+        listedItem.feeRate = s.innovationFee;
 
         emit ItemUpdated(
             listedItem.listingId,
@@ -550,29 +526,11 @@ contract IdeationMarketFacet {
         }
     }
 
-    function setTotalFee(uint32 fee) public onlyOwner {
+    function setInnovationFee(uint32 fee) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
-        uint256 previousFee = s.ideationMarketFee;
-        s.ideationMarketFee = fee;
-        emit IdeationMarketFeeUpdated(previousFee, fee);
-    }
-
-    function setFounder1(address _founder1, uint8 _ratio) external onlyOwner {
-        AppStorage storage s = LibAppStorage.appStorage();
-        s.founder1 = _founder1;
-        s.founder1Ratio = _ratio;
-    }
-
-    function setFounder2(address _founder2, uint8 _ratio) external onlyOwner {
-        AppStorage storage s = LibAppStorage.appStorage();
-        s.founder2 = _founder2;
-        s.founder2Ratio = _ratio;
-    }
-
-    function setFounder3(address _founder3, uint8 _ratio) external onlyOwner {
-        AppStorage storage s = LibAppStorage.appStorage();
-        s.founder3 = _founder3;
-        s.founder3Ratio = _ratio;
+        uint256 previousFee = s.innovationFee;
+        s.innovationFee = fee;
+        emit InnovationFeeUpdated(previousFee, fee);
     }
 
     function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {

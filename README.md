@@ -153,9 +153,9 @@ Withdraw accumulated proceeds from sales.
 
 #### Setting Fees
 ```solidity
-function setFee(uint256 fee) external;
+function innovationFee(uint32 fee) external;
 ```
-Update the marketplace fee (only accessible by the owner).
+Update the marketplace/innovation fee (only accessible by the owner).
 
 ---
 
