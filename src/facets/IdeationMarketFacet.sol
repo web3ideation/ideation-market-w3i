@@ -323,6 +323,7 @@ contract IdeationMarketFacet {
         uint256 totalFee = ((listedItem.price * listedItem.feeRate) / 100000);
 
         // Calculate each founder's share based on their ratio (ratios should sum to 100)
+
         uint256 founderFee1Amount = (totalFee * s.founder1Ratio) / 100000;
         uint256 founderFee2Amount = (totalFee * s.founder2Ratio) / 100000;
         uint256 founderFee3Amount = (totalFee * s.founder3Ratio) / 100000;
