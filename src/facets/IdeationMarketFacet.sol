@@ -38,7 +38,7 @@ contract IdeationMarketFacet {
      * @param seller The address of the seller.
      * @param desiredNftAddress The desired NFT address for swaps (0 for non-swap listing).
      * @param desiredTokenId The desired token ID for swaps (only applicable for swap listing).
-     * @param feeRate Fee rate at the time of listing.
+     * @param feeRate innovationFee rate at the time of listing in case it gets updated before selling.
      * @param quantity Quantity (for ERC1155 tokens; must be 0 for ERC721).
      */
     event ItemListed(
@@ -66,7 +66,6 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId,
         uint256 desiredQuantity,
         uint256 feeRate,
-        uint256 innovationFee,
         uint256 quantity
     );
 
@@ -88,7 +87,8 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId,
         uint256 desiredQuantity,
         uint256 feeRate,
-        uint256 quantity
+        uint256 quantity,
+        bool buyerWhitelistEnabled
     );
 
     event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
@@ -123,7 +123,7 @@ contract IdeationMarketFacet {
 
     // struct AppStorage {
     //     uint128 listingId;
-    //     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale, including innovationFee
+    //     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts and royalty fee) for each sale, including innovationFee
     //     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     //     mapping(address => uint256) proceeds; // Proceeds by seller address
     //     bool reentrancyLock;
@@ -328,11 +328,16 @@ contract IdeationMarketFacet {
             }
         }
 
-        // Update proceeds for the seller and marketplace owner
+        // handle excess payment
+        uint256 excessPayment = msg.value - listedItem.price;
+
+        // Update proceeds for the seller, marketplace owner and potentially buyer
 
         s.proceeds[listedItem.seller] += sellerProceeds;
         s.proceeds[LibDiamond.contractOwner()] += innovationFee;
-
+        if (excessPayment > 0) {
+            s.proceeds[msg.sender] += excessPayment;
+        }
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
             // Detect the desired token's standard using ERC165 interface checks.
@@ -401,7 +406,6 @@ contract IdeationMarketFacet {
             listedItem.desiredTokenId,
             listedItem.desiredQuantity,
             listedItem.feeRate,
-            innovationFee,
             listedItem.quantity
         );
     }
@@ -428,7 +432,8 @@ contract IdeationMarketFacet {
         address newDesiredNftAddress,
         uint256 newDesiredTokenId,
         uint256 newDesiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-        uint256 newQuantity // >0 for ERC1155, 0 for only ERC721
+        uint256 newQuantity, // >0 for ERC1155, 0 for only ERC721
+        bool newBuyerWhitelistEnabled
     )
         external
         isListed(nftAddress, tokenId)
@@ -481,7 +486,8 @@ contract IdeationMarketFacet {
         listedItem.desiredTokenId = newDesiredTokenId;
         listedItem.desiredQuantity = newDesiredQuantity;
         listedItem.quantity = newQuantity;
-        listedItem.feeRate = s.innovationFee;
+        listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
+        listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled;
 
         emit ItemUpdated(
             listedItem.listingId,
@@ -493,7 +499,8 @@ contract IdeationMarketFacet {
             newDesiredTokenId,
             newDesiredQuantity,
             listedItem.feeRate,
-            newQuantity
+            newQuantity,
+            newBuyerWhitelistEnabled
         );
     }
 
@@ -526,11 +533,11 @@ contract IdeationMarketFacet {
         }
     }
 
-    function setInnovationFee(uint32 fee) public onlyOwner {
+    function setInnovationFee(uint32 newFee) public onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 previousFee = s.innovationFee;
-        s.innovationFee = fee;
-        emit InnovationFeeUpdated(previousFee, fee);
+        s.innovationFee = newFee;
+        emit InnovationFeeUpdated(previousFee, newFee);
     }
 
     function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {
