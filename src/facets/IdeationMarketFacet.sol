@@ -541,7 +541,6 @@ contract IdeationMarketFacet {
     }
 
     function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {
-        IERC721 nft = IERC721(nftAddress);
         AppStorage storage s = LibAppStorage.appStorage();
 
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
@@ -551,9 +550,20 @@ contract IdeationMarketFacet {
             return;
         }
 
-        // Check if the marketplace is still approved to transfer this NFT.
-        if (nft.getApproved(tokenId) != address(this) && !nft.isApprovedForAll(nft.ownerOf(tokenId), address(this))) {
-            // Approval is missing; cancel the listing by deleting it from storage.
+        bool approved;
+
+        // check approval depending on token type
+        if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+            approved = IERC1155(nftAddress).isApprovedForAll(listedItem.seller, address(this));
+        } else {
+            // Check if the marketplace is still approved to transfer this NFT.
+            IERC721 nft = IERC721(nftAddress);
+            approved =
+                nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(listedItem.seller, address(this));
+        }
+
+        // If approval is missing, cancel the listing by deleting it from storage.
+        if (!approved) {
             delete s.listings[nftAddress][tokenId];
 
             emit ItemCanceledDueToMissingApproval(
