@@ -25,7 +25,7 @@ contract DeployDiamond is Script {
     // Constructor arguments
     address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // !!!W Use appropriate address for testing
     uint32 innovationFee = 1000; // Example fee, e.g., 1000 means 1%
-    uint256 buyerWhitelistMaxBatchSize = 300;
+    uint16 buyerWhitelistMaxBatchSize = 300;
 
     function run() external {
         vm.startBroadcast();
@@ -131,7 +131,7 @@ contract DeployDiamond is Script {
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
             cuts,
             address(diamondInit),
-            abi.encodeWithSignature("init(uint32,uint256)", innovationFee, buyerWhitelistMaxBatchSize)
+            abi.encodeWithSignature("init(uint32,uint16)", innovationFee, buyerWhitelistMaxBatchSize)
         );
 
         // We use `IERC173` instead of an `IOwnershipFacet` interface for the `OwnershipFacet` with no problems

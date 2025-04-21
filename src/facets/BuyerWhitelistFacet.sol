@@ -14,7 +14,7 @@ contract BuyerWhitelistFacet {
     //     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
     // }
     // mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
-    // uint256 buyerWhitelistMaxBatchSize; // should be 300
+    // uint16 buyerWhitelistMaxBatchSize; // should be 300
 
     event BuyerWhitelisted(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);
     event BuyerRemovedFromWhitelist(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);

@@ -23,7 +23,7 @@ struct AppStorage {
     address[] whitelistedCollectionsArray; // for lookups
     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
     mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
-    uint256 buyerWhitelistMaxBatchSize; // should be 300
+    uint16 buyerWhitelistMaxBatchSize; // should be 300
 }
 
 library LibAppStorage {

@@ -20,7 +20,7 @@ import {IERC1155} from "../interfaces/IERC1155.sol";
 import {IERC2981} from "../interfaces/IERC2981.sol";
 
 contract DiamondInit {
-    function init(uint32 innovationFee, uint256 buyerWhitelistMaxBatchSize) external {
+    function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
 
         // Diamond and ERC165 interfaces
