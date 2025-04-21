@@ -46,7 +46,7 @@ contract GetterFacet {
      */
     function getNextListingId() external view returns (uint128) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.listingId + 1;
+        return s.listingIdCounter + 1;
     }
 
     /**

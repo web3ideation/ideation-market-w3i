@@ -14,7 +14,7 @@ struct Listing {
 }
 
 struct AppStorage {
-    uint128 listingId;
+    uint128 listingIdCounter;
     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     mapping(address => uint256) proceeds; // Proceeds by seller address

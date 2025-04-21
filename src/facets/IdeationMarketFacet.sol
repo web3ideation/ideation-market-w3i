@@ -122,7 +122,7 @@ contract IdeationMarketFacet {
     // }
 
     // struct AppStorage {
-    //     uint128 listingId;
+    //     uint128 listingIdCounter;
     //     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts and royalty fee) for each sale, including innovationFee
     //     mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
     //     mapping(address => uint256) proceeds; // Proceeds by seller address
@@ -242,10 +242,10 @@ contract IdeationMarketFacet {
 
         AppStorage storage s = LibAppStorage.appStorage();
 
-        s.listingId++;
+        s.listingIdCounter++;
 
         s.listings[nftAddress][tokenId] = Listing({
-            listingId: s.listingId,
+            listingId: s.listingIdCounter,
             price: price,
             feeRate: s.innovationFee,
             seller: msg.sender,
@@ -257,7 +257,7 @@ contract IdeationMarketFacet {
         });
 
         emit ItemListed(
-            s.listingId,
+            s.listingIdCounter,
             nftAddress,
             tokenId,
             price,
