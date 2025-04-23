@@ -39,6 +39,12 @@ jobs:
           forge build --sizes
         id: build
 
+      - name: Run selector‐clash check
+        run: |
+         chmod +x script/check-selectors.sh
+         script/check-selectors.sh
+        id: selector-clash check
+
       - name: Run Forge tests
         run: |
           forge test -vvv
