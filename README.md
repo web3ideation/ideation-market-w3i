@@ -11,6 +11,11 @@ This project includes code from the following open-source project(s):
 
 <br><br><br><br><br>
 
+
+notes:
+ logic	After a collection is de-whitelisted, its already-listed tokens can still be bought. buyItem() has no onlyWhitelistedCollection check, so a policy change doesn’t fully take effect. -> i think thats fine. just keep in mind that when revoking a collection from the whitelist to cancel all the listings manually.
+
+
 # IdeationMarketDiamond
 
 A decentralized NFT marketplace built on the EIP-2535 Diamonds standard, allowing users to list, buy, sell, and swap NFTs efficiently while ensuring modularity, upgradability, and security. The repository leverages OpenZeppelin’s standards and introduces custom facets for enhanced functionality.
