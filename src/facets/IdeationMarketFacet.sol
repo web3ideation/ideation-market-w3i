@@ -8,6 +8,7 @@ import "../interfaces/IERC165.sol";
 import "../interfaces/IERC2981.sol";
 import "../interfaces/IERC1155.sol";
 
+error IdeationMarket__AlreadyListed(address nftAddress, uint256 tokenId);
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
 error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
@@ -205,6 +206,12 @@ contract IdeationMarketFacet {
         uint256 quantity, // >0 for ERC1155, 0 for only ERC721
         bool buyerWhitelistEnabled
     ) external isNftOwner(nftAddress, tokenId, msg.sender) onlyWhitelistedCollection(nftAddress) {
+        // Prevent relisting an already-listed NFT
+        AppStorage storage s = LibAppStorage.appStorage();
+        if (s.listings[nftAddress][tokenId].seller != address(0)) {
+            revert IdeationMarket__AlreadyListed(nftAddress, tokenId);
+        }
+
         // Swap-specific check
         if (nftAddress == desiredNftAddress && tokenId == desiredTokenId) {
             revert IdeationMarket__NoSwapForSameNft();
@@ -239,8 +246,6 @@ contract IdeationMarketFacet {
             }
             checkApproval(nftAddress, tokenId);
         }
-
-        AppStorage storage s = LibAppStorage.appStorage();
 
         s.listingIdCounter++;
 
