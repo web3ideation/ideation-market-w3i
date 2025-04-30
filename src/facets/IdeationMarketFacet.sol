@@ -11,6 +11,8 @@ import "../interfaces/IERC1155.sol";
 error IdeationMarket__AlreadyListed(address nftAddress, uint256 tokenId);
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
+error IdeationMarket__ListingTermsChanged();
+error IdeationMarket__FreeListingsNotSupported();
 error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
 error IdeationMarket__NoProceeds();
 error IdeationMarket__SameBuyerAsSeller();
@@ -20,7 +22,7 @@ error IdeationMarket__NotListed();
 error IdeationMarket__Reentrant();
 error IdeationMarket__CollectionNotWhitelisted(address nftAddress);
 error IdeationMarket__BuyerNotWhitelisted(address nftAddress, uint256 tokenId, address buyer);
-error IdeationMarket__InvalidNoSwapTokenId();
+error IdeationMarket__InvalidNoSwapParameters();
 error IdeationMarket__InsufficientTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__RoyaltyFeeExceedsProceeds();
 error IdeationMarket__NotAuthorizedToCancel();
@@ -217,16 +219,18 @@ contract IdeationMarketFacet {
             revert IdeationMarket__NoSwapForSameNft();
         }
         if (desiredNftAddress == address(0)) {
-            if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapTokenId();
-        } else if (desiredNftAddress != address(0) && desiredQuantity > 0) {
+            if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (desiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
+        } else if (desiredQuantity > 0) {
             if (!IERC165(desiredNftAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-        } else if (desiredNftAddress != address(0) && desiredQuantity == 0) {
+        } else if (desiredQuantity == 0) {
             if (!IERC165(desiredNftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-        } //else: no swap listing
+        }
 
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (quantity > 0) {
@@ -276,22 +280,31 @@ contract IdeationMarketFacet {
         );
     }
 
-    function buyItem(address nftAddress, uint256 tokenId)
-        external
-        payable
-        nonReentrant
-        isListed(nftAddress, tokenId)
-        onlyWhitelistedBuyer(nftAddress, tokenId)
-    {
+    function buyItem(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 expectedQuantity,
+        address expectedDesiredNftAddress,
+        uint256 expectedDesiredTokenId,
+        uint256 expectedDesiredQuantity
+    ) external payable nonReentrant isListed(nftAddress, tokenId) onlyWhitelistedBuyer(nftAddress, tokenId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
 
-        if (msg.sender == listedItem.seller) {
-            revert IdeationMarket__SameBuyerAsSeller();
-        }
-
         if (msg.value < listedItem.price) {
             revert IdeationMarket__PriceNotMet(listedItem.listingId, listedItem.price, msg.value);
+        }
+
+        if (
+            listedItem.desiredNftAddress != expectedDesiredNftAddress
+                || listedItem.desiredTokenId != expectedDesiredTokenId
+                || listedItem.desiredQuantity != expectedDesiredQuantity || listedItem.quantity != expectedQuantity
+        ) {
+            revert IdeationMarket__ListingTermsChanged();
+        }
+
+        if (msg.sender == listedItem.seller) {
+            revert IdeationMarket__SameBuyerAsSeller();
         }
 
         // Use interface check to ensure the token supports the expected standard.
@@ -450,17 +463,18 @@ contract IdeationMarketFacet {
             revert IdeationMarket__NoSwapForSameNft();
         }
         if (newDesiredNftAddress == address(0)) {
-            if (newDesiredTokenId != 0) revert IdeationMarket__InvalidNoSwapTokenId();
+            if (newDesiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (newDesiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (newPrice <= 0) revert IdeationMarket__FreeListingsNotSupported();
         } else if (newDesiredQuantity > 0) {
             if (!IERC165(newDesiredNftAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-        } else {
+        } else if (newDesiredQuantity == 0) {
             if (!IERC165(newDesiredNftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
         }
-        //else: no swap listing
 
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
