@@ -2,11 +2,13 @@
 pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
+import "../interfaces/IERC721.sol";
 
 error BuyerWhitelist__ListingDoesNotExist();
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
+error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
 
 contract BuyerWhitelistFacet {
     // these are relevant storage Variables defined in the LibAppStorage.sol
@@ -25,9 +27,11 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to add.
     function addBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listedItem = s.listings[nftAddress][tokenId];
-        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
-        if (listedItem.seller != msg.sender) revert BuyerWhitelist__NotListingSeller();
+        IERC721 nft = IERC721(nftAddress);
+        address ownerToken = nft.ownerOf(tokenId);
+        if (msg.sender != ownerToken) {
+            revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+        }
         if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
@@ -50,9 +54,11 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to remove.
     function removeBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listedItem = s.listings[nftAddress][tokenId];
-        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
-        if (listedItem.seller != msg.sender) revert BuyerWhitelist__NotListingSeller();
+        IERC721 nft = IERC721(nftAddress);
+        address ownerToken = nft.ownerOf(tokenId);
+        if (msg.sender != ownerToken) {
+            revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+        }
         if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
