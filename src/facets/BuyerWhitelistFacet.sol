@@ -27,7 +27,7 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to add.
     function addBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        IERC721 nft = IERC721(nftAddress);
+        IERC721 nft = IERC721(nftAddress); //!!! erc1155 support necessary!
         address ownerToken = nft.ownerOf(tokenId);
         if (msg.sender != ownerToken) {
             revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
@@ -54,7 +54,7 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to remove.
     function removeBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        IERC721 nft = IERC721(nftAddress);
+        IERC721 nft = IERC721(nftAddress); //!!! erc1155 support necessary!
         address ownerToken = nft.ownerOf(tokenId);
         if (msg.sender != ownerToken) {
             revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
