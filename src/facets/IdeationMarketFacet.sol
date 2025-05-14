@@ -490,22 +490,8 @@ contract IdeationMarketFacet {
 
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (newQuantity > 0) {
-            // Assume this is an ERC1155 listing.
-            if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
-            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            if (balance < newQuantity) revert IdeationMarket__InsufficientTokenBalance(newQuantity, balance);
             check1155Approval(nftAddress, msg.sender);
         } else {
-            // For quantity==0, assume an ERC721 token.
-            if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
-            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
-            if (ownerToken != msg.sender) {
-                revert IdeationMarket__NotNftOwner(tokenId, nftAddress);
-            }
             check721Approval(nftAddress, tokenId);
         }
 
