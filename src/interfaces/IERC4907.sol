@@ -1,4 +1,4 @@
-// right now this is not in use
+// right now this is not in use - for lending (not transfering permanent ownership) of Tokens
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.20;

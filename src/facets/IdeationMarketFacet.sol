@@ -153,10 +153,18 @@ contract IdeationMarketFacet {
     }
 
     modifier isNftOwner(address nftAddress, uint256 tokenId, address nftOwner) {
-        IERC721 nft = IERC721(nftAddress);
-        address ownerToken = nft.ownerOf(tokenId);
-        if (msg.sender != ownerToken) {
-            revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
+        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (msg.sender != ownerToken) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
+            }
+        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
+            if (balance == 0) {
+                revert IdeationMarket__NotNftOwner(tokenId, nftAddress, address(0));
+            }
+        } else {
+            revert IdeationMarket__NotSupportedTokenStandard();
         }
         _;
     }
@@ -248,7 +256,7 @@ contract IdeationMarketFacet {
             if (ownerToken != msg.sender) {
                 revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
-            checkApproval(nftAddress, tokenId);
+            check721Approval(nftAddress, tokenId);
         }
 
         s.listingIdCounter++;
@@ -325,7 +333,7 @@ contract IdeationMarketFacet {
             if (ownerToken != listedItem.seller) {
                 revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
-            checkApproval(nftAddress, tokenId);
+            check721Approval(nftAddress, tokenId);
         }
 
         // Calculate the innovation fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
@@ -383,7 +391,7 @@ contract IdeationMarketFacet {
                 }
 
                 // Check approval
-                checkApproval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
+                check721Approval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
 
                 // Perform the safe swap transfer buyer to seller.
                 desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
@@ -431,8 +439,17 @@ contract IdeationMarketFacet {
     // natspec info: the nft owner is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(address nftAddress, uint256 tokenId) external isListed(nftAddress, tokenId) {
         address diamondOwner = LibDiamond.contractOwner();
+        bool isOwner;
+        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+            isOwner = (msg.sender == IERC721(nftAddress).ownerOf(tokenId));
+        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+            isOwner = (IERC1155(nftAddress).balanceOf(msg.sender, tokenId) > 0);
+        } else {
+            revert IdeationMarket__NotSupportedTokenStandard();
+        }
 
-        if (msg.sender != IERC721(nftAddress).ownerOf(tokenId) && msg.sender != diamondOwner) {
+        // allows the diamondOwner to cancel any Listing
+        if (!isOwner && msg.sender != diamondOwner) {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
@@ -497,7 +514,7 @@ contract IdeationMarketFacet {
             if (ownerToken != msg.sender) {
                 revert IdeationMarket__NotNftOwner(tokenId, nftAddress, ownerToken);
             }
-            checkApproval(nftAddress, tokenId);
+            check721Approval(nftAddress, tokenId);
         }
 
         listedItem.price = newPrice;
@@ -539,7 +556,7 @@ contract IdeationMarketFacet {
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
-    function checkApproval(address nftAddress, uint256 tokenId) internal view {
+    function check721Approval(address nftAddress, uint256 tokenId) internal view {
         IERC721 nft = IERC721(nftAddress);
         if (!(nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(nft.ownerOf(tokenId), address(this)))) {
             revert IdeationMarket__NotApprovedForMarketplace();

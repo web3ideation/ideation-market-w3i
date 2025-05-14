@@ -3,12 +3,15 @@ pragma solidity ^0.8.28;
 
 import "../libraries/LibAppStorage.sol";
 import "../interfaces/IERC721.sol";
+import "../interfaces/IERC1155.sol";
+import "../interfaces/IERC165.sol";
 
 error BuyerWhitelist__ListingDoesNotExist();
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
 error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
+error BuyerWhitelist__NotSupportedTokenStandard();
 
 contract BuyerWhitelistFacet {
     // these are relevant storage Variables defined in the LibAppStorage.sol
@@ -27,11 +30,21 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to add.
     function addBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        IERC721 nft = IERC721(nftAddress); //!!! erc1155 support necessary!
-        address ownerToken = nft.ownerOf(tokenId);
-        if (msg.sender != ownerToken) {
-            revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+
+        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (msg.sender != ownerToken) {
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+            }
+        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
+            if (balance == 0) {
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, address(0));
+            }
+        } else {
+            revert BuyerWhitelist__NotSupportedTokenStandard();
         }
+
         if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
@@ -54,11 +67,21 @@ contract BuyerWhitelistFacet {
     /// @param buyers An array of buyer addresses to remove.
     function removeBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
-        IERC721 nft = IERC721(nftAddress); //!!! erc1155 support necessary!
-        address ownerToken = nft.ownerOf(tokenId);
-        if (msg.sender != ownerToken) {
-            revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+
+        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            if (msg.sender != ownerToken) {
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+            }
+        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
+            if (balance == 0) {
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, address(0));
+            }
+        } else {
+            revert BuyerWhitelist__NotSupportedTokenStandard();
         }
+
         if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
         for (uint256 i = 0; i < buyers.length;) {
