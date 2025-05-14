@@ -10,7 +10,8 @@ error BuyerWhitelist__ListingDoesNotExist();
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
-error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress, address nftOwner);
+error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress);
+error BuyerWhitelist__NotAuthorizedOperator(uint256 tokenId, address nftAddress);
 error BuyerWhitelist__NotSupportedTokenStandard();
 
 contract BuyerWhitelistFacet {
@@ -32,14 +33,17 @@ contract BuyerWhitelistFacet {
         AppStorage storage s = LibAppStorage.appStorage();
 
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
-            if (msg.sender != ownerToken) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+            IERC721 nft = IERC721(nftAddress);
+            if (
+                msg.sender != nft.ownerOf(tokenId) && msg.sender != nft.getApproved(tokenId)
+                    && !nft.isApprovedForAll(nft.ownerOf(tokenId), msg.sender)
+            ) {
+                revert BuyerWhitelist__NotAuthorizedOperator(tokenId, nftAddress);
             }
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
             if (balance == 0) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, address(0));
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress);
             }
         } else {
             revert BuyerWhitelist__NotSupportedTokenStandard();
@@ -69,14 +73,17 @@ contract BuyerWhitelistFacet {
         AppStorage storage s = LibAppStorage.appStorage();
 
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
-            if (msg.sender != ownerToken) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, ownerToken);
+            IERC721 nft = IERC721(nftAddress);
+            if (
+                msg.sender != nft.ownerOf(tokenId) && msg.sender != nft.getApproved(tokenId)
+                    && !nft.isApprovedForAll(nft.ownerOf(tokenId), msg.sender)
+            ) {
+                revert BuyerWhitelist__NotAuthorizedOperator(tokenId, nftAddress);
             }
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
             uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
             if (balance == 0) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress, address(0));
+                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress);
             }
         } else {
             revert BuyerWhitelist__NotSupportedTokenStandard();
