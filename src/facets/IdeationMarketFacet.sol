@@ -152,12 +152,12 @@ contract IdeationMarketFacet {
         _;
     }
 
-    modifier isAuthorizedOperator(address nftAddress, uint256 tokenId, address nftOwner) {
+    modifier isAuthorizedOperator(address nftAddress, uint256 tokenId) {
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
             IERC721 nft = IERC721(nftAddress);
             address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
             if (
-                msg.sender != nft.ownerOf(tokenId) && msg.sender != nft.getApproved(tokenId)
+                msg.sender != ownerToken && msg.sender != nft.getApproved(tokenId)
                     && !nft.isApprovedForAll(ownerToken, msg.sender)
             ) {
                 revert IdeationMarket__NotAuthorizedOperator(tokenId, nftAddress);
@@ -219,7 +219,7 @@ contract IdeationMarketFacet {
         uint256 desiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
         uint256 quantity, // >0 for ERC1155, 0 for only ERC721
         bool buyerWhitelistEnabled
-    ) external isAuthorizedOperator(nftAddress, tokenId, msg.sender) onlyWhitelistedCollection(nftAddress) {
+    ) external isAuthorizedOperator(nftAddress, tokenId) onlyWhitelistedCollection(nftAddress) {
         // Prevent relisting an already-listed NFT
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.listings[nftAddress][tokenId].seller != address(0)) {
@@ -377,11 +377,11 @@ contract IdeationMarketFacet {
                 );
             } else {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
+                address desiredOwner = desiredNft.ownerOf(listedItem.desiredTokenId);
                 // For ERC721: Check ownership.
                 if (
-                    msg.sender != desiredNft.ownerOf(listedItem.desiredTokenId)
-                        && msg.sender != desiredNft.getApproved(listedItem.desiredTokenId)
-                        && !desiredNft.isApprovedForAll(desiredNft.ownerOf(listedItem.desiredTokenId), msg.sender)
+                    msg.sender != desiredOwner && msg.sender != desiredNft.getApproved(listedItem.desiredTokenId)
+                        && !desiredNft.isApprovedForAll(desiredOwner, msg.sender)
                 ) {
                     revert IdeationMarket__NotOwnerOfDesiredSwap();
                 }
@@ -438,9 +438,9 @@ contract IdeationMarketFacet {
         bool isOwner;
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
             IERC721 nft = IERC721(nftAddress);
+            address owner = nft.ownerOf(tokenId);
             isOwner = (
-                msg.sender == IERC721(nftAddress).ownerOf(tokenId) || msg.sender == nft.getApproved(tokenId)
-                    || nft.isApprovedForAll(IERC721(nftAddress).ownerOf(tokenId), msg.sender)
+                msg.sender == owner || msg.sender == nft.getApproved(tokenId) || nft.isApprovedForAll(owner, msg.sender)
             );
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
             isOwner = (IERC1155(nftAddress).balanceOf(msg.sender, tokenId) > 0);
@@ -472,7 +472,7 @@ contract IdeationMarketFacet {
     )
         external
         isListed(nftAddress, tokenId)
-        isAuthorizedOperator(nftAddress, tokenId, msg.sender)
+        isAuthorizedOperator(nftAddress, tokenId)
         onlyWhitelistedCollection(nftAddress)
     {
         // Swap-specific check
