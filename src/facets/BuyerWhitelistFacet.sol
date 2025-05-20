@@ -6,58 +6,47 @@ import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IERC165.sol";
 
-error BuyerWhitelist__ListingDoesNotExist();
+error BuyerWhitelist__ListingDoesNotExist(); //!!! change to -orOutdated
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
 error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress);
 error BuyerWhitelist__NotAuthorizedOperator(uint256 tokenId, address nftAddress);
 error BuyerWhitelist__NotSupportedTokenStandard();
+error BuyerWhitelist__EmptyCalldata();
 
 contract BuyerWhitelistFacet {
-    // these are relevant storage Variables defined in the LibAppStorage.sol
-    // struct Listing {
-    //     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
-    // }
-    // mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
-    // uint16 buyerWhitelistMaxBatchSize; // should be 300
-
-    event BuyerWhitelisted(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);
-    event BuyerRemovedFromWhitelist(address indexed nftAddress, uint256 indexed tokenId, address indexed buyer);
+    event BuyerWhitelisted(uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer);
+    event BuyerRemovedFromWhitelist(
+        uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer
+    );
 
     /// @notice Batch adds buyer addresses to a listing's whitelist.
-    /// @param nftAddress The NFT contract address.
-    /// @param tokenId The token ID.
-    /// @param buyers An array of buyer addresses to add.
-    function addBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
+    /// @param listingId The ID number of the Listing.
+    /// @param allowedBuyers An array of buyer addresses to add.
+    function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
 
-        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-            IERC721 nft = IERC721(nftAddress);
-            if (
-                msg.sender != nft.ownerOf(tokenId) && msg.sender != nft.getApproved(tokenId)
-                    && !nft.isApprovedForAll(nft.ownerOf(tokenId), msg.sender)
-            ) {
-                revert BuyerWhitelist__NotAuthorizedOperator(tokenId, nftAddress);
-            }
-        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            if (balance == 0) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress);
-            }
-        } else {
-            revert BuyerWhitelist__NotSupportedTokenStandard();
-        }
+        if (allowedBuyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
-        if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
+        if (allowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        for (uint256 i = 0; i < buyers.length;) {
-            address buyer = buyers[i];
-            if (buyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+        // Find the NFT + tokenId for this listing
+        address nftAddress = s.listingIdToNft[listingId];
+        uint256 tokenId = s.listingIdToTokenId[listingId];
 
-            if (!s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer]) {
-                s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer] = true;
-                emit BuyerWhitelisted(nftAddress, tokenId, buyer);
+        // Ensure listing exists & caller is the seller
+        Listing storage listedItem = s.listings[nftAddress][tokenId];
+        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExist();
+        if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
+
+        for (uint256 i = 0; i < allowedBuyers.length;) {
+            address allowedBuyer = allowedBuyers[i];
+            if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+
+            if (!s.whitelistedBuyersByListingId[listingId][allowedBuyer]) {
+                s.whitelistedBuyersByListingId[listingId][allowedBuyer] = true;
+                emit BuyerWhitelisted(listingId, nftAddress, tokenId, allowedBuyer);
             }
             unchecked {
                 i++;
@@ -66,36 +55,29 @@ contract BuyerWhitelistFacet {
     }
 
     /// @notice Batch removes buyer addresses from a listing's whitelist.
-    /// @param nftAddress The NFT contract address.
-    /// @param tokenId The token ID.
-    /// @param buyers An array of buyer addresses to remove.
-    function removeBuyerWhitelistAddresses(address nftAddress, uint256 tokenId, address[] calldata buyers) external {
+    /// @param listingId The ID number of the Listing.
+    /// @param disallowedBuyers An array of buyer addresses to remove.
+    function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
 
-        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-            IERC721 nft = IERC721(nftAddress);
-            if (
-                msg.sender != nft.ownerOf(tokenId) && msg.sender != nft.getApproved(tokenId)
-                    && !nft.isApprovedForAll(nft.ownerOf(tokenId), msg.sender)
-            ) {
-                revert BuyerWhitelist__NotAuthorizedOperator(tokenId, nftAddress);
-            }
-        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            if (balance == 0) {
-                revert BuyerWhitelist__NotNftOwner(tokenId, nftAddress);
-            }
-        } else {
-            revert BuyerWhitelist__NotSupportedTokenStandard();
-        }
+        if (disallowedBuyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
 
-        if (buyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
+        if (disallowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        for (uint256 i = 0; i < buyers.length;) {
-            address buyer = buyers[i];
-            if (s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer]) {
-                s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer] = false;
-                emit BuyerRemovedFromWhitelist(nftAddress, tokenId, buyer);
+        // Find the NFT + tokenId for this listing
+        address nftAddress = s.listingIdToNft[listingId];
+        uint256 tokenId = s.listingIdToTokenId[listingId];
+
+        // Ensure listing exists & caller is the seller
+        Listing storage listedItem = s.listings[nftAddress][tokenId];
+        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExist();
+        if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
+
+        for (uint256 i = 0; i < disallowedBuyers.length;) {
+            address allowedBuyer = disallowedBuyers[i];
+            if (s.whitelistedBuyersByListingId[listingId][allowedBuyer]) {
+                s.whitelistedBuyersByListingId[listingId][allowedBuyer] = false;
+                emit BuyerRemovedFromWhitelist(listingId, nftAddress, tokenId, allowedBuyer);
             }
             unchecked {
                 i++;

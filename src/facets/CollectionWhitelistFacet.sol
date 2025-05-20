@@ -7,11 +7,6 @@ import "../libraries/LibDiamond.sol";
 error CollectionWhitelist__AlreadyWhitelisted();
 error CollectionWhitelist__NotWhitelisted();
 
-// these are relevant storage Variables defined in the LibAppStorage.sol
-// mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
-// address[] whitelistedCollectionsArray; // for lookups
-// mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
-
 contract CollectionWhitelistFacet {
     // Only diamond owner can update the whitelist.
     modifier onlyOwner() {

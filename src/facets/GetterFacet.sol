@@ -77,12 +77,11 @@ contract GetterFacet {
     }
 
     /// @notice Checks if a buyer is whitelisted for a specific listing.
-    /// @param nftAddress The NFT contract address.
-    /// @param tokenId The token ID.
+    /// @param listingId ID number of the Listing.
     /// @param buyer The buyer address to check.
     /// @return True if the buyer is whitelisted, false otherwise.
-    function isBuyerWhitelisted(address nftAddress, uint256 tokenId, address buyer) external view returns (bool) {
+    function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.whitelistedBuyersByNFT[nftAddress][tokenId][buyer];
+        return s.whitelistedBuyersByListingId[listingId][buyer];
     }
 }

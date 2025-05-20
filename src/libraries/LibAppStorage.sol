@@ -26,7 +26,10 @@ struct AppStorage {
     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
     address[] whitelistedCollectionsArray; // for lookups
     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
-    mapping(address => mapping(uint256 => mapping(address => bool))) whitelistedBuyersByNFT; // nftAddress => tokenId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+    mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+    mapping(uint128 => address) listingIdToNft; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
+    mapping(uint128 => uint256) listingIdToTokenId; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
+        // !!! check strucktpacking
 }
 
 library LibAppStorage {
