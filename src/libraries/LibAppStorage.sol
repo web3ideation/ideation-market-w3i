@@ -29,7 +29,6 @@ struct AppStorage {
     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
     mapping(uint128 => address) listingIdToNft; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
     mapping(uint128 => uint256) listingIdToTokenId; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
-        // !!! check strucktpacking
 }
 
 library LibAppStorage {

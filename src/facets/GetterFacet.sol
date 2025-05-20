@@ -11,9 +11,26 @@ contract GetterFacet {
      * @param tokenId The NFT token ID.
      * @return listing The Listing struct containing listing details.
      */
-    function getListing(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
+    function getListingByNFT(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.listings[nftAddress][tokenId];
+    }
+
+    /// @notice Returns the Listing struct for a given listingId.
+    /// @param listingId The ID of the listing to retrieve.
+    /// @return listing The Listing struct.
+    function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
+        AppStorage storage s = LibAppStorage.appStorage();
+
+        // Look up the NFT address & tokenId for this listing
+        address nftAddress = s.listingIdToNft[listingId];
+        uint256 tokenId = s.listingIdToTokenId[listingId];
+
+        // Fetch the listing
+        listing = s.listings[nftAddress][tokenId];
+
+        // check if overwritten by a new listing of the same NFT
+        require(listing.listingId == listingId, "GetterFacet: listing not found");
     }
 
     /**

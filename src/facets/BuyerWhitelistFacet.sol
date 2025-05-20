@@ -6,7 +6,7 @@ import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IERC165.sol";
 
-error BuyerWhitelist__ListingDoesNotExist(); //!!! change to -orOutdated
+error BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
@@ -37,7 +37,7 @@ contract BuyerWhitelistFacet {
 
         // Ensure listing exists & caller is the seller
         Listing storage listedItem = s.listings[nftAddress][tokenId];
-        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExist();
+        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
         if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
 
         for (uint256 i = 0; i < allowedBuyers.length;) {
@@ -70,7 +70,7 @@ contract BuyerWhitelistFacet {
 
         // Ensure listing exists & caller is the seller
         Listing storage listedItem = s.listings[nftAddress][tokenId];
-        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExist();
+        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
         if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
 
         for (uint256 i = 0; i < disallowedBuyers.length;) {
