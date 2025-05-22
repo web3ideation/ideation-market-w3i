@@ -32,6 +32,8 @@ error IdeationMarket__NotOwnerOfDesiredSwap();
 error IdeationMarket__TransferFailed();
 error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__WhitelistNotAllowed();
+error IdeationMarket__WrongParameter();
+error IdeationMarket__erc1155HolderRequired();
 
 contract IdeationMarketFacet {
     /**
@@ -128,20 +130,34 @@ contract IdeationMarketFacet {
         _;
     }
 
-    modifier isAuthorizedOperator(address nftAddress, uint256 tokenId) {
+    modifier isAuthorizedOperator(address nftAddress, uint256 tokenId, address erc1155Holder) {
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
             IERC721 nft = IERC721(nftAddress);
-            address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
+            address ownerToken = nft.ownerOf(tokenId);
             if (
                 msg.sender != ownerToken && msg.sender != nft.getApproved(tokenId)
                     && !nft.isApprovedForAll(ownerToken, msg.sender)
             ) {
                 revert IdeationMarket__NotAuthorizedOperator(tokenId, nftAddress);
             }
+            if (erc1155Holder != address(0)) {
+                revert IdeationMarket__WrongParameter();
+            }
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-            uint256 balance = IERC1155(nftAddress).balanceOf(msg.sender, tokenId);
-            if (balance == 0) {
-                revert IdeationMarket__SellerNotNftOwner(tokenId, nftAddress);
+            IERC1155 nft = IERC1155(nftAddress);
+            // check if the user is the holder of the Token
+            if (nft.balanceOf(msg.sender, tokenId) == 0) {
+                // otherwise check if an 'erc1155Holder' has been parsed
+                if (erc1155Holder == address(0)) revert IdeationMarket__erc1155HolderRequired();
+                // check that this 'erc1155Holder' is really the holder
+                if (nft.balanceOf(erc1155Holder, tokenId) == 0) {
+                    revert IdeationMarket__SellerNotNftOwner(tokenId, nftAddress);
+                }
+                if (!nft.isApprovedForAll(erc1155Holder, msg.sender)) {
+                    revert IdeationMarket__NotAuthorizedOperator(tokenId, nftAddress);
+                }
+            } else if (erc1155Holder != address(0) && erc1155Holder != msg.sender) {
+                revert IdeationMarket__WrongParameter();
             }
         } else {
             revert IdeationMarket__NotSupportedTokenStandard();
@@ -178,6 +194,7 @@ contract IdeationMarketFacet {
     function listItem(
         address nftAddress,
         uint256 tokenId,
+        address erc1155Holder,
         uint96 price,
         address desiredNftAddress,
         uint256 desiredTokenId,
@@ -185,7 +202,7 @@ contract IdeationMarketFacet {
         uint256 quantity, // >0 for ERC1155, 0 for only ERC721
         bool buyerWhitelistEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
-    ) external isAuthorizedOperator(nftAddress, tokenId) onlyWhitelistedCollection(nftAddress) {
+    ) external isAuthorizedOperator(nftAddress, tokenId, erc1155Holder) onlyWhitelistedCollection(nftAddress) {
         // Prevent relisting an already-listed NFT
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.listings[nftAddress][tokenId].seller != address(0)) {
@@ -210,9 +227,12 @@ contract IdeationMarketFacet {
             }
         }
 
+        // if the interacting user is an approved Operator set the token Owner as the seller
+        address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
+
         // ensure the MarketPlace has been Approved for transfer.
         if (quantity > 0) {
-            check1155Approval(nftAddress, msg.sender);
+            check1155Approval(nftAddress, seller);
         } else {
             check721Approval(nftAddress, tokenId);
         }
@@ -228,7 +248,7 @@ contract IdeationMarketFacet {
             listingId: newListingId,
             price: price,
             feeRate: s.innovationFee,
-            seller: msg.sender,
+            seller: seller,
             desiredNftAddress: desiredNftAddress,
             desiredTokenId: desiredTokenId,
             desiredQuantity: desiredQuantity,
@@ -248,7 +268,7 @@ contract IdeationMarketFacet {
             nftAddress,
             tokenId,
             price,
-            msg.sender,
+            seller,
             desiredNftAddress,
             desiredTokenId,
             desiredQuantity,
@@ -347,7 +367,7 @@ contract IdeationMarketFacet {
             // Detect the desired token's standard using ERC165 interface checks.
 
             if (listedItem.desiredQuantity > 0) {
-                // For ERC1155: Check that buyer holds enough token.
+                // For ERC1155: Check that buyer holds enough token. !!! this needs to also accept an authorized operator
                 uint256 swapBalance =
                     IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId);
                 if (swapBalance < listedItem.desiredQuantity) {
@@ -418,29 +438,31 @@ contract IdeationMarketFacet {
         );
     }
 
-    // natspec info: the nft owner is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
+    // natspec info: the nft owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(address nftAddress, uint256 tokenId) external isListed(nftAddress, tokenId) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        Listing memory listedItem = s.listings[nftAddress][tokenId];
         address diamondOwner = LibDiamond.contractOwner();
-        bool isOwner;
+        bool isAuthorized;
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
+            // !!! check if listedItem.quantity =0 means ERC721 and >0 means ERC1155 - because then i could change this check in the update and cancel function from having to use the interface to just checking the listedItem.quantity. (and check if there are more functions where this is applicable as well)
             IERC721 nft = IERC721(nftAddress);
-            address owner = nft.ownerOf(tokenId);
-            isOwner = (
+            address owner = listedItem.seller; // !!! this was 'nft.ownerOf(tokenId)' and got optimized by not getting this from the nft but from the s.listings. -> there is more potential maybe in this function and the update listing function (and check if there are more functions where this is applicable as well)
+            isAuthorized = (
                 msg.sender == owner || msg.sender == nft.getApproved(tokenId) || nft.isApprovedForAll(owner, msg.sender)
             );
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-            isOwner = (IERC1155(nftAddress).balanceOf(msg.sender, tokenId) > 0);
+            address seller = listedItem.seller;
+            isAuthorized = (msg.sender == seller || IERC1155(nftAddress).isApprovedForAll(seller, msg.sender));
         } else {
             revert IdeationMarket__NotSupportedTokenStandard();
         }
 
         // allows the diamondOwner to cancel any Listing
-        if (!isOwner && msg.sender != diamondOwner) {
+        if (!isAuthorized && msg.sender != diamondOwner) {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
-        AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[nftAddress][tokenId];
         delete (s.listings[nftAddress][tokenId]);
 
         emit ItemCanceled(listedItem.listingId, nftAddress, tokenId, listedItem.seller, msg.sender);
@@ -449,6 +471,7 @@ contract IdeationMarketFacet {
     function updateListing(
         address nftAddress,
         uint256 tokenId,
+        address erc1155Holder, // !!! this isnt necessary if i take the address from the listedItem.seller
         uint96 newPrice,
         address newDesiredNftAddress,
         uint256 newDesiredTokenId,
@@ -458,7 +481,7 @@ contract IdeationMarketFacet {
     )
         external
         isListed(nftAddress, tokenId)
-        isAuthorizedOperator(nftAddress, tokenId)
+        isAuthorizedOperator(nftAddress, tokenId, erc1155Holder)
         onlyWhitelistedCollection(nftAddress)
     {
         // Swap-specific check
@@ -482,9 +505,12 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
 
+        // if the interacting user is an approved Operator set the token Owner as the seller
+        address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
+
         // Use interface check to ensure the token supports the expected standard and the MarketPlace has been Approved for transfer.
         if (newQuantity > 0) {
-            check1155Approval(nftAddress, msg.sender);
+            check1155Approval(nftAddress, seller);
         } else {
             check721Approval(nftAddress, tokenId);
         }
@@ -502,7 +528,7 @@ contract IdeationMarketFacet {
             nftAddress,
             tokenId,
             newPrice,
-            msg.sender,
+            seller,
             newDesiredNftAddress,
             newDesiredTokenId,
             newDesiredQuantity,
