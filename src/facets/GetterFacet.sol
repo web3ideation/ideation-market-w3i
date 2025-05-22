@@ -4,6 +4,9 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
+error GetterFacet__NotListed();
+error GetterFacet__ListingNotFound();
+
 contract GetterFacet {
     /**
      * @notice Returns the listing details for a specific NFT.
@@ -11,9 +14,10 @@ contract GetterFacet {
      * @param tokenId The NFT token ID.
      * @return listing The Listing struct containing listing details.
      */
-    function getListingByNFT(address nftAddress, uint256 tokenId) external view returns (Listing memory) {
+    function getListingByNFT(address nftAddress, uint256 tokenId) external view returns (Listing memory listing) {
         AppStorage storage s = LibAppStorage.appStorage();
-        return s.listings[nftAddress][tokenId];
+        listing = s.listings[nftAddress][tokenId];
+        if (listing.listingId == 0) revert GetterFacet__NotListed();
     }
 
     /// @notice Returns the Listing struct for a given listingId.
@@ -30,7 +34,7 @@ contract GetterFacet {
         listing = s.listings[nftAddress][tokenId];
 
         // check if overwritten by a new listing of the same NFT
-        require(listing.listingId == listingId, "GetterFacet: listing not found");
+        if (listing.listingId != listingId || listingId == 0) revert GetterFacet__ListingNotFound();
     }
 
     /**
@@ -99,6 +103,10 @@ contract GetterFacet {
     /// @return True if the buyer is whitelisted, false otherwise.
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
+        address nftAddress = s.listingIdToNft[listingId];
+        uint256 tokenId = s.listingIdToTokenId[listingId];
+        Listing memory listing = s.listings[nftAddress][tokenId];
+        if (listing.listingId != listingId) revert GetterFacet__ListingNotFound();
         return s.whitelistedBuyersByListingId[listingId][buyer];
     }
 }
