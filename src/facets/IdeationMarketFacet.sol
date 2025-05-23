@@ -34,6 +34,8 @@ error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 ava
 error IdeationMarket__WhitelistNotAllowed();
 error IdeationMarket__WrongParameter();
 error IdeationMarket__erc1155HolderRequired();
+error IdeationMarket__ERC721QuantityMustBe0();
+error IdeationMarket__ERC1155QuantityCantBe0();
 
 contract IdeationMarketFacet {
     /**
@@ -313,7 +315,7 @@ contract IdeationMarketFacet {
             revert IdeationMarket__SameBuyerAsSeller();
         }
 
-        // Use interface check to ensure the token supports the expected standard.
+        // Use interface check to ensure the token supports the expected standard. !!! is this really necessary? I mean if they didn't, they could never been listed, right?
         if (listedItem.quantity > 0) {
             if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
@@ -362,12 +364,13 @@ contract IdeationMarketFacet {
         if (excessPayment > 0) {
             s.proceeds[msg.sender] += excessPayment;
         }
+
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
             // Detect the desired token's standard using ERC165 interface checks.
 
             if (listedItem.desiredQuantity > 0) {
-                // For ERC1155: Check that buyer holds enough token. !!! this needs to also accept an authorized operator
+                // For ERC1155: Check that buyer holds enough token. !!! this needs to also accept an authorized operator -- we need the desiredErc1155Holder !!!
                 uint256 swapBalance =
                     IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId);
                 if (swapBalance < listedItem.desiredQuantity) {
@@ -416,7 +419,7 @@ contract IdeationMarketFacet {
 
         delete (s.listings[nftAddress][tokenId]);
 
-        // Transfer tokens based on the token standard.
+        // Transfer tokens based on the token standard. !!! in case the transfer wouldn't work, would the proceeds still be paid out?
         if (listedItem.quantity > 0) {
             IERC1155(nftAddress).safeTransferFrom(listedItem.seller, msg.sender, tokenId, listedItem.quantity, "");
         } else {
@@ -444,20 +447,16 @@ contract IdeationMarketFacet {
         Listing memory listedItem = s.listings[nftAddress][tokenId];
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
-        if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-            // !!! check if listedItem.quantity =0 means ERC721 and >0 means ERC1155 - because then i could change this check in the update and cancel function from having to use the interface to just checking the listedItem.quantity. (and check if there are more functions where this is applicable as well)
+        if (listedItem.quantity == 0) {
             IERC721 nft = IERC721(nftAddress);
-            address owner = listedItem.seller; // !!! this was 'nft.ownerOf(tokenId)' and got optimized by not getting this from the nft but from the s.listings. -> there is more potential maybe in this function and the update listing function (and check if there are more functions where this is applicable as well)
+            address owner = listedItem.seller;
             isAuthorized = (
                 msg.sender == owner || msg.sender == nft.getApproved(tokenId) || nft.isApprovedForAll(owner, msg.sender)
             );
-        } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-            address seller = listedItem.seller;
-            isAuthorized = (msg.sender == seller || IERC1155(nftAddress).isApprovedForAll(seller, msg.sender));
         } else {
-            revert IdeationMarket__NotSupportedTokenStandard();
+            address owner = listedItem.seller;
+            isAuthorized = (msg.sender == owner || IERC1155(nftAddress).isApprovedForAll(owner, msg.sender));
         }
-
         // allows the diamondOwner to cancel any Listing
         if (!isAuthorized && msg.sender != diamondOwner) {
             revert IdeationMarket__NotAuthorizedToCancel();
@@ -504,6 +503,16 @@ contract IdeationMarketFacet {
 
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[nftAddress][tokenId];
+
+        // make sure that the quantity stays 0 for erc721 !!! get this doublechecked by cGPT
+        if (listedItem.quantity == 0 && newQuantity != 0) {
+            revert IdeationMarket__ERC721QuantityMustBe0();
+        }
+
+        // make sure that the quatnity stays >0 for erc1155 !!! get this doublechecked by cGPT
+        if (listedItem.quantity != 0 && newQuantity == 0) {
+            revert IdeationMarket__ERC1155QuantityCantBe0();
+        }
 
         // if the interacting user is an approved Operator set the token Owner as the seller
         address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
@@ -587,10 +596,9 @@ contract IdeationMarketFacet {
         bool approved;
 
         // check approval depending on token type
-        if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
+        if (listedItem.quantity >= 0) {
             approved = IERC1155(nftAddress).isApprovedForAll(listedItem.seller, address(this));
         } else {
-            // Check if the marketplace is still approved to transfer this NFT.
             IERC721 nft = IERC721(nftAddress);
             approved =
                 nft.getApproved(tokenId) == address(this) || nft.isApprovedForAll(listedItem.seller, address(this));
@@ -605,5 +613,5 @@ contract IdeationMarketFacet {
             );
         }
     }
-    // find getter functions in the GetterFacet.sol
+    // find the getter functions in the GetterFacet.sol
 }
