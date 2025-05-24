@@ -320,7 +320,6 @@ contract IdeationMarketFacet {
         if (msg.sender == listedItem.seller) {
             revert IdeationMarket__SameBuyerAsSeller();
         }
-        // !!! when an authorized operator lists an nft the marketplace will be added as an authorized operator. will that revoke that original operators authorization?
         // Use interface check to ensure the token supports the expected standard. !!! is this really necessary? I mean if they didn't, they could never been listed, right?
         if (listedItem.quantity > 0) {
             if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
@@ -481,7 +480,7 @@ contract IdeationMarketFacet {
     function updateListing(
         address nftAddress,
         uint256 tokenId,
-        address erc1155Holder, // !!! this isnt necessary if i take the address from the listedItem.seller
+        address erc1155Holder, // !!! this isnt necessary if i take the address from the listedItem.seller - but i need it for the isAuthorizedOperator modifier...
         uint96 newPrice,
         address newDesiredNftAddress,
         uint256 newDesiredTokenId,
