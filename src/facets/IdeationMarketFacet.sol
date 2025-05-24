@@ -12,7 +12,7 @@ import "../interfaces/IBuyerWhitelistFacet.sol";
 error IdeationMarket__AlreadyListed(address nftAddress, uint256 tokenId);
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__SellerNotNftOwner(uint256 tokenId, address nftAddress);
-error IdeationMarket__NotAuthorizedOperator(uint256 tokenId, address nftAddress);
+error IdeationMarket__NotAuthorizedOperator();
 error IdeationMarket__ListingTermsChanged();
 error IdeationMarket__FreeListingsNotSupported();
 error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
@@ -32,8 +32,7 @@ error IdeationMarket__NotOwnerOfDesiredSwap();
 error IdeationMarket__TransferFailed();
 error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__WhitelistNotAllowed();
-error IdeationMarket__WrongParameter();
-error IdeationMarket__erc1155HolderRequired();
+error IdeationMarket__WrongErc1155Holder();
 error IdeationMarket__ERC721QuantityMustBe0();
 error IdeationMarket__ERC1155QuantityCantBe0();
 
@@ -132,6 +131,7 @@ contract IdeationMarketFacet {
         _;
     }
 
+    // !!! simplify buy requiring the correct erc1155 holder address always when its an erc1155
     modifier isAuthorizedOperator(address nftAddress, uint256 tokenId, address erc1155Holder) {
         if (IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
             IERC721 nft = IERC721(nftAddress);
@@ -140,26 +140,27 @@ contract IdeationMarketFacet {
                 msg.sender != ownerToken && msg.sender != nft.getApproved(tokenId)
                     && !nft.isApprovedForAll(ownerToken, msg.sender)
             ) {
-                revert IdeationMarket__NotAuthorizedOperator(tokenId, nftAddress);
+                revert IdeationMarket__NotAuthorizedOperator();
             }
             if (erc1155Holder != address(0)) {
-                revert IdeationMarket__WrongParameter();
+                revert IdeationMarket__WrongErc1155Holder();
             }
         } else if (IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
             IERC1155 nft = IERC1155(nftAddress);
             // check if the user is the holder of the Token
             if (nft.balanceOf(msg.sender, tokenId) == 0) {
                 // otherwise check if an 'erc1155Holder' has been parsed
-                if (erc1155Holder == address(0)) revert IdeationMarket__erc1155HolderRequired();
+                if (erc1155Holder == address(0)) revert IdeationMarket__WrongErc1155Holder();
                 // check that this 'erc1155Holder' is really the holder
                 if (nft.balanceOf(erc1155Holder, tokenId) == 0) {
                     revert IdeationMarket__SellerNotNftOwner(tokenId, nftAddress);
                 }
+                // check if the user is authorized
                 if (!nft.isApprovedForAll(erc1155Holder, msg.sender)) {
-                    revert IdeationMarket__NotAuthorizedOperator(tokenId, nftAddress);
+                    revert IdeationMarket__NotAuthorizedOperator();
                 }
             } else if (erc1155Holder != address(0) && erc1155Holder != msg.sender) {
-                revert IdeationMarket__WrongParameter();
+                revert IdeationMarket__WrongErc1155Holder();
             }
         } else {
             revert IdeationMarket__NotSupportedTokenStandard();
@@ -286,7 +287,8 @@ contract IdeationMarketFacet {
         uint256 expectedQuantity,
         address expectedDesiredNftAddress,
         uint256 expectedDesiredTokenId,
-        uint256 expectedDesiredQuantity
+        uint256 expectedDesiredQuantity,
+        address desiredErc1155Holder // if it is a swap listing where the desired nft is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
     ) external payable nonReentrant isListed(nftAddress, tokenId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[nftAddress][tokenId];
@@ -311,10 +313,14 @@ contract IdeationMarketFacet {
             revert IdeationMarket__ListingTermsChanged();
         }
 
+        if (listedItem.desiredQuantity > 0) {
+            if (desiredErc1155Holder == address(0)) revert IdeationMarket__WrongErc1155Holder();
+        }
+
         if (msg.sender == listedItem.seller) {
             revert IdeationMarket__SameBuyerAsSeller();
         }
-
+        // !!! when an authorized operator lists an nft the marketplace will be added as an authorized operator. will that revoke that original operators authorization?
         // Use interface check to ensure the token supports the expected standard. !!! is this really necessary? I mean if they didn't, they could never been listed, right?
         if (listedItem.quantity > 0) {
             if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
@@ -367,22 +373,27 @@ contract IdeationMarketFacet {
 
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
-            // Detect the desired token's standard using ERC165 interface checks.
-
             if (listedItem.desiredQuantity > 0) {
-                // For ERC1155: Check that buyer holds enough token. !!! this needs to also accept an authorized operator -- we need the desiredErc1155Holder !!!
-                uint256 swapBalance =
-                    IERC1155(listedItem.desiredNftAddress).balanceOf(msg.sender, listedItem.desiredTokenId);
+                // For ERC1155: Check that buyer holds enough token.
+                IERC1155 desiredNft = IERC1155(listedItem.desiredNftAddress);
+                uint256 swapBalance = desiredNft.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
+                if (swapBalance == 0) revert IdeationMarket__WrongErc1155Holder();
+                if (
+                    desiredNft.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
+                        && !desiredNft.isApprovedForAll(desiredErc1155Holder, msg.sender)
+                ) {
+                    revert IdeationMarket__NotAuthorizedOperator();
+                }
                 if (swapBalance < listedItem.desiredQuantity) {
                     revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredQuantity, swapBalance);
                 }
 
                 // Check approval
-                check1155Approval(listedItem.desiredNftAddress, msg.sender);
+                check1155Approval(listedItem.desiredNftAddress, desiredErc1155Holder);
 
                 // Perform the safe swap transfer buyer to seller.
                 IERC1155(listedItem.desiredNftAddress).safeTransferFrom(
-                    msg.sender, listedItem.seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
+                    desiredErc1155Holder, listedItem.seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
                 );
             } else {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
