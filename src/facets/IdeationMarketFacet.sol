@@ -320,20 +320,15 @@ contract IdeationMarketFacet {
         if (msg.sender == listedItem.seller) {
             revert IdeationMarket__SameBuyerAsSeller();
         }
-        // Use interface check to ensure the token supports the expected standard. !!! is this really necessary? I mean if they didn't, they could never been listed, right?
+
+        // Check if the seller still owns the token and if the marketplace is still approved
         if (listedItem.quantity > 0) {
-            if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
             uint256 balance = IERC1155(nftAddress).balanceOf(listedItem.seller, tokenId);
             if (balance < listedItem.quantity) {
                 revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.quantity, balance);
             }
             check1155Approval(nftAddress, listedItem.seller);
         } else {
-            if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
             address ownerToken = IERC721(nftAddress).ownerOf(tokenId);
             if (ownerToken != listedItem.seller) {
                 revert IdeationMarket__SellerNotNftOwner(tokenId, nftAddress);
