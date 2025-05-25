@@ -2,7 +2,10 @@
 pragma solidity ^0.8.28;
 
 struct Listing {
+    // !!! check struct packing and padding
     uint128 listingId;
+    address nftAddresss;
+    uint256 tokenId;
     uint96 price;
     uint32 feeRate; // storing the fee at the time of listing
     address seller;
@@ -16,19 +19,19 @@ struct Listing {
 }
 
 struct AppStorage {
+    // !!! check struct packing and padding
     uint128 listingIdCounter;
     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
     uint16 buyerWhitelistMaxBatchSize; // should be 300
     bool reentrancyLock;
     // 9 bytes padding for future tiny vars
-    mapping(address => mapping(uint256 => Listing)) listings; // Listings by NFT contract and token ID
+    mapping(uint128 => Listing) listings; // Listings by listinngId
+    mapping(address => mapping(uint256 => uint128[])) nftTokenToListingIds; // reverse index from nft to ListingIds
     mapping(address => uint256) proceeds; // Proceeds by seller address
     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
     address[] whitelistedCollectionsArray; // for lookups
     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
-    mapping(uint128 => address) listingIdToNft; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
-    mapping(uint128 => uint256) listingIdToTokenId; // Reverse‐lookup so we can go from listingId → nftAddress & tokenId
 }
 
 library LibAppStorage {
