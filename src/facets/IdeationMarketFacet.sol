@@ -56,14 +56,14 @@ contract IdeationMarketFacet {
         uint256 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
+        uint256 quantity,
         uint256 price,
+        uint256 feeRate,
         address seller,
+        bool buyerWhitelistEnabled,
         address desiredNftAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity,
-        uint256 feeRate,
-        uint256 quantity,
-        bool buyerWhitelistEnabled
+        uint256 desiredQuantity
     );
 
     event ItemBought(
@@ -192,16 +192,15 @@ contract IdeationMarketFacet {
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external isAuthorizedOperator(nftAddress, tokenId, erc1155Holder, quantity) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[listingId];
 
         // check if the Collection is Whitelisted
-        if (!s.whitelistedCollections[listedItem.nftAddress]) {
-            revert IdeationMarket__CollectionNotWhitelisted(listedItem.nftAddress);
+        if (!s.whitelistedCollections[nftAddress]) {
+            revert IdeationMarket__CollectionNotWhitelisted(nftAddress);
         }
 
-        // Prevent relisting an already-listed NFT
-        if (listedItem.seller != address(0)) {
-            revert IdeationMarket__AlreadyListed(listedItem.nftAddress, listedItem.tokenId);
+        // Prevent relisting an already-listed ERC721 NFT
+        if (quantity == 0 && s.nftTokenToListingIds[nftAddress][tokenId].length > 0) {
+            revert IdeationMarket__AlreadyListed(nftAddress, tokenId);
         }
 
         // Swap-specific check
@@ -225,12 +224,12 @@ contract IdeationMarketFacet {
         // if the interacting user is an approved Operator set the token Owner as the seller
         address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
 
-        // ensure the qunatity matches the token Type and the MarketPlace has been Approved for transfer.
+        // ensure the quantity matches the token Type and the MarketPlace has been Approved for transfer.
         if (quantity > 0) {
             if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check1155Approval(nftAddress, seller);
+            check1155Approval(nftAddress, seller); // !!! the approval function needs to keep the nftAddress parameter bc the listing isnt there yet - recheck that
         } else {
             if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
@@ -243,20 +242,21 @@ contract IdeationMarketFacet {
 
         uint128 newListingId = s.listingIdCounter;
 
-        s.listingIdToNft[newListingId] = nftAddress;
-        s.listingIdToTokenId[newListingId] = tokenId;
-
-        s.listings[nftAddress][tokenId] = Listing({
+        s.listings[newListingId] = Listing({ // !!! I added the nftAddress and tokenId and changed the position of quantity and buyerWhitelistEnabled - check that this is implemented EVERYWHERE!
             listingId: newListingId,
+            nftAddress: nftAddress,
+            tokenId: tokenId,
+            quantity: quantity,
             price: price,
             feeRate: s.innovationFee,
             seller: seller,
+            buyerWhitelistEnabled: buyerWhitelistEnabled,
             desiredNftAddress: desiredNftAddress,
             desiredTokenId: desiredTokenId,
-            desiredQuantity: desiredQuantity,
-            quantity: quantity,
-            buyerWhitelistEnabled: buyerWhitelistEnabled
+            desiredQuantity: desiredQuantity
         });
+
+        s.nftTokenToListingIds[nftAddress][tokenId].push(newId);
 
         if (buyerWhitelistEnabled) {
             // delegate into BuyerWhitelistFacet on this Diamond
@@ -269,14 +269,14 @@ contract IdeationMarketFacet {
             s.listingIdCounter,
             nftAddress,
             tokenId,
+            quantity,
             price,
+            s.innovationFee,
             seller,
+            buyerWhitelistEnabled,
             desiredNftAddress,
             desiredTokenId,
-            desiredQuantity,
-            s.innovationFee,
-            quantity,
-            buyerWhitelistEnabled
+            desiredQuantity
         );
     }
 
