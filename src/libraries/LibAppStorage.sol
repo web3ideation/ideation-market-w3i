@@ -4,7 +4,7 @@ pragma solidity ^0.8.28;
 struct Listing {
     // !!! check struct packing and padding
     uint128 listingId;
-    address nftAddresss;
+    address nftAddress;
     uint256 tokenId;
     uint96 price;
     uint32 feeRate; // storing the fee at the time of listing

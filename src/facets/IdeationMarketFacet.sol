@@ -9,6 +9,7 @@ import "../interfaces/IERC2981.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IBuyerWhitelistFacet.sol";
 
+// !!! add listing Id as primary identifier
 error IdeationMarket__AlreadyListed(address nftAddress, uint256 tokenId);
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__SellerNotNftOwner(uint256 tokenId, address nftAddress);
@@ -38,6 +39,7 @@ error IdeationMarket__ERC1155QuantityCantBe0();
 error IdeationMarket__WrongQuantityParameter();
 
 contract IdeationMarketFacet {
+    // !!! add listing Id as primary identifier
     /**
      * @notice Emitted when an item is listed on the marketplace.
      * @param listingId The listing ID.
@@ -126,34 +128,32 @@ contract IdeationMarketFacet {
         _;
     }
 
-    modifier isListed(address nftAddress, uint256 tokenId) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        if (s.listings[nftAddress][tokenId].seller == address(0)) revert IdeationMarket__NotListed();
+    modifier isListed(uint128 listingId) {
+        if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
         _;
     }
 
-    modifier isAuthorizedOperator(address nftAddress, uint256 tokenId, address erc1155Holder, uint256 quantity) {
+    modifier isAuthorizedOperator(uint128 listingId, uint256 quantity) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        Listing memory listedItem = s.listings[listingId];
         if (quantity > 0) {
-            IERC1155 nft = IERC1155(nftAddress);
+            IERC1155 nft = IERC1155(listedItem.nftAddress);
             // check if the user is authorized
-            if (msg.sender != erc1155Holder && !nft.isApprovedForAll(erc1155Holder, msg.sender)) {
+            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
             // check that this 'erc1155Holder' is really the holder
-            if (nft.balanceOf(erc1155Holder, tokenId) == 0) {
+            if (nft.balanceOf(listedItem.seller, listedItem.tokenId) == 0) {
                 revert IdeationMarket__WrongErc1155HolderParameter();
             }
         } else {
-            IERC721 nft = IERC721(nftAddress);
-            address ownerToken = nft.ownerOf(tokenId);
+            IERC721 nft = IERC721(listedItem.nftAddress);
+            address ownerToken = nft.ownerOf(listedItem.tokenId);
             if (
-                msg.sender != ownerToken && msg.sender != nft.getApproved(tokenId)
+                msg.sender != ownerToken && msg.sender != nft.getApproved(listedItem.tokenId)
                     && !nft.isApprovedForAll(ownerToken, msg.sender)
             ) {
                 revert IdeationMarket__NotAuthorizedOperator();
-            }
-            if (erc1155Holder != address(0)) {
-                revert IdeationMarket__WrongErc1155HolderParameter();
             }
         }
         _;
@@ -165,12 +165,6 @@ contract IdeationMarketFacet {
         s.reentrancyLock = true;
         _;
         s.reentrancyLock = false;
-    }
-
-    modifier onlyWhitelistedCollection(address nftAddress) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        if (!s.whitelistedCollections[nftAddress]) revert IdeationMarket__CollectionNotWhitelisted(nftAddress);
-        _;
     }
 
     ////////////////////
@@ -196,15 +190,18 @@ contract IdeationMarketFacet {
         uint256 quantity, // >0 for ERC1155, 0 for only ERC721
         bool buyerWhitelistEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
-    )
-        external
-        isAuthorizedOperator(nftAddress, tokenId, erc1155Holder, quantity)
-        onlyWhitelistedCollection(nftAddress)
-    {
-        // Prevent relisting an already-listed NFT
+    ) external isAuthorizedOperator(nftAddress, tokenId, erc1155Holder, quantity) {
         AppStorage storage s = LibAppStorage.appStorage();
-        if (s.listings[nftAddress][tokenId].seller != address(0)) {
-            revert IdeationMarket__AlreadyListed(nftAddress, tokenId);
+        Listing memory listedItem = s.listings[listingId];
+
+        // check if the Collection is Whitelisted
+        if (!s.whitelistedCollections[listedItem.nftAddress]) {
+            revert IdeationMarket__CollectionNotWhitelisted(listedItem.nftAddress);
+        }
+
+        // Prevent relisting an already-listed NFT
+        if (listedItem.seller != address(0)) {
+            revert IdeationMarket__AlreadyListed(listedItem.nftAddress, listedItem.tokenId);
         }
 
         // Swap-specific check

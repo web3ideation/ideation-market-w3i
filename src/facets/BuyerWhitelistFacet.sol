@@ -6,6 +6,7 @@ import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IERC165.sol";
 
+// !!! add listing Id as primary identifier
 error BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
 error BuyerWhitelist__NotListingSeller();
 error BuyerWhitelist__ExceedsMaxBatchSize();
@@ -16,6 +17,7 @@ error BuyerWhitelist__NotSupportedTokenStandard();
 error BuyerWhitelist__EmptyCalldata();
 
 contract BuyerWhitelistFacet {
+    // !!! add listing Id as primary identifier
     event BuyerWhitelisted(uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer);
     event BuyerRemovedFromWhitelist(
         uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer
