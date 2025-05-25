@@ -19,7 +19,7 @@ struct Listing {
 }
 
 struct AppStorage {
-    // !!! check struct packing and padding
+    // !!! check struct packing
     uint128 listingIdCounter;
     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
     uint16 buyerWhitelistMaxBatchSize; // should be 300
