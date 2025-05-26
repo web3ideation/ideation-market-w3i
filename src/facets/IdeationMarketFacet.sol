@@ -453,29 +453,52 @@ contract IdeationMarketFacet {
     }
 
     // natspec info: the nft owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
-    function cancelListing(uint128 listingId) public listingExists(listingId) {
+    function cancelListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[nftAddress][tokenId];
+        Listing memory listedItem = s.listings[listingId];
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
         if (listedItem.quantity == 0) {
-            IERC721 nft = IERC721(nftAddress);
-            address owner = listedItem.seller;
+            IERC721 nft = IERC721(listedItem.nftAddress);
             isAuthorized = (
-                msg.sender == owner || msg.sender == nft.getApproved(tokenId) || nft.isApprovedForAll(owner, msg.sender)
+                msg.sender == listedItem.seller || msg.sender == nft.getApproved(listedItem.tokenId)
+                    || nft.isApprovedForAll(listedItem.seller, msg.sender)
             );
         } else {
-            address owner = listedItem.seller;
-            isAuthorized = (msg.sender == owner || IERC1155(nftAddress).isApprovedForAll(owner, msg.sender));
+            isAuthorized = (
+                msg.sender == listedItem.seller
+                    || IERC1155(listedItem.nftAddress).isApprovedForAll(listedItem.seller, msg.sender)
+            );
         }
         // allows the diamondOwner to cancel any Listing
         if (!isAuthorized && msg.sender != diamondOwner) {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
-        delete (s.listings[nftAddress][tokenId]);
+        // deactivate the listing // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
+        listedItem.seller = address(0);
 
-        emit ItemCanceled(listedItem.listingId, nftAddress, tokenId, listedItem.seller, msg.sender);
+        // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again
+
+        uint128[] storage arr = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
+        for (uint256 i; i < arr.length; ++i) {
+            if (arr[i] == listingId) {
+                arr[i] = arr[arr.length - 1];
+                arr.pop();
+                break;
+            }
+        }
+
+        uint128[] memory listingArray = s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
+        for (uint256 i; i < listingArray.length; ++i) {
+            if (listingArray[i] == listingId) {
+                listingArray[i] = listingArray[listingArray.length - 1];
+                listingArray.pop();
+                // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
+            }
+        }
+
+        emit ItemCanceled(listingId, listedItem.nftAddress, listedItem.tokenId, listedItem.seller, msg.sender);
     }
 
     function updateListing(
@@ -511,8 +534,8 @@ contract IdeationMarketFacet {
 
         // check if the Collection is Whitelisted -- even tho it would not have been able to get listed in the first place - if the collection has been revoked in the meantime, updating would cancel the listing
         if (!s.whitelistedCollections[nftAddress]) {
-            cancelListing(nftAddress, tokenId);
-            // !!! here needs to be somthing that finishes the function like return(?)
+            cancelIfNotApproved(nftAddress, tokenId);
+            // !!! here needs to be somthing that finishes the function like return/break(?)
         }
 
         // make sure that the quantity stays 0 for erc721
@@ -591,9 +614,9 @@ contract IdeationMarketFacet {
         emit InnovationFeeUpdated(previousFee, newFee);
     }
 
-    function cancelIfNotApproved(address nftAddress, uint256 tokenId) external {
+    function cancelIfNotApproved(address nftAddress, uint256 tokenId) public {
         AppStorage storage s = LibAppStorage.appStorage();
-
+        // !!! add cancel listing if not on collection whitelist anymore
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
         Listing memory listedItem = s.listings[nftAddress][tokenId];
         if (listedItem.seller == address(0)) {
