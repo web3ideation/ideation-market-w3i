@@ -8,20 +8,15 @@ import "../interfaces/IERC165.sol";
 
 // !!! add listing Id as primary identifier
 error BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
-error BuyerWhitelist__NotListingSeller();
+error BuyerWhitelist__NotListingSeller(); // !!! add support for authorized operators
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
-error BuyerWhitelist__NotNftOwner(uint256 tokenId, address nftAddress);
-error BuyerWhitelist__NotAuthorizedOperator(uint256 tokenId, address nftAddress);
-error BuyerWhitelist__NotSupportedTokenStandard();
 error BuyerWhitelist__EmptyCalldata();
 
 contract BuyerWhitelistFacet {
     // !!! add listing Id as primary identifier
-    event BuyerWhitelisted(uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer);
-    event BuyerRemovedFromWhitelist(
-        uint128 indexed listingId, address nftAddress, uint256 tokenId, address indexed buyer
-    );
+    event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
+    event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
 
     /// @notice Batch adds buyer addresses to a listing's whitelist.
     /// @param listingId The ID number of the Listing.
@@ -33,12 +28,8 @@ contract BuyerWhitelistFacet {
 
         if (allowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        // Find the NFT + tokenId for this listing
-        address nftAddress = s.listingIdToNft[listingId];
-        uint256 tokenId = s.listingIdToTokenId[listingId];
-
         // Ensure listing exists & caller is the seller
-        Listing storage listedItem = s.listings[nftAddress][tokenId];
+        Listing storage listedItem = s.listings[listingId];
         if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
         if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
 
@@ -48,7 +39,7 @@ contract BuyerWhitelistFacet {
 
             if (!s.whitelistedBuyersByListingId[listingId][allowedBuyer]) {
                 s.whitelistedBuyersByListingId[listingId][allowedBuyer] = true;
-                emit BuyerWhitelisted(listingId, nftAddress, tokenId, allowedBuyer);
+                emit BuyerWhitelisted(listingId, allowedBuyer);
             }
             unchecked {
                 i++;
@@ -66,20 +57,18 @@ contract BuyerWhitelistFacet {
 
         if (disallowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        // Find the NFT + tokenId for this listing
-        address nftAddress = s.listingIdToNft[listingId];
-        uint256 tokenId = s.listingIdToTokenId[listingId];
-
         // Ensure listing exists & caller is the seller
-        Listing storage listedItem = s.listings[nftAddress][tokenId];
+        Listing storage listedItem = s.listings[listingId];
         if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
         if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
 
         for (uint256 i = 0; i < disallowedBuyers.length;) {
-            address allowedBuyer = disallowedBuyers[i];
-            if (s.whitelistedBuyersByListingId[listingId][allowedBuyer]) {
-                s.whitelistedBuyersByListingId[listingId][allowedBuyer] = false;
-                emit BuyerRemovedFromWhitelist(listingId, nftAddress, tokenId, allowedBuyer);
+            address disallowedBuyer = disallowedBuyers[i];
+            if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+
+            if (s.whitelistedBuyersByListingId[listingId][disallowedBuyer]) {
+                s.whitelistedBuyersByListingId[listingId][disallowedBuyer] = false;
+                emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
             }
             unchecked {
                 i++;
