@@ -4,37 +4,23 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
-error GetterFacet__NotListed();
-error GetterFacet__ListingNotFound();
-
 contract GetterFacet {
     /**
      * @notice Returns the listing details for a specific NFT.
-     * @param nftAddress The NFT contract address.
-     * @param tokenId The NFT token ID.
-     * @return listing The Listing struct containing listing details.
      */
-    function getListingByNFT(address nftAddress, uint256 tokenId) external view returns (Listing memory listing) {
+    function getListingIdsByNFT(address nftAddress, uint256 tokenId) external view /*!!!multiple arrays*/ {
         AppStorage storage s = LibAppStorage.appStorage();
-        listing = s.listings[nftAddress][tokenId];
-        if (listing.listingId == 0) revert GetterFacet__NotListed();
+        uint128[] storage listingArray = s.nftTokenToListingIds[nftAddress][tokenId];
+        for (uint256 i; i < listingArray.length; ++i) {
+            // !!! here an Listings Array should get filled which then gets returned so that when the user enters nftAddress and tokenId he would get all listing Structs
+        }
     }
 
     /// @notice Returns the Listing struct for a given listingId.
     /// @param listingId The ID of the listing to retrieve.
     /// @return listing The Listing struct.
-    function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
-        AppStorage storage s = LibAppStorage.appStorage();
-
-        // Look up the NFT address & tokenId for this listing
-        address nftAddress = s.listingIdToNft[listingId];
-        uint256 tokenId = s.listingIdToTokenId[listingId];
-
-        // Fetch the listing
-        listing = s.listings[nftAddress][tokenId];
-
-        // check if overwritten by a new listing of the same NFT
-        if (listing.listingId != listingId || listingId == 0) revert GetterFacet__ListingNotFound();
+    function getListingByListingId(uint128 listingId) external view returns (Listing memory) {
+        return LibAppStorage.appStorage().listings[listingId];
     }
 
     /**
@@ -103,10 +89,6 @@ contract GetterFacet {
     /// @return True if the buyer is whitelisted, false otherwise.
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
-        address nftAddress = s.listingIdToNft[listingId];
-        uint256 tokenId = s.listingIdToTokenId[listingId];
-        Listing memory listing = s.listings[nftAddress][tokenId];
-        if (listing.listingId != listingId) revert GetterFacet__ListingNotFound();
         return s.whitelistedBuyersByListingId[listingId][buyer];
     }
 }
