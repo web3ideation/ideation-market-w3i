@@ -10,9 +10,9 @@ import "../interfaces/IERC1155.sol";
 import "../interfaces/IBuyerWhitelistFacet.sol";
 
 // !!! add listing Id as primary identifier
-error IdeationMarket__AlreadyListed(address nftAddress, uint256 tokenId);
 error IdeationMarket__NotApprovedForMarketplace();
-error IdeationMarket__SellerNotNftOwner(uint256 tokenId, address nftAddress);
+error IdeationMarket__AlreadyListed();
+error IdeationMarket__SellerNotNftOwner(uint128 listingId);
 error IdeationMarket__NotAuthorizedOperator();
 error IdeationMarket__ListingTermsChanged();
 error IdeationMarket__FreeListingsNotSupported();
@@ -194,7 +194,7 @@ contract IdeationMarketFacet {
         bool buyerWhitelistEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
-        // !!! isAuthorizedOperator mechanism must be done here
+        // !!! isAuthorizedOperator mechanism must be done here since by this time there is no listing in storage yet
 
         AppStorage storage s = LibAppStorage.appStorage();
 
@@ -205,7 +205,7 @@ contract IdeationMarketFacet {
 
         // Prevent relisting an already-listed ERC721 NFT
         if (quantity == 0 && s.nftTokenToListingIds[nftAddress][tokenId].length > 0) {
-            revert IdeationMarket__AlreadyListed(nftAddress, tokenId);
+            revert IdeationMarket__AlreadyListed();
         }
 
         // Swap-specific check
@@ -294,7 +294,7 @@ contract IdeationMarketFacet {
         address desiredErc1155Holder // if it is a swap listing where the desired nft is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
     ) external payable nonReentrant listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[listingId];
+        Listing storage listedItem = s.listings[listingId];
 
         // BuyerWhitelist Check
         if (listedItem.buyerWhitelistEnabled) {
@@ -333,7 +333,7 @@ contract IdeationMarketFacet {
         } else {
             address ownerToken = IERC721(listedItem.nftAddress).ownerOf(listedItem.tokenId);
             if (ownerToken != listedItem.seller) {
-                revert IdeationMarket__SellerNotNftOwner(listedItem.tokenId, listedItem.nftAddress);
+                revert IdeationMarket__SellerNotNftOwner(listingId);
             }
             check721Approval(listedItem.nftAddress, listedItem.tokenId);
         }
@@ -409,14 +409,15 @@ contract IdeationMarketFacet {
                 desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
             }
 
-            // in case the desiredNft is listed already, delete that now deprecated listing // !!! let cGPT check this again
+            // in case the desiredNft is listed already, delete that now deprecated listing // !!! let cGPT check this again // !!! I think this is only applicable for erc1155 not erc721 but is processed with erc721...
             uint128[] storage listingArray =
                 s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
             for (uint256 i; i < listingArray.length; ++i) {
-                if (s.listings[listingArray[i]].seller == desiredErc1155Holder) {
+                if (
+                    s.listings[listingArray[i]].seller == desiredErc1155Holder /* !!! && desiredErc1155Holder.balance < s.listings[listingArray[i]].quantity */
+                ) {
                     s.listings[listingArray[i]].seller = address(0); // indicating that this Listing is not active
                     listingArray[i] = listingArray[listingArray.length - 1];
-                    listingArray.pop();
                     emit ItemCanceled(
                         listingArray[i],
                         listedItem.desiredNftAddress,
@@ -424,12 +425,15 @@ contract IdeationMarketFacet {
                         desiredErc1155Holder,
                         address(this)
                     );
+                    listingArray.pop();
                     // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
                 }
             }
         }
 
-        delete (s.listings[listedItem.listingId]);
+        delete (s.listings[listedItem.listingId]); // !!! change this to just setting the seller to 0 instead of deleting the whole thing
+
+        // !!! also remove it from the reverse lookup nftTokenToListingIds
 
         // Transfer tokens based on the token standard.
         if (listedItem.quantity > 0) {
@@ -458,7 +462,7 @@ contract IdeationMarketFacet {
     // natspec info: the nft owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[listingId];
+        Listing storage listedItem = s.listings[listingId];
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
         if (listedItem.quantity == 0) {
@@ -482,7 +486,7 @@ contract IdeationMarketFacet {
         listedItem.seller = address(0);
 
         // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again
-        uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
+        uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
         for (uint256 i; i < listingArray.length; ++i) {
             if (listingArray[i] == listingId) {
                 listingArray[i] = listingArray[listingArray.length - 1];
@@ -608,7 +612,7 @@ contract IdeationMarketFacet {
     function cancelIfNotApproved(uint128 listingId) public {
         AppStorage storage s = LibAppStorage.appStorage();
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
-        Listing memory listedItem = s.listings[listingId];
+        Listing storage listedItem = s.listings[listingId];
         if (listedItem.seller == address(0)) {
             // No listing exists for this NFT, so there's nothing to cancel.
             revert IdeationMarket__NotListed();
@@ -633,8 +637,7 @@ contract IdeationMarketFacet {
             listedItem.seller = address(0);
 
             // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again
-            uint128[] storage listingArray =
-                s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
+            uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
             for (uint256 i; i < listingArray.length; ++i) {
                 if (listingArray[i] == listingId) {
                     listingArray[i] = listingArray[listingArray.length - 1];
