@@ -9,7 +9,6 @@ import "../interfaces/IERC2981.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IBuyerWhitelistFacet.sol";
 
-// !!! add listing Id as primary identifier
 error IdeationMarket__NotApprovedForMarketplace();
 error IdeationMarket__AlreadyListed();
 error IdeationMarket__SellerNotNftOwner(uint128 listingId);
@@ -34,8 +33,6 @@ error IdeationMarket__TransferFailed();
 error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__WhitelistNotAllowed();
 error IdeationMarket__WrongErc1155HolderParameter();
-error IdeationMarket__ERC721QuantityMustBe0();
-error IdeationMarket__ERC1155QuantityCantBe0();
 error IdeationMarket__WrongQuantityParameter();
 
 contract IdeationMarketFacet {
@@ -399,7 +396,7 @@ contract IdeationMarketFacet {
                     msg.sender != desiredOwner && msg.sender != desiredNft.getApproved(listedItem.desiredTokenId)
                         && !desiredNft.isApprovedForAll(desiredOwner, msg.sender)
                 ) {
-                    revert IdeationMarket__NotOwnerOfDesiredSwap();
+                    revert IdeationMarket__NotAuthorizedOperator();
                 }
 
                 // Check approval
@@ -539,12 +536,12 @@ contract IdeationMarketFacet {
         // Use interface check to ensure the MarketPlace is still Approved for transfer and the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
         if (newQuantity > 0) {
             if (listedItem.quantity == 0) {
-                revert IdeationMarket__ERC721QuantityMustBe0();
+                revert IdeationMarket__WrongQuantityParameter();
             }
             check1155Approval(listedItem.nftAddress, listedItem.seller);
         } else {
             if (listedItem.quantity > 0) {
-                revert IdeationMarket__ERC1155QuantityCantBe0();
+                revert IdeationMarket__WrongQuantityParameter();
             }
             check721Approval(listedItem.nftAddress, listedItem.tokenId);
         }
