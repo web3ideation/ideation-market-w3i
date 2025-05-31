@@ -122,11 +122,8 @@ contract IdeationMarketFacet {
     ///////////////
     // Modifiers //
     ///////////////
-
-    modifier onlyOwner() {
-        LibDiamond.enforceIsContractOwner();
-        _;
-    }
+    // !!! nice to have: change the modifiers to helper functions to save on redundant storage loads
+    // !!! nice to have: check for additional repetetive code throughout my functions and create more helper functions from them
 
     modifier listingExists(uint128 listingId) {
         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
@@ -224,7 +221,7 @@ contract IdeationMarketFacet {
             if (!IERC165(nftAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check1155Approval(nftAddress, seller); // !!! the approval function needs to keep the nftAddress parameter bc the listing isnt there yet - recheck that
+            check1155Approval(nftAddress, seller);
         } else {
             if (!IERC165(nftAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
@@ -607,7 +604,8 @@ contract IdeationMarketFacet {
         }
     }
 
-    function setInnovationFee(uint32 newFee) public onlyOwner {
+    function setInnovationFee(uint32 newFee) public {
+        LibDiamond.enforceIsContractOwner();
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 previousFee = s.innovationFee;
         s.innovationFee = newFee;
