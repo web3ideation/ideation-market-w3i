@@ -234,7 +234,7 @@ contract IdeationMarketFacet {
 
         uint128 newListingId = s.listingIdCounter;
 
-        s.listings[newListingId] = Listing({ // !!! I added the nftAddress and tokenId and changed the position of quantity and buyerWhitelistEnabled - check that this is implemented EVERYWHERE!
+        s.listings[newListingId] = Listing({
             listingId: newListingId,
             nftAddress: nftAddress,
             tokenId: tokenId,
@@ -412,8 +412,8 @@ contract IdeationMarketFacet {
                         desiredErc1155Holder,
                         address(this)
                     );
-                    listingArray.pop();
-                    // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
+                    listingArray.pop(); // !!! doublecheck that this would pop the right listingId
+                        // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
                 }
             }
         }
