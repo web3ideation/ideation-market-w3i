@@ -133,32 +133,6 @@ contract IdeationMarketFacet {
         _;
     }
 
-    modifier isAuthorizedOperator(uint128 listingId, uint256 quantity) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        Listing memory listedItem = s.listings[listingId];
-        if (quantity > 0) {
-            IERC1155 nft = IERC1155(listedItem.nftAddress);
-            // check if the user is authorized
-            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
-                revert IdeationMarket__NotAuthorizedOperator();
-            }
-            // check that this 'erc1155Holder' is really the holder // !!! check if this is still always refering to an erc1155Holder Parameter or if there are functions that could fail here where the user didnt input the erc1155Holder
-            if (nft.balanceOf(listedItem.seller, listedItem.tokenId) == 0) {
-                revert IdeationMarket__WrongErc1155HolderParameter();
-            }
-        } else {
-            IERC721 nft = IERC721(listedItem.nftAddress);
-            address ownerToken = nft.ownerOf(listedItem.tokenId);
-            if (
-                msg.sender != ownerToken && msg.sender != nft.getApproved(listedItem.tokenId)
-                    && !nft.isApprovedForAll(ownerToken, msg.sender)
-            ) {
-                revert IdeationMarket__NotAuthorizedOperator();
-            }
-        }
-        _;
-    }
-
     modifier nonReentrant() {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
@@ -191,8 +165,27 @@ contract IdeationMarketFacet {
         bool buyerWhitelistEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
-        // !!! isAuthorizedOperator mechanism must be done here since by this time there is no listing in storage yet
-
+        // check if the user is an authorized Operator
+        if (quantity > 0) {
+            IERC1155 nft = IERC1155(nftAddress);
+            // check if the user is authorized or the holder himself
+            if (msg.sender != erc1155Holder && !nft.isApprovedForAll(erc1155Holder, msg.sender)) {
+                revert IdeationMarket__NotAuthorizedOperator();
+            }
+            // check that this 'erc1155Holder' is really the holder
+            if (nft.balanceOf(erc1155Holder, tokenId) == 0) {
+                revert IdeationMarket__WrongErc1155HolderParameter();
+            }
+        } else {
+            IERC721 nft = IERC721(nftAddress);
+            address tokenHolder = nft.ownerOf(tokenId);
+            if (
+                msg.sender != tokenHolder && msg.sender != nft.getApproved(tokenId)
+                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+            ) {
+                revert IdeationMarket__NotAuthorizedOperator();
+            }
+        }
         AppStorage storage s = LibAppStorage.appStorage();
 
         // check if the Collection is Whitelisted
@@ -503,11 +496,27 @@ contract IdeationMarketFacet {
         uint256 newDesiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
         uint256 newQuantity, // >0 for ERC1155, 0 for only ERC721
         bool newBuyerWhitelistEnabled
-    ) external listingExists(listingId) isAuthorizedOperator(listingId, newQuantity) {
+    ) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 
-        // !!! isAuthorizedOperator can be done inline since this is the only postion the modifier is getting used
+        // check if the user is an authorized operator
+        if (newQuantity > 0) {
+            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            // check if the user is authorized
+            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+                revert IdeationMarket__NotAuthorizedOperator();
+            }
+        } else {
+            IERC721 nft = IERC721(listedItem.nftAddress);
+            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            if (
+                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
+                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+            ) {
+                revert IdeationMarket__NotAuthorizedOperator();
+            }
+        }
 
         // check if the Collection is still Whitelisted - even tho it would not have been able to get listed in the first place, if the collection has been revoked in the meantime, updating would cancel the listing
         if (!s.whitelistedCollections[listedItem.nftAddress]) {
