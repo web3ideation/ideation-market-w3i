@@ -15,6 +15,9 @@ This project includes code from the following open-source project(s):
 notes:
  logic	After a collection is de-whitelisted, its already-listed tokens can still be bought. buyItem() has no onlyWhitelistedCollection check, so a policy change doesn’t fully take effect. -> i think thats fine. just keep in mind that when revoking a collection from the whitelist to cancel all the listings manually.
  approved operators of erc721 can interact with the marketplacediamond on behalv of the owner, tho approced operators of erc1155 can NOT interact with the marketplacediamond on behalv of the owner because for the isApproved check the Owner address must be known tho it is not so it simply is impossible without offchain tracing. [I could add this funcitonality in the future by: require that users “register” as the controller in your protocol pre-listing]
+ listedItem.seller == address(0) means that the listing is inactive
+ quantity == 0 means its an erc721
+ quantity > 0 means its an erc1155
 
 
 # IdeationMarketDiamond

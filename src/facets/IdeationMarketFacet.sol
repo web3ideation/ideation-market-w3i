@@ -356,10 +356,13 @@ contract IdeationMarketFacet {
 
         // in case it's a swap listing, send that desired nft (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredNftAddress != address(0)) {
+            address desiredOwner; // initializing this for erc721 cleanup
+            uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
             if (listedItem.desiredQuantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredNft = IERC1155(listedItem.desiredNftAddress);
                 uint256 swapBalance = desiredNft.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
+                remainingBalance = swapBalance - listedItem.desiredQuantity + 1;
                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
                 if (
                     desiredNft.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
@@ -380,7 +383,7 @@ contract IdeationMarketFacet {
                 );
             } else {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
-                address desiredOwner = desiredNft.ownerOf(listedItem.desiredTokenId);
+                desiredOwner = desiredNft.ownerOf(listedItem.desiredTokenId);
                 // For ERC721: Check ownership.
                 if (
                     msg.sender != desiredOwner && msg.sender != desiredNft.getApproved(listedItem.desiredTokenId)
@@ -396,24 +399,31 @@ contract IdeationMarketFacet {
                 desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
             }
 
-            // in case the desiredNft is listed already, delete that now deprecated listing // !!! let cGPT check this again // !!! I think this is only applicable for erc1155 not erc721 but is processed with erc721...
+            // in case the desiredNft is listed already, delete that now deprecated listing
             uint128[] storage listingArray =
                 s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
-            for (uint256 i; i < listingArray.length; ++i) {
+
+            address obsoleteSeller = (listedItem.desiredQuantity > 0)
+                ? desiredErc1155Holder // ERC-1155 swap
+                : desiredOwner; // ERC-721 swap
+
+            for (uint256 i = 0; i < listingArray.length;) {
                 if (
-                    s.listings[listingArray[i]].seller == desiredErc1155Holder /* !!! && desiredErc1155Holder.balance < s.listings[listingArray[i]].quantity */
+                    s.listings[listingArray[i]].seller == obsoleteSeller
+                        && remainingBalance <= s.listings[listingArray[i]].quantity
                 ) {
                     s.listings[listingArray[i]].seller = address(0); // indicating that this Listing is not active
-                    listingArray[i] = listingArray[listingArray.length - 1];
                     emit ItemCanceled(
                         listingArray[i],
                         listedItem.desiredNftAddress,
                         listedItem.desiredTokenId,
-                        desiredErc1155Holder,
+                        obsoleteSeller,
                         address(this)
                     );
-                    listingArray.pop(); // !!! doublecheck that this would pop the right listingId
-                        // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
+                    listingArray[i] = listingArray[listingArray.length - 1];
+                    listingArray.pop();
+                } else {
+                    i++;
                 }
             }
         }
@@ -472,13 +482,12 @@ contract IdeationMarketFacet {
         // deactivate the listing // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
         listedItem.seller = address(0);
 
-        // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again
+        // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
         uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
         for (uint256 i; i < listingArray.length; ++i) {
             if (listingArray[i] == listingId) {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
-                // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
             }
         }
 
@@ -615,7 +624,7 @@ contract IdeationMarketFacet {
     // checks for token contract approval and for collection whitelist
     function cancelIfNotApproved(uint128 listingId) public {
         AppStorage storage s = LibAppStorage.appStorage();
-        // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the Modifier in order to safe gas.
+        // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the listingExists Modifier in order to safe gas.
         Listing storage listedItem = s.listings[listingId];
         if (listedItem.seller == address(0)) {
             // No listing exists for this NFT, so there's nothing to cancel.
@@ -640,13 +649,12 @@ contract IdeationMarketFacet {
             // deactivate the listing // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
             listedItem.seller = address(0);
 
-            // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again
+            // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
             uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
             for (uint256 i; i < listingArray.length; ++i) {
                 if (listingArray[i] == listingId) {
                     listingArray[i] = listingArray[listingArray.length - 1];
                     listingArray.pop();
-                    // !!! should i 'break;' here or is it possible that there might be two listingmappings to delete?
                 }
             }
 
