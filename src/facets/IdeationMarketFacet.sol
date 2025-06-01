@@ -111,13 +111,15 @@ contract IdeationMarketFacet {
         address triggeredBy
     );
 
-    event RoyaltyPaid(
+    event RoyaltyPaid( // !!! needs to be uint128!
         uint256 indexed listingId,
         address indexed royaltyReceiver,
         address indexed nftAddress,
         uint256 tokenId,
         uint256 royaltyAmount
     );
+
+    event CollectionWhitelistRevokedCancelTriggered(uint128 indexed listingId, address indexed nftAddress);
 
     ///////////////
     // Modifiers //
@@ -469,7 +471,7 @@ contract IdeationMarketFacet {
     }
 
     // natspec info: the nft owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
-    function cancelListing(uint128 listingId) external listingExists(listingId) {
+    function cancelListing(uint128 listingId) public listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 
@@ -541,8 +543,9 @@ contract IdeationMarketFacet {
 
         // check if the Collection is still Whitelisted - even tho it would not have been able to get listed in the first place, if the collection has been revoked in the meantime, updating would cancel the listing
         if (!s.whitelistedCollections[listedItem.nftAddress]) {
-            cancelIfNotApproved(listingId);
-            return; // !!! does this actually finish the function without doing anything more?
+            cancelListing(listingId);
+            emit CollectionWhitelistRevokedCancelTriggered(listingId, listedItem.nftAddress);
+            return;
         }
 
         // Swap-specific check
@@ -628,7 +631,7 @@ contract IdeationMarketFacet {
         }
     }
 
-    function setInnovationFee(uint32 newFee) public {
+    function setInnovationFee(uint32 newFee) external {
         LibDiamond.enforceIsContractOwner();
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 previousFee = s.innovationFee;
@@ -637,7 +640,7 @@ contract IdeationMarketFacet {
     }
 
     // checks for token contract approval and for collection whitelist
-    function cancelIfNotApproved(uint128 listingId) public {
+    function cancelIfNotApproved(uint128 listingId) external {
         AppStorage storage s = LibAppStorage.appStorage();
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the listingExists Modifier in order to safe gas.
         Listing storage listedItem = s.listings[listingId];
