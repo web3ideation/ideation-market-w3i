@@ -15,7 +15,7 @@ error IdeationMarket__SellerNotNftOwner(uint128 listingId);
 error IdeationMarket__NotAuthorizedOperator();
 error IdeationMarket__ListingTermsChanged();
 error IdeationMarket__FreeListingsNotSupported();
-error IdeationMarket__PriceNotMet(uint256 listingId, uint256 price, uint256 value);
+error IdeationMarket__PriceNotMet(uint128 listingId, uint256 price, uint256 value);
 error IdeationMarket__NoProceeds();
 error IdeationMarket__SameBuyerAsSeller();
 error IdeationMarket__NoSwapForSameNft();
@@ -49,7 +49,7 @@ contract IdeationMarketFacet {
      * @param quantity Quantity (for ERC1155 tokens; must be 0 for ERC721).
      */
     event ItemListed(
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
         uint256 quantity,
@@ -63,7 +63,7 @@ contract IdeationMarketFacet {
     );
 
     event ItemBought(
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
         uint256 quantity,
@@ -77,7 +77,7 @@ contract IdeationMarketFacet {
     );
 
     event ItemCanceled(
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
         address seller,
@@ -85,7 +85,7 @@ contract IdeationMarketFacet {
     );
 
     event ItemUpdated(
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
         uint256 quantity,
@@ -104,7 +104,7 @@ contract IdeationMarketFacet {
 
     // Event emitted when a listing is canceled due to revoked approval.
     event ItemCanceledDueToMissingApproval(
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed nftAddress,
         uint256 indexed tokenId,
         address seller,
@@ -112,7 +112,7 @@ contract IdeationMarketFacet {
     );
 
     event RoyaltyPaid( // !!! needs to be uint128!
-        uint256 indexed listingId,
+        uint128 indexed listingId,
         address indexed royaltyReceiver,
         address indexed nftAddress,
         uint256 tokenId,
