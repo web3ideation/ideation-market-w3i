@@ -400,28 +400,28 @@ contract IdeationMarketFacet {
             }
 
             // in case the desiredNft is listed already, deactivate that now deprecated listing to cleanup
-            uint128[] storage listingArray =
+            uint128[] storage deprecatedListingArray =
                 s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
 
             address obsoleteSeller = (listedItem.desiredQuantity > 0)
                 ? desiredErc1155Holder // ERC-1155 swap
                 : desiredOwner; // ERC-721 swap
 
-            for (uint256 i = 0; i < listingArray.length;) {
+            for (uint256 i = 0; i < deprecatedListingArray.length;) {
                 if (
-                    s.listings[listingArray[i]].seller == obsoleteSeller
-                        && remainingBalance <= s.listings[listingArray[i]].quantity
+                    s.listings[deprecatedListingArray[i]].seller == obsoleteSeller
+                        && remainingBalance <= s.listings[deprecatedListingArray[i]].quantity
                 ) {
-                    s.listings[listingArray[i]].seller = address(0); // indicating that this Listing is not active
+                    s.listings[deprecatedListingArray[i]].seller = address(0); // indicating that this Listing is not active
                     emit ItemCanceled(
-                        listingArray[i],
+                        deprecatedListingArray[i],
                         listedItem.desiredNftAddress,
                         listedItem.desiredTokenId,
                         obsoleteSeller,
                         address(this)
                     );
-                    listingArray[i] = listingArray[listingArray.length - 1];
-                    listingArray.pop();
+                    deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
+                    deprecatedListingArray.pop();
                 } else {
                     i++;
                 }
@@ -430,7 +430,16 @@ contract IdeationMarketFacet {
 
         s.listings[listingId].seller = address(0); // indicating that this Listing is not active
 
-        // !!! also remove it from the reverse lookup nftTokenToListingIds
+        // cleanup the nftTokenToListingIds mapping
+        uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
+        for (uint256 i; i < listingArray.length;) {
+            if (listingArray[i] == listingId) {
+                listingArray[i] = listingArray[listingArray.length - 1];
+                listingArray.pop();
+            } else {
+                i++;
+            }
+        }
 
         // Transfer tokens based on the token standard.
         if (listedItem.quantity > 0) {
@@ -448,7 +457,7 @@ contract IdeationMarketFacet {
             listedItem.quantity,
             listedItem.price,
             listedItem.feeRate,
-            listedItem.seller,
+            listedItem.seller, // !!! address(0) - since i deactivated it already - check this for all the canceled events aswell
             msg.sender,
             listedItem.desiredNftAddress,
             listedItem.desiredTokenId,
@@ -482,12 +491,14 @@ contract IdeationMarketFacet {
         // indicating that this Listing is not active // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
         listedItem.seller = address(0);
 
-        // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
+        // cleanup the nftTokenToListingIds mapping
         uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
-        for (uint256 i; i < listingArray.length; ++i) {
+        for (uint256 i; i < listingArray.length;) {
             if (listingArray[i] == listingId) {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
+            } else {
+                i++;
             }
         }
 
