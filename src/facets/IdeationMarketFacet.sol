@@ -362,7 +362,7 @@ contract IdeationMarketFacet {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredNft = IERC1155(listedItem.desiredNftAddress);
                 uint256 swapBalance = desiredNft.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
-                remainingBalance = swapBalance - listedItem.desiredQuantity + 1;
+                remainingBalance = swapBalance - listedItem.desiredQuantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
                 if (
                     desiredNft.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
@@ -399,7 +399,7 @@ contract IdeationMarketFacet {
                 desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
             }
 
-            // in case the desiredNft is listed already, delete that now deprecated listing
+            // in case the desiredNft is listed already, deactivate that now deprecated listing to cleanup
             uint128[] storage listingArray =
                 s.nftTokenToListingIds[listedItem.desiredNftAddress][listedItem.desiredTokenId];
 
@@ -428,7 +428,7 @@ contract IdeationMarketFacet {
             }
         }
 
-        delete (s.listings[listedItem.listingId]); // !!! change this to just setting the seller to 0 instead of deleting the whole thing
+        s.listings[listingId].seller = address(0); // indicating that this Listing is not active
 
         // !!! also remove it from the reverse lookup nftTokenToListingIds
 
@@ -479,7 +479,7 @@ contract IdeationMarketFacet {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
-        // deactivate the listing // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
+        // indicating that this Listing is not active // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
         listedItem.seller = address(0);
 
         // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
