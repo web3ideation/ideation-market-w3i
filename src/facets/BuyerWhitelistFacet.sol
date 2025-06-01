@@ -6,6 +6,7 @@ import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
 import "../interfaces/IERC165.sol";
 
+// !!! add a reset whitelist function that uses struct delete - check if that is really more gas efficient than the batch delete and check if its worth the effort changing the code from the versioning nested mapping to the struct nested mapping.
 // !!! add listing Id as primary identifier
 error BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
 error BuyerWhitelist__NotListingSeller(); // !!! add support for authorized operators

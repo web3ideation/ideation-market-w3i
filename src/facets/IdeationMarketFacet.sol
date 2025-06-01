@@ -283,6 +283,8 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 
+        address seller = listedItem.seller; // storing the seller address for usage after deactivating the listing
+
         // BuyerWhitelist Check
         if (listedItem.buyerWhitelistEnabled) {
             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
@@ -306,20 +308,20 @@ contract IdeationMarketFacet {
             revert IdeationMarket__WrongErc1155HolderParameter();
         }
 
-        if (msg.sender == listedItem.seller) {
+        if (msg.sender == seller) {
             revert IdeationMarket__SameBuyerAsSeller();
         }
 
         // Check if the seller still owns the token and if the marketplace is still approved
         if (listedItem.quantity > 0) {
-            uint256 balance = IERC1155(listedItem.nftAddress).balanceOf(listedItem.seller, listedItem.tokenId);
+            uint256 balance = IERC1155(listedItem.nftAddress).balanceOf(seller, listedItem.tokenId);
             if (balance < listedItem.quantity) {
                 revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.quantity, balance);
             }
-            check1155Approval(listedItem.nftAddress, listedItem.seller);
+            check1155Approval(listedItem.nftAddress, seller);
         } else {
             address ownerToken = IERC721(listedItem.nftAddress).ownerOf(listedItem.tokenId);
-            if (ownerToken != listedItem.seller) {
+            if (ownerToken != seller) {
                 revert IdeationMarket__SellerNotNftOwner(listingId);
             }
             check721Approval(listedItem.nftAddress, listedItem.tokenId);
@@ -348,7 +350,7 @@ contract IdeationMarketFacet {
 
         // Update proceeds for the seller, marketplace owner and potentially buyer
 
-        s.proceeds[listedItem.seller] += sellerProceeds;
+        s.proceeds[seller] += sellerProceeds;
         s.proceeds[LibDiamond.contractOwner()] += innovationFee;
         if (excessPayment > 0) {
             s.proceeds[msg.sender] += excessPayment;
@@ -379,7 +381,7 @@ contract IdeationMarketFacet {
 
                 // Perform the safe swap transfer buyer to seller.
                 IERC1155(listedItem.desiredNftAddress).safeTransferFrom(
-                    desiredErc1155Holder, listedItem.seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
+                    desiredErc1155Holder, seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
                 );
             } else {
                 IERC721 desiredNft = IERC721(listedItem.desiredNftAddress);
@@ -396,7 +398,7 @@ contract IdeationMarketFacet {
                 check721Approval(listedItem.desiredNftAddress, listedItem.desiredTokenId);
 
                 // Perform the safe swap transfer buyer to seller.
-                desiredNft.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
+                desiredNft.safeTransferFrom(msg.sender, seller, listedItem.desiredTokenId);
             }
 
             // in case the desiredNft is listed already, deactivate that now deprecated listing to cleanup
@@ -428,7 +430,8 @@ contract IdeationMarketFacet {
             }
         }
 
-        s.listings[listingId].seller = address(0); // indicating that this Listing is not active
+        // delete Listing
+        delete s.listings[listingId];
 
         // cleanup the nftTokenToListingIds mapping
         uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
@@ -444,10 +447,10 @@ contract IdeationMarketFacet {
         // Transfer tokens based on the token standard.
         if (listedItem.quantity > 0) {
             IERC1155(listedItem.nftAddress).safeTransferFrom(
-                listedItem.seller, msg.sender, listedItem.tokenId, listedItem.quantity, ""
+                seller, msg.sender, listedItem.tokenId, listedItem.quantity, ""
             );
         } else {
-            IERC721(listedItem.nftAddress).safeTransferFrom(listedItem.seller, msg.sender, listedItem.tokenId);
+            IERC721(listedItem.nftAddress).safeTransferFrom(seller, msg.sender, listedItem.tokenId);
         }
 
         emit ItemBought(
@@ -457,7 +460,7 @@ contract IdeationMarketFacet {
             listedItem.quantity,
             listedItem.price,
             listedItem.feeRate,
-            listedItem.seller, // !!! address(0) - since i deactivated it already - check this for all the canceled events aswell
+            seller,
             msg.sender,
             listedItem.desiredNftAddress,
             listedItem.desiredTokenId,
@@ -469,27 +472,28 @@ contract IdeationMarketFacet {
     function cancelListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
+
+        address seller = listedItem.seller; // storing the seller address for usage after deactivating the listing
+
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
         if (listedItem.quantity == 0) {
             IERC721 nft = IERC721(listedItem.nftAddress);
             isAuthorized = (
-                msg.sender == listedItem.seller || msg.sender == nft.getApproved(listedItem.tokenId)
-                    || nft.isApprovedForAll(listedItem.seller, msg.sender)
+                msg.sender == seller || msg.sender == nft.getApproved(listedItem.tokenId)
+                    || nft.isApprovedForAll(seller, msg.sender)
             );
         } else {
-            isAuthorized = (
-                msg.sender == listedItem.seller
-                    || IERC1155(listedItem.nftAddress).isApprovedForAll(listedItem.seller, msg.sender)
-            );
+            isAuthorized =
+                (msg.sender == seller || IERC1155(listedItem.nftAddress).isApprovedForAll(seller, msg.sender));
         }
         // allows the diamondOwner to cancel any Listing
         if (!isAuthorized && msg.sender != diamondOwner) {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
-        // indicating that this Listing is not active // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
-        listedItem.seller = address(0);
+        // delete Listing
+        delete s.listings[listingId];
 
         // cleanup the nftTokenToListingIds mapping
         uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
@@ -502,7 +506,7 @@ contract IdeationMarketFacet {
             }
         }
 
-        emit ItemCanceled(listingId, listedItem.nftAddress, listedItem.tokenId, listedItem.seller, msg.sender);
+        emit ItemCanceled(listingId, listedItem.nftAddress, listedItem.tokenId, seller, msg.sender);
     }
 
     function updateListing(
@@ -638,27 +642,29 @@ contract IdeationMarketFacet {
         // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the listingExists Modifier in order to safe gas.
         Listing storage listedItem = s.listings[listingId];
         if (listedItem.seller == address(0)) {
-            // No listing exists for this NFT, so there's nothing to cancel.
+            // listing is deactivated or doesnt exist, so there's nothing to cancel.
             revert IdeationMarket__NotListed();
         }
 
+        address seller = listedItem.seller; // storing the seller address for usage after deactivating the listing
+
         bool approved;
 
-        // !!! add cancel listing if not on collection whitelist anymore - and skip the approval check
+        // !!! add cancel listing if not on collection whitelist anymore - and skip the approval check - well i can do that with the cancel listing superiority myself...
 
         // check approval depending on token type
         if (listedItem.quantity > 0) {
-            approved = IERC1155(listedItem.nftAddress).isApprovedForAll(listedItem.seller, address(this));
+            approved = IERC1155(listedItem.nftAddress).isApprovedForAll(seller, address(this));
         } else {
             IERC721 nft = IERC721(listedItem.nftAddress);
-            approved = nft.getApproved(listedItem.tokenId) == address(this)
-                || nft.isApprovedForAll(listedItem.seller, address(this));
+            approved =
+                nft.getApproved(listedItem.tokenId) == address(this) || nft.isApprovedForAll(seller, address(this));
         }
 
         // If approval is missing, cancel the listing by deleting it from storage.
         if (!approved) {
-            // deactivate the listing // !!! check with cGPT if this is correct instead of deleting the complete struct, this way i have the rest of the data still onchain, just like in the buyitem function
-            listedItem.seller = address(0);
+            // delete Listing
+            delete s.listings[listingId];
 
             // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
             uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
@@ -672,7 +678,7 @@ contract IdeationMarketFacet {
             }
 
             emit ItemCanceledDueToMissingApproval(
-                listingId, listedItem.nftAddress, listedItem.tokenId, listedItem.seller, msg.sender
+                listingId, listedItem.nftAddress, listedItem.tokenId, seller, msg.sender
             );
         }
     }
