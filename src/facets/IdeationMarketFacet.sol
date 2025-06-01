@@ -662,10 +662,12 @@ contract IdeationMarketFacet {
 
             // cleanup the nftTokenToListingIds mapping // !!! let cGPT check this again - i think it needs to be } else { i++;
             uint128[] storage listingArray = s.nftTokenToListingIds[listedItem.nftAddress][listedItem.tokenId];
-            for (uint256 i; i < listingArray.length; ++i) {
+            for (uint256 i; i < listingArray.length;) {
                 if (listingArray[i] == listingId) {
                     listingArray[i] = listingArray[listingArray.length - 1];
                     listingArray.pop();
+                } else {
+                    i++;
                 }
             }
 
