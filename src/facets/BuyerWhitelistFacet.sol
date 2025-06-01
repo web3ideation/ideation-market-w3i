@@ -4,18 +4,14 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
-import "../interfaces/IERC165.sol";
 
-// !!! add a reset whitelist function that uses struct delete - check if that is really more gas efficient than the batch delete and check if its worth the effort changing the code from the versioning nested mapping to the struct nested mapping.
-// !!! add listing Id as primary identifier
-error BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
-error BuyerWhitelist__NotListingSeller(); // !!! add support for authorized operators
+error BuyerWhitelist__ListingDoesNotExist();
+error BuyerWhitelist__NotAuthorizedOperator();
 error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
 error BuyerWhitelist__EmptyCalldata();
 
 contract BuyerWhitelistFacet {
-    // !!! add listing Id as primary identifier
     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
 
@@ -29,10 +25,27 @@ contract BuyerWhitelistFacet {
 
         if (allowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        // Ensure listing exists & caller is the seller
+        // Ensure listing exists
         Listing storage listedItem = s.listings[listingId];
-        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
-        if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
+        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+
+        // check if the user is an authorized operator
+        if (listedItem.quantity > 0) {
+            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            // check if the user is authorized
+            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+                revert BuyerWhitelist__NotAuthorizedOperator();
+            }
+        } else {
+            IERC721 nft = IERC721(listedItem.nftAddress);
+            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            if (
+                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
+                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+            ) {
+                revert BuyerWhitelist__NotAuthorizedOperator();
+            }
+        }
 
         for (uint256 i = 0; i < allowedBuyers.length;) {
             address allowedBuyer = allowedBuyers[i];
@@ -58,10 +71,27 @@ contract BuyerWhitelistFacet {
 
         if (disallowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
-        // Ensure listing exists & caller is the seller
+        // Ensure listing exists
         Listing storage listedItem = s.listings[listingId];
-        if (listedItem.listingId != listingId) revert BuyerWhitelist__ListingDoesNotExistOrIsOutdated();
-        if (msg.sender != listedItem.seller) revert BuyerWhitelist__NotListingSeller();
+        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+
+        // check if the user is an authorized operator
+        if (listedItem.quantity > 0) {
+            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            // check if the user is authorized
+            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+                revert BuyerWhitelist__NotAuthorizedOperator();
+            }
+        } else {
+            IERC721 nft = IERC721(listedItem.nftAddress);
+            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            if (
+                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
+                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+            ) {
+                revert BuyerWhitelist__NotAuthorizedOperator();
+            }
+        }
 
         for (uint256 i = 0; i < disallowedBuyers.length;) {
             address disallowedBuyer = disallowedBuyers[i];

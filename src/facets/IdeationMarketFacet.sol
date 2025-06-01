@@ -125,8 +125,6 @@ contract IdeationMarketFacet {
     ///////////////
     // Modifiers //
     ///////////////
-    // !!! nice to have: change the modifiers to helper functions to save on redundant storage loads
-    // !!! nice to have: check for additional repetetive code throughout my functions and create more helper functions from them
 
     modifier listingExists(uint128 listingId) {
         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
@@ -639,16 +637,11 @@ contract IdeationMarketFacet {
     }
 
     // checks for token contract approval and for collection whitelist
-    function cancelIfNotApproved(uint128 listingId) external {
+    function cancelIfNotApproved(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        // Retrieve the current listing. If there's no active listing, exit. We are using this instead of the listingExists Modifier in order to safe gas.
         Listing storage listedItem = s.listings[listingId];
-        if (listedItem.seller == address(0)) {
-            // listing is deactivated or doesnt exist, so there's nothing to cancel.
-            revert IdeationMarket__NotListed();
-        }
 
-        address seller = listedItem.seller; // storing the seller address for usage after deactivating the listing
+        address seller = listedItem.seller; // !!!!! storing the seller address for usage after deactivating the listing
 
         bool approved;
 
