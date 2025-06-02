@@ -2,24 +2,23 @@
 pragma solidity ^0.8.28;
 
 struct Listing {
-    // !!! check struct packing and padding
     uint128 listingId;
-    address nftAddress;
-    uint256 tokenId;
     uint96 price;
     uint32 feeRate; // storing the fee at the time of listing
+    address nftAddress;
+    // 12 bytes padding reserved for future flags
+    uint256 tokenId;
     address seller;
     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
     // 11 bytes padding reserved for future flags
     address desiredNftAddress; // For swap Listing !=address(0)
-    // 12 bytes padding
+    // 12 bytes padding reserved for future flags
     uint256 desiredTokenId;
     uint256 desiredQuantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
     uint256 quantity; // For ERC1155 >1 and for ERC721 ==0
 }
 
 struct AppStorage {
-    // !!! check struct packing
     uint128 listingIdCounter;
     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
     uint16 buyerWhitelistMaxBatchSize; // should be 300
