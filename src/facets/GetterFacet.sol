@@ -4,16 +4,41 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
+// !!! add error messages for null returns, for example when a listing doesnt exist
+
 contract GetterFacet {
-    /**
-     * @notice Returns the listing details for a specific NFT.
-     */
-    function getListingIdsByNFT(address nftAddress, uint256 tokenId) external view /*!!!multiple arrays*/ {
+    /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
+    /// @param nftAddress The address of the NFT contract.
+    /// @param tokenId    The tokenId within that contract.
+    /// @return listings  An array of Listing structs that are still active.
+    function getListingsByNFT(address nftAddress, uint256 tokenId) external view returns (Listing[] memory listings) {
         AppStorage storage s = LibAppStorage.appStorage();
         uint128[] storage listingArray = s.nftTokenToListingIds[nftAddress][tokenId];
-        for (uint256 i; i < listingArray.length; ++i) {
-            // !!! here an Listings Array should get filled which then gets returned so that when the user enters nftAddress and tokenId he would get all listing Structs
+        uint256 totalIds = listingArray.length;
+
+        // First pass: count how many listings are still active (seller != address(0))
+        uint256 activeCount = 0;
+        for (uint256 i = 0; i < totalIds; i++) {
+            Listing storage maybe = s.listings[listingArray[i]];
+            if (maybe.seller != address(0)) {
+                activeCount++;
+            }
         }
+
+        // Allocate a memory array of exactly activeCount size
+        listings = new Listing[](activeCount);
+
+        // Second pass: fill that array with active listings
+        uint256 outIndex = 0;
+        for (uint256 i = 0; i < totalIds; i++) {
+            Listing storage current = s.listings[listingArray[i]];
+            if (current.seller != address(0)) {
+                listings[outIndex] = current;
+                outIndex++;
+            }
+        }
+
+        return listings;
     }
 
     /// @notice Returns the Listing struct for a given listingId.
@@ -90,5 +115,11 @@ contract GetterFacet {
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.whitelistedBuyersByListingId[listingId][buyer];
+    }
+
+    /// @notice Returns the maximum number of buyers you can whitelist in one batch.
+    /// @return maxBatchSize The `buyerWhitelistMaxBatchSize` (e.g. 300).
+    function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
+        return LibAppStorage.appStorage().buyerWhitelistMaxBatchSize;
     }
 }
