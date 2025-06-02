@@ -641,19 +641,17 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 
-        address seller = listedItem.seller; // !!!!! storing the seller address for usage after deactivating the listing
-
         bool approved;
 
         // check if the Collection is still Whitelisted
         if (s.whitelistedCollections[listedItem.nftAddress]) {
             // check approval depending on token type
             if (listedItem.quantity > 0) {
-                approved = IERC1155(listedItem.nftAddress).isApprovedForAll(seller, address(this));
+                approved = IERC1155(listedItem.nftAddress).isApprovedForAll(listedItem.seller, address(this));
             } else {
                 IERC721 nft = IERC721(listedItem.nftAddress);
-                approved =
-                    nft.getApproved(listedItem.tokenId) == address(this) || nft.isApprovedForAll(seller, address(this));
+                approved = nft.getApproved(listedItem.tokenId) == address(this)
+                    || nft.isApprovedForAll(listedItem.seller, address(this));
             }
         }
 
@@ -671,7 +669,7 @@ contract IdeationMarketFacet {
             }
 
             emit ItemCanceledDueToMissingApproval(
-                listingId, listedItem.nftAddress, listedItem.tokenId, seller, msg.sender
+                listingId, listedItem.nftAddress, listedItem.tokenId, listedItem.seller, msg.sender
             );
             // delete Listing
             delete s.listings[listingId];
