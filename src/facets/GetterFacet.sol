@@ -4,7 +4,8 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
-// !!! add error messages for null returns, for example when a listing doesnt exist
+error GetterFacet__ListingNotFound(uint128 listingId);
+error GetterFacet__NoActiveListings(address nftAddress, uint256 tokenId);
 
 contract GetterFacet {
     /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
@@ -23,6 +24,10 @@ contract GetterFacet {
             if (maybe.seller != address(0)) {
                 activeCount++;
             }
+        }
+
+        if (activeCount == 0) {
+            revert GetterFacet__NoActiveListings(nftAddress, tokenId);
         }
 
         // Allocate a memory array of exactly activeCount size
@@ -44,8 +49,13 @@ contract GetterFacet {
     /// @notice Returns the Listing struct for a given listingId.
     /// @param listingId The ID of the listing to retrieve.
     /// @return listing The Listing struct.
-    function getListingByListingId(uint128 listingId) external view returns (Listing memory) {
-        return LibAppStorage.appStorage().listings[listingId];
+    function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        listing = s.listings[listingId];
+        if (listing.seller == address(0)) {
+            revert GetterFacet__ListingNotFound(listingId);
+        }
+        return listing;
     }
 
     /**
@@ -114,6 +124,10 @@ contract GetterFacet {
     /// @return True if the buyer is whitelisted, false otherwise.
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
+        Listing storage listed = s.listings[listingId];
+        if (listed.seller == address(0)) {
+            revert GetterFacet__ListingNotFound(listingId);
+        }
         return s.whitelistedBuyersByListingId[listingId][buyer];
     }
 
