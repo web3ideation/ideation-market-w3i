@@ -20,8 +20,7 @@ contract GetterFacet {
         // First pass: count how many listings are still active (seller != address(0))
         uint256 activeCount = 0;
         for (uint256 i = 0; i < totalIds; i++) {
-            Listing storage maybe = s.listings[listingArray[i]];
-            if (maybe.seller != address(0)) {
+            if (s.listings[listingArray[i]].seller != address(0)) {
                 activeCount++;
             }
         }
@@ -34,12 +33,12 @@ contract GetterFacet {
         listings = new Listing[](activeCount);
 
         // Second pass: fill that array with active listings
-        uint256 outIndex = 0;
+        uint256 arrayIndex = 0;
         for (uint256 i = 0; i < totalIds; i++) {
             Listing storage current = s.listings[listingArray[i]];
             if (current.seller != address(0)) {
-                listings[outIndex] = current;
-                outIndex++;
+                listings[arrayIndex] = current;
+                arrayIndex++;
             }
         }
 
@@ -124,8 +123,7 @@ contract GetterFacet {
     /// @return True if the buyer is whitelisted, false otherwise.
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listed = s.listings[listingId];
-        if (listed.seller == address(0)) {
+        if (s.listings[listingId].seller == address(0)) {
             revert GetterFacet__ListingNotFound(listingId);
         }
         return s.whitelistedBuyersByListingId[listingId][buyer];

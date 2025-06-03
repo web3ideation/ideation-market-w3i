@@ -26,7 +26,7 @@ contract BuyerWhitelistFacet {
         if (allowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
         // Ensure listing exists
-        Listing storage listedItem = s.listings[listingId];
+        Listing memory listedItem = s.listings[listingId];
         if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
         // check if the user is an authorized operator
@@ -72,7 +72,7 @@ contract BuyerWhitelistFacet {
         if (disallowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
 
         // Ensure listing exists
-        Listing storage listedItem = s.listings[listingId];
+        Listing memory listedItem = s.listings[listingId];
         if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
         // check if the user is an authorized operator

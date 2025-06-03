@@ -282,7 +282,7 @@ contract IdeationMarketFacet {
         address desiredErc1155Holder // if it is a swap listing where the desired nft is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
     ) external payable nonReentrant listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listedItem = s.listings[listingId];
+        Listing memory listedItem = s.listings[listingId];
 
         // BuyerWhitelist Check
         if (listedItem.buyerWhitelistEnabled) {
@@ -471,7 +471,7 @@ contract IdeationMarketFacet {
     // natspec info: the nft owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
     function cancelListing(uint128 listingId) public listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listedItem = s.listings[listingId];
+        Listing memory listedItem = s.listings[listingId];
 
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
@@ -521,18 +521,24 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 
+        // cache variables for gas efficiency
+        address nftAddress = listedItem.nftAddress;
+        address seller = listedItem.seller;
+        uint256 tokenId = listedItem.tokenId;
+        uint256 quantity = listedItem.quantity;
+
         // check if the user is an authorized operator
         if (newQuantity > 0) {
-            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            IERC1155 nft = IERC1155(nftAddress);
             // check if the user is authorized
-            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+            if (msg.sender != seller && !nft.isApprovedForAll(seller, msg.sender)) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
         } else {
-            IERC721 nft = IERC721(listedItem.nftAddress);
-            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            IERC721 nft = IERC721(nftAddress);
+            address tokenHolder = nft.ownerOf(tokenId);
             if (
-                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
+                msg.sender != tokenHolder && msg.sender != nft.getApproved(tokenId)
                     && !nft.isApprovedForAll(tokenHolder, msg.sender)
             ) {
                 revert IdeationMarket__NotAuthorizedOperator();
@@ -540,14 +546,14 @@ contract IdeationMarketFacet {
         }
 
         // check if the Collection is still Whitelisted - even tho it would not have been able to get listed in the first place, if the collection has been revoked in the meantime, updating would cancel the listing
-        if (!s.whitelistedCollections[listedItem.nftAddress]) {
+        if (!s.whitelistedCollections[nftAddress]) {
             cancelListing(listingId);
-            emit CollectionWhitelistRevokedCancelTriggered(listingId, listedItem.nftAddress);
+            emit CollectionWhitelistRevokedCancelTriggered(listingId, nftAddress);
             return;
         }
 
         // Swap-specific check
-        if (listedItem.nftAddress == newDesiredNftAddress && listedItem.tokenId == newDesiredTokenId) {
+        if (nftAddress == newDesiredNftAddress && tokenId == newDesiredTokenId) {
             revert IdeationMarket__NoSwapForSameNft();
         }
         if (newDesiredNftAddress == address(0)) {
@@ -566,15 +572,15 @@ contract IdeationMarketFacet {
 
         // Use interface check to ensure the MarketPlace is still Approved for transfer and the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
         if (newQuantity > 0) {
-            if (listedItem.quantity == 0) {
+            if (quantity == 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check1155Approval(listedItem.nftAddress, listedItem.seller);
+            check1155Approval(nftAddress, seller);
         } else {
-            if (listedItem.quantity > 0) {
+            if (quantity > 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check721Approval(listedItem.nftAddress, listedItem.tokenId);
+            check721Approval(nftAddress, tokenId);
         }
 
         listedItem.price = newPrice;
@@ -587,12 +593,12 @@ contract IdeationMarketFacet {
 
         emit ItemUpdated(
             listedItem.listingId,
-            listedItem.nftAddress,
-            listedItem.tokenId,
+            nftAddress,
+            tokenId,
             newQuantity,
             newPrice,
             listedItem.feeRate,
-            listedItem.seller,
+            seller,
             newBuyerWhitelistEnabled,
             newDesiredNftAddress,
             newDesiredTokenId,
@@ -640,7 +646,7 @@ contract IdeationMarketFacet {
     // checks for token contract approval and for collection whitelist
     function cancelIfNotApproved(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
-        Listing storage listedItem = s.listings[listingId];
+        Listing memory listedItem = s.listings[listingId];
 
         bool approved;
 
