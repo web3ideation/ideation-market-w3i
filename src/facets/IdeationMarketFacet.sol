@@ -363,7 +363,6 @@ contract IdeationMarketFacet {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredNft = IERC1155(listedItem.desiredNftAddress);
                 uint256 swapBalance = desiredNft.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
-                remainingBalance = swapBalance - listedItem.desiredQuantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
                 if (
                     desiredNft.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
@@ -374,6 +373,8 @@ contract IdeationMarketFacet {
                 if (swapBalance < listedItem.desiredQuantity) {
                     revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredQuantity, swapBalance);
                 }
+
+                remainingBalance = swapBalance - listedItem.desiredQuantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
 
                 // Check approval
                 check1155Approval(listedItem.desiredNftAddress, desiredErc1155Holder);
