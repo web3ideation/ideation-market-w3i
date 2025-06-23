@@ -5,13 +5,13 @@ struct Listing {
     uint128 listingId;
     uint96 price;
     uint32 feeRate; // storing the fee at the time of listing
-    address nftAddress;
+    address tokenAddress;
     // 12 bytes padding reserved for future flags
     uint256 tokenId;
     address seller;
     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
     // 11 bytes padding reserved for future flags
-    address desiredNftAddress; // For swap Listing !=address(0)
+    address desiredTokenAddress; // For swap Listing !=address(0)
     // 12 bytes padding reserved for future flags
     uint256 desiredTokenId;
     uint256 desiredQuantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
@@ -25,7 +25,7 @@ struct AppStorage {
     bool reentrancyLock;
     // 9 bytes padding for future tiny vars
     mapping(uint128 => Listing) listings; // Listings by listinngId
-    mapping(address => mapping(uint256 => uint128[])) nftTokenToListingIds; // reverse index from nft to ListingIds
+    mapping(address => mapping(uint256 => uint128[])) tokenToListingIds; // reverse index from token to ListingIds
     mapping(address => uint256) proceeds; // Proceeds by seller address
     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
     address[] whitelistedCollectionsArray; // for lookups

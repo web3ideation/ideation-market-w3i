@@ -31,17 +31,17 @@ contract BuyerWhitelistFacet {
 
         // check if the user is an authorized operator
         if (listedItem.quantity > 0) {
-            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            IERC1155 token = IERC1155(listedItem.tokenAddress);
             // check if the user is authorized
-            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }
         } else {
-            IERC721 nft = IERC721(listedItem.nftAddress);
-            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            IERC721 token = IERC721(listedItem.tokenAddress);
+            address tokenHolder = token.ownerOf(listedItem.tokenId);
             if (
-                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
-                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
+                    && !token.isApprovedForAll(tokenHolder, msg.sender)
             ) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }
@@ -77,17 +77,17 @@ contract BuyerWhitelistFacet {
 
         // check if the user is an authorized operator
         if (listedItem.quantity > 0) {
-            IERC1155 nft = IERC1155(listedItem.nftAddress);
+            IERC1155 token = IERC1155(listedItem.tokenAddress);
             // check if the user is authorized
-            if (msg.sender != listedItem.seller && !nft.isApprovedForAll(listedItem.seller, msg.sender)) {
+            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }
         } else {
-            IERC721 nft = IERC721(listedItem.nftAddress);
-            address tokenHolder = nft.ownerOf(listedItem.tokenId);
+            IERC721 token = IERC721(listedItem.tokenAddress);
+            address tokenHolder = token.ownerOf(listedItem.tokenId);
             if (
-                msg.sender != tokenHolder && msg.sender != nft.getApproved(listedItem.tokenId)
-                    && !nft.isApprovedForAll(tokenHolder, msg.sender)
+                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
+                    && !token.isApprovedForAll(tokenHolder, msg.sender)
             ) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }

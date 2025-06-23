@@ -5,16 +5,20 @@ import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
 error GetterFacet__ListingNotFound(uint128 listingId);
-error GetterFacet__NoActiveListings(address nftAddress, uint256 tokenId);
+error GetterFacet__NoActiveListings(address tokenAddress, uint256 tokenId);
 
 contract GetterFacet {
     /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
-    /// @param nftAddress The address of the NFT contract.
+    /// @param tokenAddress The address of the NFT contract.
     /// @param tokenId    The tokenId within that contract.
     /// @return listings  An array of Listing structs that are still active.
-    function getListingsByNFT(address nftAddress, uint256 tokenId) external view returns (Listing[] memory listings) {
+    function getListingsByNFT(address tokenAddress, uint256 tokenId)
+        external
+        view
+        returns (Listing[] memory listings)
+    {
         AppStorage storage s = LibAppStorage.appStorage();
-        uint128[] storage listingArray = s.nftTokenToListingIds[nftAddress][tokenId];
+        uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
         uint256 totalIds = listingArray.length;
 
         // First pass: count how many listings are still active (seller != address(0))
@@ -26,7 +30,7 @@ contract GetterFacet {
         }
 
         if (activeCount == 0) {
-            revert GetterFacet__NoActiveListings(nftAddress, tokenId);
+            revert GetterFacet__NoActiveListings(tokenAddress, tokenId);
         }
 
         // Allocate a memory array of exactly activeCount size
