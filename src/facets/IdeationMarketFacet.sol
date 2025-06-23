@@ -429,6 +429,9 @@ contract IdeationMarketFacet {
             }
         }
 
+        // delete Listing
+        delete s.listings[listingId];
+
         // cleanup the tokenToListingIds mapping
         uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
         for (uint256 i; i < listingArray.length;) {
@@ -462,9 +465,6 @@ contract IdeationMarketFacet {
             listedItem.desiredTokenId,
             listedItem.desiredQuantity
         );
-
-        // delete Listing
-        delete s.listings[listingId]; //!!! this isnt necessary anymore since the listedItem.xxx reads from memory - so this can go on top again - also check for other cases
     }
 
     // natspec info: the token owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
@@ -491,6 +491,9 @@ contract IdeationMarketFacet {
             revert IdeationMarket__NotAuthorizedToCancel();
         }
 
+        // delete Listing
+        delete s.listings[listingId];
+
         // cleanup the tokenToListingIds mapping
         uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
         for (uint256 i; i < listingArray.length;) {
@@ -503,9 +506,6 @@ contract IdeationMarketFacet {
         }
 
         emit ItemCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
-
-        // delete Listing
-        delete s.listings[listingId];
     }
 
     function updateListing(
@@ -668,6 +668,8 @@ contract IdeationMarketFacet {
 
         // If approval is missing, cancel the listing by deleting it from storage.
         if (!approved) {
+            // delete Listing
+            delete s.listings[listingId];
             // cleanup the tokenToListingIds mapping
             uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
             for (uint256 i; i < listingArray.length;) {
@@ -682,8 +684,6 @@ contract IdeationMarketFacet {
             emit ItemCanceledDueToMissingApproval(
                 listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender
             );
-            // delete Listing
-            delete s.listings[listingId];
         } else {
             revert IdeationMarket__StillApproved();
         }
