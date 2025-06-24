@@ -48,7 +48,7 @@ contract IdeationMarketFacet {
      * @param feeRate innovationFee rate at the time of listing in case it gets updated before selling.
      * @param quantity Quantity (for ERC1155 tokens; must be 0 for ERC721).
      */
-    event ItemListed(
+    event ListingCreated(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -62,7 +62,7 @@ contract IdeationMarketFacet {
         uint256 desiredQuantity
     );
 
-    event ItemBought(
+    event ListingPurchased(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -76,7 +76,7 @@ contract IdeationMarketFacet {
         uint256 desiredQuantity
     );
 
-    event ItemCanceled(
+    event ListingCanceled(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -84,7 +84,7 @@ contract IdeationMarketFacet {
         address triggeredBy
     );
 
-    event ItemUpdated(
+    event ListingUpdated(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -103,7 +103,7 @@ contract IdeationMarketFacet {
     event InnovationFeeUpdated(uint256 previousFee, uint256 newFee);
 
     // Event emitted when a listing is canceled due to revoked approval.
-    event ItemCanceledDueToMissingApproval(
+    event ListingCanceledDueToMissingApproval(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -257,7 +257,7 @@ contract IdeationMarketFacet {
             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
         }
 
-        emit ItemListed(
+        emit ListingCreated(
             s.listingIdCounter,
             tokenAddress,
             tokenId,
@@ -414,7 +414,7 @@ contract IdeationMarketFacet {
                         && remainingBalance <= s.listings[deprecatedListingArray[i]].quantity
                 ) {
                     delete s.listings[deprecatedListingArray[i]];
-                    emit ItemCanceled(
+                    emit ListingCanceled(
                         deprecatedListingArray[i],
                         listedItem.desiredTokenAddress,
                         listedItem.desiredTokenId,
@@ -452,7 +452,7 @@ contract IdeationMarketFacet {
             IERC721(listedItem.tokenAddress).safeTransferFrom(listedItem.seller, msg.sender, listedItem.tokenId);
         }
 
-        emit ItemBought(
+        emit ListingPurchased(
             listedItem.listingId,
             listedItem.tokenAddress,
             listedItem.tokenId,
@@ -505,7 +505,7 @@ contract IdeationMarketFacet {
             }
         }
 
-        emit ItemCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
+        emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
     }
 
     function updateListing(
@@ -590,7 +590,7 @@ contract IdeationMarketFacet {
         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
-        emit ItemUpdated(
+        emit ListingUpdated(
             listedItem.listingId,
             tokenAddress,
             tokenId,
@@ -681,7 +681,7 @@ contract IdeationMarketFacet {
                 }
             }
 
-            emit ItemCanceledDueToMissingApproval(
+            emit ListingCanceledDueToMissingApproval(
                 listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender
             );
         } else {
