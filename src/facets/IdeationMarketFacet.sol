@@ -221,13 +221,13 @@ contract IdeationMarketFacet {
             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check1155Approval(tokenAddress, seller);
+            requireERC1155Approval(tokenAddress, seller);
         } else {
             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
 
-            check721Approval(tokenAddress, tokenId);
+            requireERC721Approval(tokenAddress, tokenId);
         }
 
         s.listingIdCounter++;
@@ -316,13 +316,13 @@ contract IdeationMarketFacet {
             if (balance < listedItem.quantity) {
                 revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.quantity, balance);
             }
-            check1155Approval(listedItem.tokenAddress, listedItem.seller);
+            requireERC1155Approval(listedItem.tokenAddress, listedItem.seller);
         } else {
             address ownerToken = IERC721(listedItem.tokenAddress).ownerOf(listedItem.tokenId);
             if (ownerToken != listedItem.seller) {
                 revert IdeationMarket__SellerNotTokenOwner(listingId);
             }
-            check721Approval(listedItem.tokenAddress, listedItem.tokenId);
+            requireERC721Approval(listedItem.tokenAddress, listedItem.tokenId);
         }
 
         // Calculate the innovation fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
@@ -376,7 +376,7 @@ contract IdeationMarketFacet {
                 remainingBalance = swapBalance - listedItem.desiredQuantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
 
                 // Check approval
-                check1155Approval(listedItem.desiredTokenAddress, desiredErc1155Holder);
+                requireERC1155Approval(listedItem.desiredTokenAddress, desiredErc1155Holder);
 
                 // Perform the safe swap transfer buyer to seller.
                 IERC1155(listedItem.desiredTokenAddress).safeTransferFrom(
@@ -394,7 +394,7 @@ contract IdeationMarketFacet {
                 }
 
                 // Check approval
-                check721Approval(listedItem.desiredTokenAddress, listedItem.desiredTokenId);
+                requireERC721Approval(listedItem.desiredTokenAddress, listedItem.desiredTokenId);
 
                 // Perform the safe swap transfer buyer to seller.
                 desiredToken.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
@@ -574,12 +574,12 @@ contract IdeationMarketFacet {
             if (quantity == 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check1155Approval(tokenAddress, seller);
+            requireERC1155Approval(tokenAddress, seller);
         } else {
             if (quantity > 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
-            check721Approval(tokenAddress, tokenId);
+            requireERC721Approval(tokenAddress, tokenId);
         }
 
         listedItem.price = newPrice;
@@ -621,7 +621,7 @@ contract IdeationMarketFacet {
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
-    function check721Approval(address tokenAddress, uint256 tokenId) internal view {
+    function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
         IERC721 token = IERC721(tokenAddress);
         if (
             !(
@@ -633,7 +633,7 @@ contract IdeationMarketFacet {
         }
     }
 
-    function check1155Approval(address tokenAddress, address tokenOwner) internal view {
+    function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
         if (!IERC1155(tokenAddress).isApprovedForAll(tokenOwner, address(this))) {
             revert IdeationMarket__NotApprovedForMarketplace();
         }
