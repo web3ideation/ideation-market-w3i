@@ -8,6 +8,12 @@ error CollectionWhitelist__AlreadyWhitelisted();
 error CollectionWhitelist__NotWhitelisted();
 
 contract CollectionWhitelistFacet {
+    /// @notice Emitted when a collection is added.
+    event CollectionAddedToWhitelist(address indexed tokenAddress);
+
+    /// @notice Emitted when a collection is removed.
+    event CollectionRemovedFromWhitelist(address indexed tokenAddress);
+
     // Only diamond owner can update the whitelist.
     modifier onlyOwner() {
         LibDiamond.enforceIsContractOwner();
@@ -23,6 +29,8 @@ contract CollectionWhitelistFacet {
         s.whitelistedCollections[tokenAddress] = true;
         s.whitelistedCollectionsIndex[tokenAddress] = s.whitelistedCollectionsArray.length;
         s.whitelistedCollectionsArray.push(tokenAddress);
+
+        emit CollectionAddedToWhitelist(tokenAddress);
     }
 
     // when removing collections from the whitelist consider canceling active listings of such
@@ -47,6 +55,8 @@ contract CollectionWhitelistFacet {
         s.whitelistedCollectionsArray.pop();
         delete s.whitelistedCollectionsIndex[tokenAddress];
         s.whitelistedCollections[tokenAddress] = false;
+
+        emit CollectionRemovedFromWhitelist(tokenAddress);
     }
 
     /// @notice Batch adds multiple NFT contract addresses to the whitelist.
