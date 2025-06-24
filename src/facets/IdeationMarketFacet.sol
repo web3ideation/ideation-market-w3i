@@ -150,7 +150,7 @@ contract IdeationMarketFacet {
      * @dev: Using approve() the user keeps on owning the NFT while it is listed
      */
 
-    function listItem(
+    function createListing(
         address tokenAddress,
         uint256 tokenId,
         address erc1155Holder,
@@ -272,7 +272,7 @@ contract IdeationMarketFacet {
         );
     }
 
-    function buyItem(
+    function purchaseListing(
         uint128 listingId,
         uint256 expectedQuantity,
         address expectedDesiredTokenAddress,
@@ -588,7 +588,7 @@ contract IdeationMarketFacet {
         listedItem.desiredQuantity = newDesiredQuantity;
         listedItem.quantity = newQuantity;
         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
-        listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the listItem function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+        listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
         emit ItemUpdated(
             listedItem.listingId,
@@ -648,7 +648,7 @@ contract IdeationMarketFacet {
     }
 
     // checks for token contract approval and for collection whitelist
-    function cancelIfNotApproved(uint128 listingId) external listingExists(listingId) {
+    function cleanListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 

@@ -59,9 +59,10 @@ contract DeployDiamond is Script {
         ownershipSelectors[0] = IERC173.owner.selector; // IERC173 has all the ownership functions needed.
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
 
-        bytes4[] memory marketSelectors = new bytes4[](6);
-        marketSelectors[0] = bytes4(keccak256("listItem(address,uint256,uint96,address,uint256,uint256,uint256,bool)"));
-        marketSelectors[1] = bytes4(keccak256("buyItem(address,uint256)"));
+        bytes4[] memory marketSelectors = new bytes4[](6); // !!! change to listingId as identifier
+        marketSelectors[0] =
+            bytes4(keccak256("createListing(address,uint256,uint96,address,uint256,uint256,uint256,bool)"));
+        marketSelectors[1] = bytes4(keccak256("purchaseListing(address,uint256)"));
         marketSelectors[2] = bytes4(keccak256("cancelListing(address,uint256)"));
         marketSelectors[3] = bytes4(keccak256("updateListing(address,uint256,uint96,address,uint256,uint256,uint256)"));
         marketSelectors[4] = bytes4(keccak256("withdrawProceeds()"));
