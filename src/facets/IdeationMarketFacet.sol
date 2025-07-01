@@ -196,22 +196,7 @@ contract IdeationMarketFacet {
         }
 
         // Swap-specific check
-        if (tokenAddress == desiredTokenAddress && tokenId == desiredTokenId) {
-            revert IdeationMarket__NoSwapForSameToken();
-        }
-        if (desiredTokenAddress == address(0)) {
-            if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (desiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
-        } else if (desiredQuantity > 0) {
-            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
-        } else if (desiredQuantity == 0) {
-            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
-            }
-        }
+        validateSwapParameters(tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredQuantity);
 
         // if the interacting user is an approved Operator set the token Owner as the seller
         address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
@@ -430,18 +415,7 @@ contract IdeationMarketFacet {
         }
 
         // delete Listing
-        delete s.listings[listingId];
-
-        // cleanup the tokenToListingIds mapping
-        uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
-        for (uint256 i; i < listingArray.length;) {
-            if (listingArray[i] == listingId) {
-                listingArray[i] = listingArray[listingArray.length - 1];
-                listingArray.pop();
-            } else {
-                i++;
-            }
-        }
+        deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
 
         // Transfer tokens based on the token standard.
         if (listedItem.quantity > 0) {
@@ -492,18 +466,7 @@ contract IdeationMarketFacet {
         }
 
         // delete Listing
-        delete s.listings[listingId];
-
-        // cleanup the tokenToListingIds mapping
-        uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
-        for (uint256 i; i < listingArray.length;) {
-            if (listingArray[i] == listingId) {
-                listingArray[i] = listingArray[listingArray.length - 1];
-                listingArray.pop();
-            } else {
-                i++;
-            }
-        }
+        deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
 
         emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
     }
@@ -552,22 +515,9 @@ contract IdeationMarketFacet {
         }
 
         // Swap-specific check
-        if (tokenAddress == newDesiredTokenAddress && tokenId == newDesiredTokenId) {
-            revert IdeationMarket__NoSwapForSameToken();
-        }
-        if (newDesiredTokenAddress == address(0)) {
-            if (newDesiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (newDesiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (newPrice <= 0) revert IdeationMarket__FreeListingsNotSupported();
-        } else if (newDesiredQuantity > 0) {
-            if (!IERC165(newDesiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
-        } else if (newDesiredQuantity == 0) {
-            if (!IERC165(newDesiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
-        }
+        validateSwapParameters(
+            tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredQuantity
+        );
 
         // Use interface check to ensure the MarketPlace is still Approved for transfer and the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
         if (newQuantity > 0) {
@@ -621,24 +571,6 @@ contract IdeationMarketFacet {
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
-    function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
-        IERC721 token = IERC721(tokenAddress);
-        if (
-            !(
-                token.getApproved(tokenId) == address(this)
-                    || token.isApprovedForAll(token.ownerOf(tokenId), address(this))
-            )
-        ) {
-            revert IdeationMarket__NotApprovedForMarketplace();
-        }
-    }
-
-    function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
-        if (!IERC1155(tokenAddress).isApprovedForAll(tokenOwner, address(this))) {
-            revert IdeationMarket__NotApprovedForMarketplace();
-        }
-    }
-
     function setInnovationFee(uint32 newFee) external {
         LibDiamond.enforceIsContractOwner();
         AppStorage storage s = LibAppStorage.appStorage();
@@ -668,18 +600,7 @@ contract IdeationMarketFacet {
 
         // If approval is missing, cancel the listing by deleting it from storage.
         if (!approved) {
-            // delete Listing
-            delete s.listings[listingId];
-            // cleanup the tokenToListingIds mapping
-            uint128[] storage listingArray = s.tokenToListingIds[listedItem.tokenAddress][listedItem.tokenId];
-            for (uint256 i; i < listingArray.length;) {
-                if (listingArray[i] == listingId) {
-                    listingArray[i] = listingArray[listingArray.length - 1];
-                    listingArray.pop();
-                } else {
-                    i++;
-                }
-            }
+            deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
 
             emit ListingCanceledDueToMissingApproval(
                 listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender
@@ -688,5 +609,71 @@ contract IdeationMarketFacet {
             revert IdeationMarket__StillApproved();
         }
     }
+
+    //////////////////////
+    // Helper Functions //
+    //////////////////////
+
+    function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
+        IERC721 token = IERC721(tokenAddress);
+        if (
+            !(
+                token.getApproved(tokenId) == address(this)
+                    || token.isApprovedForAll(token.ownerOf(tokenId), address(this))
+            )
+        ) {
+            revert IdeationMarket__NotApprovedForMarketplace();
+        }
+    }
+
+    function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
+        if (!IERC1155(tokenAddress).isApprovedForAll(tokenOwner, address(this))) {
+            revert IdeationMarket__NotApprovedForMarketplace();
+        }
+    }
+
+    function validateSwapParameters(
+        address tokenAddress,
+        uint256 tokenId,
+        uint96 price,
+        address desiredTokenAddress,
+        uint256 desiredTokenId,
+        uint256 desiredQuantity
+    ) private view {
+        if (tokenAddress == desiredTokenAddress && tokenId == desiredTokenId) {
+            revert IdeationMarket__NoSwapForSameToken();
+        }
+
+        if (desiredTokenAddress == address(0)) {
+            if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (desiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
+        } else if (desiredQuantity > 0) {
+            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+        } else if (desiredQuantity == 0) {
+            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__NotSupportedTokenStandard();
+            }
+        }
+    }
+
+    function deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
+        internal
+    {
+        delete s.listings[listingId];
+
+        uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
+        for (uint256 i = 0; i < listingArray.length;) {
+            if (listingArray[i] == listingId) {
+                listingArray[i] = listingArray[listingArray.length - 1];
+                listingArray.pop();
+            } else {
+                i++;
+            }
+        }
+    }
+
     // find the getter functions in the GetterFacet.sol
 }

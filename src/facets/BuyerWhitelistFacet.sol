@@ -21,31 +21,7 @@ contract BuyerWhitelistFacet {
     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
 
-        if (allowedBuyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
-
-        if (allowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
-
-        // Ensure listing exists
-        Listing memory listedItem = s.listings[listingId];
-        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
-
-        // check if the user is an authorized operator
-        if (listedItem.quantity > 0) {
-            IERC1155 token = IERC1155(listedItem.tokenAddress);
-            // check if the user is authorized
-            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
-                revert BuyerWhitelist__NotAuthorizedOperator();
-            }
-        } else {
-            IERC721 token = IERC721(listedItem.tokenAddress);
-            address tokenHolder = token.ownerOf(listedItem.tokenId);
-            if (
-                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
-                    && !token.isApprovedForAll(tokenHolder, msg.sender)
-            ) {
-                revert BuyerWhitelist__NotAuthorizedOperator();
-            }
-        }
+        validateWhitelistBatch(s, listingId, allowedBuyers.length);
 
         for (uint256 i = 0; i < allowedBuyers.length;) {
             address allowedBuyer = allowedBuyers[i];
@@ -67,31 +43,7 @@ contract BuyerWhitelistFacet {
     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
 
-        if (disallowedBuyers.length > s.buyerWhitelistMaxBatchSize) revert BuyerWhitelist__ExceedsMaxBatchSize();
-
-        if (disallowedBuyers.length == 0) revert BuyerWhitelist__EmptyCalldata();
-
-        // Ensure listing exists
-        Listing memory listedItem = s.listings[listingId];
-        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
-
-        // check if the user is an authorized operator
-        if (listedItem.quantity > 0) {
-            IERC1155 token = IERC1155(listedItem.tokenAddress);
-            // check if the user is authorized
-            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
-                revert BuyerWhitelist__NotAuthorizedOperator();
-            }
-        } else {
-            IERC721 token = IERC721(listedItem.tokenAddress);
-            address tokenHolder = token.ownerOf(listedItem.tokenId);
-            if (
-                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
-                    && !token.isApprovedForAll(tokenHolder, msg.sender)
-            ) {
-                revert BuyerWhitelist__NotAuthorizedOperator();
-            }
-        }
+        validateWhitelistBatch(s, listingId, disallowedBuyers.length);
 
         for (uint256 i = 0; i < disallowedBuyers.length;) {
             address disallowedBuyer = disallowedBuyers[i];
@@ -104,6 +56,32 @@ contract BuyerWhitelistFacet {
             unchecked {
                 i++;
             }
+        }
+    }
+
+    /// @dev Reverts if batchSize is zero/exceeds cap,
+    ///      if listing.seller==0, or msg.sender isn’t authorized.
+    function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
+        Listing memory listedItem = s.listings[listingId];
+
+        if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+        if (batchSize > s.buyerWhitelistMaxBatchSize) {
+            revert BuyerWhitelist__ExceedsMaxBatchSize();
+        }
+        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+
+        if (listedItem.quantity > 0) {
+            IERC1155 token = IERC1155(listedItem.tokenAddress);
+            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
+                revert BuyerWhitelist__NotAuthorizedOperator();
+            }
+        } else {
+            IERC721 token = IERC721(listedItem.tokenAddress);
+            address tokenHolder = token.ownerOf(listedItem.tokenId);
+            if (
+                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
+                    && !token.isApprovedForAll(tokenHolder, msg.sender)
+            ) revert BuyerWhitelist__NotAuthorizedOperator();
         }
     }
 }
