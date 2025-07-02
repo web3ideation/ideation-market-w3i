@@ -3,14 +3,15 @@ pragma solidity ^0.8.28;
 
 struct Listing {
     uint128 listingId;
-    uint96 price;
+    uint256 price;
     uint32 feeRate; // storing the fee at the time of listing
     address tokenAddress;
     // 12 bytes padding reserved for future flags
     uint256 tokenId;
     address seller;
     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
-    // 11 bytes padding reserved for future flags
+    bool partialBuyEnabled; // true means that the ERC1155 Listing can be bought in multiple parts
+    // 10 bytes padding reserved for future flags
     address desiredTokenAddress; // For swap Listing !=address(0)
     // 12 bytes padding reserved for future flags
     uint256 desiredTokenId;
