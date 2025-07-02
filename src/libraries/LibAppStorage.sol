@@ -15,8 +15,8 @@ struct Listing {
     address desiredTokenAddress; // For swap Listing !=address(0)
     // 12 bytes padding reserved for future flags
     uint256 desiredTokenId;
-    uint256 desiredQuantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
-    uint256 quantity; // For ERC1155 >1 and for ERC721 ==0
+    uint256 desiredErc1155Quantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
+    uint256 erc1155Quantity; // For ERC1155 >1 and for ERC721 ==0
 }
 
 struct AppStorage {

@@ -70,7 +70,7 @@ contract BuyerWhitelistFacet {
         }
         if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-        if (listedItem.quantity > 0) {
+        if (listedItem.erc1155Quantity > 0) {
             IERC1155 token = IERC1155(listedItem.tokenAddress);
             if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
                 revert BuyerWhitelist__NotAuthorizedOperator();

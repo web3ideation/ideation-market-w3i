@@ -49,13 +49,13 @@ contract IdeationMarketFacet {
      * @param desiredTokenAddress The desired NFT address for swaps (0 for non-swap listing).
      * @param desiredTokenId The desired token ID for swaps (only applicable for swap listing).
      * @param feeRate innovationFee rate at the time of listing in case it gets updated before selling.
-     * @param quantity Quantity (for ERC1155 tokens; must be 0 for ERC721).
+     * @param erc1155Quantity Quantity (for ERC1155 tokens; must be 0 for ERC721).
      */
     event ListingCreated(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
-        uint256 quantity,
+        uint256 erc1155Quantity,
         uint256 price,
         uint256 feeRate,
         address seller,
@@ -63,14 +63,14 @@ contract IdeationMarketFacet {
         bool partialBuyEnabled,
         address desiredTokenAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity
+        uint256 desiredErc1155Quantity
     );
 
     event ListingPurchased(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
-        uint256 quantity,
+        uint256 erc1155Quantity,
         bool partialBuy,
         uint256 price,
         uint256 feeRate,
@@ -78,7 +78,7 @@ contract IdeationMarketFacet {
         address buyer,
         address desiredTokenAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity
+        uint256 desiredErc1155Quantity
     );
 
     event ListingCanceled(
@@ -93,7 +93,7 @@ contract IdeationMarketFacet {
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
-        uint256 quantity,
+        uint256 erc1155Quantity,
         uint256 price,
         uint256 feeRate,
         address seller,
@@ -101,7 +101,7 @@ contract IdeationMarketFacet {
         bool partialBuyEnabled,
         address desiredTokenAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity
+        uint256 desiredErc1155Quantity
     );
 
     event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
@@ -163,14 +163,14 @@ contract IdeationMarketFacet {
         uint96 price,
         address desiredTokenAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-        uint256 quantity, // >0 for ERC1155, 0 for only ERC721
+        uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+        uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
         bool buyerWhitelistEnabled,
         bool partialBuyEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
         // check if the user is an authorized Operator
-        if (quantity > 0) {
+        if (erc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized or the holder himself
             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
@@ -192,7 +192,7 @@ contract IdeationMarketFacet {
         }
 
         // check validity of partialBuyEnabled Flag
-        if (quantity <= 1) {
+        if (erc1155Quantity <= 1) {
             if (partialBuyEnabled) {
                 revert IdeationMarket__PartialBuyNotPossible();
             }
@@ -201,7 +201,7 @@ contract IdeationMarketFacet {
         // if partial buys allowed, require even per-unit price
         if (partialBuyEnabled) {
             // price must be divisible by quantity
-            if (price % quantity != 0) {
+            if (price % erc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
             }
         }
@@ -214,18 +214,20 @@ contract IdeationMarketFacet {
         }
 
         // Prevent relisting an already-listed ERC721 NFT
-        if (quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
+        if (erc1155Quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
             revert IdeationMarket__AlreadyListed();
         }
 
         // Swap-specific check
-        validateSwapParameters(tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredQuantity);
+        validateSwapParameters(
+            tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredErc1155Quantity
+        );
 
         // if the interacting user is an approved Operator set the token Owner as the seller
         address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
 
         // ensure the quantity matches the token Type and the MarketPlace has been Approved for transfer.
-        if (quantity > 0) {
+        if (erc1155Quantity > 0) {
             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
@@ -246,7 +248,7 @@ contract IdeationMarketFacet {
             listingId: newListingId,
             tokenAddress: tokenAddress,
             tokenId: tokenId,
-            quantity: quantity,
+            erc1155Quantity: erc1155Quantity,
             price: price,
             feeRate: s.innovationFee,
             seller: seller,
@@ -254,7 +256,7 @@ contract IdeationMarketFacet {
             partialBuyEnabled: partialBuyEnabled,
             desiredTokenAddress: desiredTokenAddress,
             desiredTokenId: desiredTokenId,
-            desiredQuantity: desiredQuantity
+            desiredErc1155Quantity: desiredErc1155Quantity
         });
 
         s.tokenToListingIds[tokenAddress][tokenId].push(newListingId);
@@ -270,7 +272,7 @@ contract IdeationMarketFacet {
             s.listingIdCounter,
             tokenAddress,
             tokenId,
-            quantity,
+            erc1155Quantity,
             price,
             s.innovationFee,
             seller,
@@ -278,16 +280,16 @@ contract IdeationMarketFacet {
             partialBuyEnabled,
             desiredTokenAddress,
             desiredTokenId,
-            desiredQuantity
+            desiredErc1155Quantity
         );
     }
 
     function purchaseListing(
         uint128 listingId,
-        uint256 expectedQuantity,
+        uint256 expectedErc1155Quantity,
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
-        uint256 expectedDesiredQuantity,
+        uint256 expectedDesiredErc1155Quantity,
         uint256 erc1155PurchaseQuantity, // the exact ERC1155 quantity the buyer wants when partialBuyEnabled = true; for ERC721 must be 0
         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
     ) external payable nonReentrant listingExists(listingId) {
@@ -305,15 +307,16 @@ contract IdeationMarketFacet {
         if (
             listedItem.desiredTokenAddress != expectedDesiredTokenAddress
                 || listedItem.desiredTokenId != expectedDesiredTokenId
-                || listedItem.desiredQuantity != expectedDesiredQuantity || listedItem.quantity != expectedQuantity
+                || listedItem.desiredErc1155Quantity != expectedDesiredErc1155Quantity
+                || listedItem.erc1155Quantity != expectedErc1155Quantity
         ) {
             revert IdeationMarket__ListingTermsChanged();
         }
 
         uint256 purchasePrice = listedItem.price;
 
-        if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.quantity) {
-            purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.quantity;
+        if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
+            purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
         }
         //setting the price based on the partialBuy quantity
 
@@ -323,17 +326,17 @@ contract IdeationMarketFacet {
 
         // Purchase‐quantity validations
         if (
-            (listedItem.quantity != 0 && erc1155PurchaseQuantity == 0)
-                || (listedItem.quantity == 0 && erc1155PurchaseQuantity != 0)
-                || erc1155PurchaseQuantity > listedItem.quantity
+            (listedItem.erc1155Quantity != 0 && erc1155PurchaseQuantity == 0)
+                || (listedItem.erc1155Quantity == 0 && erc1155PurchaseQuantity != 0)
+                || erc1155PurchaseQuantity > listedItem.erc1155Quantity
         ) {
             revert IdeationMarket__InvalidPurchaseQuantity();
         }
-        if (!listedItem.partialBuyEnabled && erc1155PurchaseQuantity != listedItem.quantity) {
+        if (!listedItem.partialBuyEnabled && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
             revert IdeationMarket__PartialBuyNotPossible();
         }
 
-        if (listedItem.desiredQuantity > 0 && desiredErc1155Holder == address(0)) {
+        if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
             revert IdeationMarket__WrongErc1155HolderParameter();
         }
 
@@ -342,10 +345,10 @@ contract IdeationMarketFacet {
         }
 
         // Check if the seller still owns the token and if the marketplace is still approved
-        if (listedItem.quantity > 0) {
+        if (listedItem.erc1155Quantity > 0) {
             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
-            if (balance < listedItem.quantity) {
-                revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.quantity, balance);
+            if (balance < listedItem.erc1155Quantity) {
+                revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.erc1155Quantity, balance);
             }
             requireERC1155Approval(listedItem.tokenAddress, listedItem.seller);
         } else {
@@ -389,7 +392,7 @@ contract IdeationMarketFacet {
         if (listedItem.desiredTokenAddress != address(0)) {
             address desiredOwner; // initializing this for erc721 cleanup
             uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
-            if (listedItem.desiredQuantity > 0) {
+            if (listedItem.desiredErc1155Quantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredToken = IERC1155(listedItem.desiredTokenAddress);
                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
@@ -400,18 +403,22 @@ contract IdeationMarketFacet {
                 ) {
                     revert IdeationMarket__NotAuthorizedOperator();
                 }
-                if (swapBalance < listedItem.desiredQuantity) {
-                    revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredQuantity, swapBalance);
+                if (swapBalance < listedItem.desiredErc1155Quantity) {
+                    revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredErc1155Quantity, swapBalance);
                 }
 
-                remainingBalance = swapBalance - listedItem.desiredQuantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
+                remainingBalance = swapBalance - listedItem.desiredErc1155Quantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
 
                 // Check approval
                 requireERC1155Approval(listedItem.desiredTokenAddress, desiredErc1155Holder);
 
                 // Perform the safe swap transfer buyer to seller.
                 IERC1155(listedItem.desiredTokenAddress).safeTransferFrom(
-                    desiredErc1155Holder, listedItem.seller, listedItem.desiredTokenId, listedItem.desiredQuantity, ""
+                    desiredErc1155Holder,
+                    listedItem.seller,
+                    listedItem.desiredTokenId,
+                    listedItem.desiredErc1155Quantity,
+                    ""
                 );
             } else {
                 IERC721 desiredToken = IERC721(listedItem.desiredTokenAddress);
@@ -435,14 +442,14 @@ contract IdeationMarketFacet {
             uint128[] storage deprecatedListingArray =
                 s.tokenToListingIds[listedItem.desiredTokenAddress][listedItem.desiredTokenId];
 
-            address obsoleteSeller = (listedItem.desiredQuantity > 0)
+            address obsoleteSeller = (listedItem.desiredErc1155Quantity > 0)
                 ? desiredErc1155Holder // ERC-1155 swap
                 : desiredOwner; // ERC-721 swap
 
             for (uint256 i = 0; i < deprecatedListingArray.length;) {
                 if (
                     s.listings[deprecatedListingArray[i]].seller == obsoleteSeller
-                        && remainingBalance <= s.listings[deprecatedListingArray[i]].quantity
+                        && remainingBalance <= s.listings[deprecatedListingArray[i]].erc1155Quantity
                 ) {
                     delete s.listings[deprecatedListingArray[i]];
                     emit ListingCanceled(
@@ -462,12 +469,12 @@ contract IdeationMarketFacet {
 
         // Update or delete the listing
         bool partialBuy = false;
-        if (erc1155PurchaseQuantity == listedItem.quantity) {
+        if (erc1155PurchaseQuantity == listedItem.erc1155Quantity) {
             // fully bought → remove
             deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
         } else {
             // partially bought → reduce remaining
-            s.listings[listingId].quantity -= erc1155PurchaseQuantity;
+            s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
             s.listings[listingId].price -= purchasePrice;
             partialBuy = true;
         }
@@ -493,7 +500,7 @@ contract IdeationMarketFacet {
             msg.sender,
             listedItem.desiredTokenAddress,
             listedItem.desiredTokenId,
-            listedItem.desiredQuantity
+            listedItem.desiredErc1155Quantity
         );
     }
 
@@ -504,7 +511,7 @@ contract IdeationMarketFacet {
 
         address diamondOwner = LibDiamond.contractOwner();
         bool isAuthorized;
-        if (listedItem.quantity == 0) {
+        if (listedItem.erc1155Quantity == 0) {
             IERC721 token = IERC721(listedItem.tokenAddress);
             isAuthorized = (
                 msg.sender == listedItem.seller || msg.sender == token.getApproved(listedItem.tokenId)
@@ -532,10 +539,11 @@ contract IdeationMarketFacet {
         uint96 newPrice,
         address newDesiredTokenAddress,
         uint256 newDesiredTokenId,
-        uint256 newDesiredQuantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-        uint256 newQuantity, // >0 for ERC1155, 0 for only ERC721
+        uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+        uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
         bool newBuyerWhitelistEnabled,
-        bool newPartialBuyEnabled
+        bool newPartialBuyEnabled,
+        address[] calldata newAllowedBuyers // whitelisted Buyers
     ) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
@@ -544,10 +552,10 @@ contract IdeationMarketFacet {
         address tokenAddress = listedItem.tokenAddress;
         address seller = listedItem.seller;
         uint256 tokenId = listedItem.tokenId;
-        uint256 quantity = listedItem.quantity;
+        uint256 erc1155Quantity = listedItem.erc1155Quantity;
 
         // check if the user is an authorized operator
-        if (newQuantity > 0) {
+        if (newErc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized
             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
@@ -572,31 +580,31 @@ contract IdeationMarketFacet {
         }
 
         // check validity of newPartialBuyEnabled Flag
-        if (newQuantity <= 1 && newPartialBuyEnabled) {
+        if (newErc1155Quantity <= 1 && newPartialBuyEnabled) {
             revert IdeationMarket__PartialBuyNotPossible();
         }
 
         // if partial buys allowed, require even per-unit price
         if (newPartialBuyEnabled) {
             // price must be divisible by quantity
-            if (newPrice % newQuantity != 0) {
+            if (newPrice % newErc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
             }
         }
 
         // Swap-specific check
         validateSwapParameters(
-            tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredQuantity
+            tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredErc1155Quantity
         );
 
         // Use interface check to ensure the MarketPlace is still Approved for transfer and the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
-        if (newQuantity > 0) {
-            if (quantity == 0) {
+        if (newErc1155Quantity > 0) {
+            if (erc1155Quantity == 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
             requireERC1155Approval(tokenAddress, seller);
         } else {
-            if (quantity > 0) {
+            if (erc1155Quantity > 0) {
                 revert IdeationMarket__WrongQuantityParameter();
             }
             requireERC721Approval(tokenAddress, tokenId);
@@ -605,17 +613,24 @@ contract IdeationMarketFacet {
         listedItem.price = newPrice;
         listedItem.desiredTokenAddress = newDesiredTokenAddress;
         listedItem.desiredTokenId = newDesiredTokenId;
-        listedItem.desiredQuantity = newDesiredQuantity;
-        listedItem.quantity = newQuantity;
+        listedItem.desiredErc1155Quantity = newDesiredErc1155Quantity;
+        listedItem.erc1155Quantity = newErc1155Quantity;
         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
         listedItem.partialBuyEnabled = newPartialBuyEnabled;
+
+        if (newBuyerWhitelistEnabled) {
+            // delegate into BuyerWhitelistFacet on this Diamond
+            IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
+        } else {
+            if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+        }
 
         emit ListingUpdated(
             listedItem.listingId,
             tokenAddress,
             tokenId,
-            newQuantity,
+            newErc1155Quantity,
             newPrice,
             listedItem.feeRate,
             seller,
@@ -623,7 +638,7 @@ contract IdeationMarketFacet {
             newPartialBuyEnabled,
             newDesiredTokenAddress,
             newDesiredTokenId,
-            newDesiredQuantity
+            newDesiredErc1155Quantity
         );
     }
 
@@ -661,7 +676,7 @@ contract IdeationMarketFacet {
         // check if the Collection is still Whitelisted
         if (s.whitelistedCollections[listedItem.tokenAddress]) {
             // check approval depending on token type
-            if (listedItem.quantity > 0) {
+            if (listedItem.erc1155Quantity > 0) {
                 approved = IERC1155(listedItem.tokenAddress).isApprovedForAll(listedItem.seller, address(this));
             } else {
                 IERC721 token = IERC721(listedItem.tokenAddress);
@@ -710,7 +725,7 @@ contract IdeationMarketFacet {
         uint96 price,
         address desiredTokenAddress,
         uint256 desiredTokenId,
-        uint256 desiredQuantity
+        uint256 desiredErc1155Quantity
     ) private view {
         if (tokenAddress == desiredTokenAddress && tokenId == desiredTokenId) {
             revert IdeationMarket__NoSwapForSameToken();
@@ -718,13 +733,13 @@ contract IdeationMarketFacet {
 
         if (desiredTokenAddress == address(0)) {
             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (desiredQuantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+            if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
             if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
-        } else if (desiredQuantity > 0) {
+        } else if (desiredErc1155Quantity > 0) {
             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
-        } else if (desiredQuantity == 0) {
+        } else if (desiredErc1155Quantity == 0) {
             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
             }
