@@ -57,7 +57,7 @@ contract IdeationMarketFacet {
         uint256 indexed tokenId,
         uint256 erc1155Quantity,
         uint256 price,
-        uint256 feeRate,
+        uint32 feeRate,
         address seller,
         bool buyerWhitelistEnabled,
         bool partialBuyEnabled,
@@ -73,7 +73,7 @@ contract IdeationMarketFacet {
         uint256 erc1155Quantity,
         bool partialBuy,
         uint256 price,
-        uint256 feeRate,
+        uint32 feeRate,
         address seller,
         address buyer,
         address desiredTokenAddress,
@@ -95,7 +95,7 @@ contract IdeationMarketFacet {
         uint256 indexed tokenId,
         uint256 erc1155Quantity,
         uint256 price,
-        uint256 feeRate,
+        uint32 feeRate,
         address seller,
         bool buyerWhitelistEnabled,
         bool partialBuyEnabled,
@@ -106,7 +106,7 @@ contract IdeationMarketFacet {
 
     event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
 
-    event InnovationFeeUpdated(uint256 previousFee, uint256 newFee);
+    event InnovationFeeUpdated(uint32 previousFee, uint32 newFee);
 
     // Event emitted when a listing is canceled due to revoked approval.
     event ListingCanceledDueToMissingApproval(
@@ -160,7 +160,7 @@ contract IdeationMarketFacet {
         address tokenAddress,
         uint256 tokenId,
         address erc1155Holder,
-        uint96 price,
+        uint256 price,
         address desiredTokenAddress,
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
@@ -360,10 +360,10 @@ contract IdeationMarketFacet {
         }
 
         // Calculate the innovation fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
-        uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
+        uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
         // Seller receives sale price minus the innovation fee
-        uint256 sellerProceeds = purchasePrice - innovationFee;
+        uint256 sellerProceeds = purchasePrice - innovationProceeds;
 
         // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell
         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
@@ -383,7 +383,7 @@ contract IdeationMarketFacet {
         // Update proceeds for the seller, marketplace owner and potentially buyer
 
         s.proceeds[listedItem.seller] += sellerProceeds;
-        s.proceeds[LibDiamond.contractOwner()] += innovationFee;
+        s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
         if (excessPayment > 0) {
             s.proceeds[msg.sender] += excessPayment;
         }
@@ -536,7 +536,7 @@ contract IdeationMarketFacet {
 
     function updateListing(
         uint128 listingId,
-        uint96 newPrice,
+        uint256 newPrice,
         address newDesiredTokenAddress,
         uint256 newDesiredTokenId,
         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
@@ -661,7 +661,7 @@ contract IdeationMarketFacet {
     function setInnovationFee(uint32 newFee) external {
         LibDiamond.enforceIsContractOwner();
         AppStorage storage s = LibAppStorage.appStorage();
-        uint256 previousFee = s.innovationFee;
+        uint32 previousFee = s.innovationFee;
         s.innovationFee = newFee;
         emit InnovationFeeUpdated(previousFee, newFee);
     }
@@ -722,7 +722,7 @@ contract IdeationMarketFacet {
     function validateSwapParameters(
         address tokenAddress,
         uint256 tokenId,
-        uint96 price,
+        uint256 price,
         address desiredTokenAddress,
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity

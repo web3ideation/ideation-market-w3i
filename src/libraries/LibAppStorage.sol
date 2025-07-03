@@ -3,20 +3,18 @@ pragma solidity ^0.8.28;
 
 struct Listing {
     uint128 listingId;
-    uint256 price;
     uint32 feeRate; // storing the fee at the time of listing
-    address tokenAddress;
-    // 12 bytes padding reserved for future flags
-    uint256 tokenId;
-    address seller;
     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
     bool partialBuyEnabled; // true means that the ERC1155 Listing can be bought in multiple parts
-    // 10 bytes padding reserved for future flags
+    // 38 bytes padding for future tiny vars
+    address tokenAddress;
+    uint256 tokenId;
+    uint256 erc1155Quantity; // For ERC1155 >1 and for ERC721 ==0
+    uint256 price;
+    address seller;
     address desiredTokenAddress; // For swap Listing !=address(0)
-    // 12 bytes padding reserved for future flags
     uint256 desiredTokenId;
     uint256 desiredErc1155Quantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
-    uint256 erc1155Quantity; // For ERC1155 >1 and for ERC721 ==0
 }
 
 struct AppStorage {
