@@ -7,13 +7,7 @@ pragma solidity ^0.8.28;
  * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
  * /*****************************************************************************
  */
-
-// A loupe is a small magnifying glass used to look at diamonds.
-// These functions look at diamonds
 interface IDiamondLoupeFacet {
-    /// These functions are expected to be called frequently
-    /// by tools.
-
     struct Facet {
         address facetAddress;
         bytes4[] functionSelectors;

@@ -11,29 +11,20 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
 
-// The functions in DiamondLoupeFacet MUST be added to a diamond.
-// The EIP-2535 Diamond standard requires these functions.
-
 contract DiamondLoupeFacet is IDiamondLoupeFacet, IERC165 {
-    // Diamond Loupe Functions
-    ////////////////////////////////////////////////////////////////////
-    /// These functions are expected to be called frequently by tools.
-    //
-    // struct Facet {
-    //     address facetAddress;
-    //     bytes4[] functionSelectors;
-    // }
-
     /// @notice Gets all facets and their selectors.
     /// @return facets_ Facet
     function facets() external view override returns (Facet[] memory facets_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         uint256 numFacets = ds.facetAddresses.length;
         facets_ = new Facet[](numFacets);
-        for (uint256 i; i < numFacets; i++) {
+        for (uint256 i = 0; i < numFacets;) {
             address facetAddress_ = ds.facetAddresses[i];
             facets_[i].facetAddress = facetAddress_;
             facets_[i].functionSelectors = ds.facetFunctionSelectors[facetAddress_].functionSelectors;
+            unchecked {
+                i++;
+            }
         }
     }
 
@@ -66,7 +57,9 @@ contract DiamondLoupeFacet is IDiamondLoupeFacet, IERC165 {
         facetAddress_ = ds.selectorToFacetAndPosition[_functionSelector].facetAddress;
     }
 
-    // This implements ERC-165.
+    /// @notice Queries ERC-165 support for a given interface ID.
+    /// @param _interfaceId The ERC-165 interface identifier.
+    /// @return True if the diamond supports this interface, false otherwise.
     function supportsInterface(bytes4 _interfaceId) external view override returns (bool) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         return ds.supportedInterfaces[_interfaceId];
