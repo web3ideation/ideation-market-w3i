@@ -30,7 +30,6 @@ contract DeployDiamond is Script {
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();
-        DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
         DiamondLoupeFacet diamondLoupeFacet = new DiamondLoupeFacet();
         OwnershipFacet ownershipFacet = new OwnershipFacet();
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
@@ -39,7 +38,7 @@ contract DeployDiamond is Script {
         GetterFacet getterFacet = new GetterFacet();
 
         // Deploy the diamond with the initial facet cut for DiamondCutFacet
-        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(diamondCutFacet));
+        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(new DiamondCutFacet()));
         console.log("Deployed Diamond.sol at address:", address(ideationMarketDiamond));
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
@@ -127,9 +126,7 @@ contract DeployDiamond is Script {
 
         // Upgrade and initialize the diamond to include these facets
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
-            cuts,
-            address(diamondInit),
-            abi.encodeWithSignature("init(uint32,uint16)", innovationFee, buyerWhitelistMaxBatchSize)
+            cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );
 
         console.log("Diamond cuts complete. Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
