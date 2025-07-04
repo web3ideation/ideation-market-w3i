@@ -23,9 +23,12 @@ contract GetterFacet {
 
         // First pass: count how many listings are still active (seller != address(0))
         uint256 activeCount = 0;
-        for (uint256 i = 0; i < totalIds; i++) {
+        for (uint256 i = 0; i < totalIds;) {
             if (s.listings[listingArray[i]].seller != address(0)) {
                 activeCount++;
+            }
+            unchecked {
+                i++;
             }
         }
 
@@ -38,11 +41,14 @@ contract GetterFacet {
 
         // Second pass: fill that array with active listings
         uint256 arrayIndex = 0;
-        for (uint256 i = 0; i < totalIds; i++) {
+        for (uint256 i = 0; i < totalIds;) {
             Listing storage current = s.listings[listingArray[i]];
             if (current.seller != address(0)) {
                 listings[arrayIndex] = current;
                 arrayIndex++;
+            }
+            unchecked {
+                i++;
             }
         }
 
