@@ -20,15 +20,18 @@ contract BuyerWhitelistFacet {
     /// @param allowedBuyers An array of buyer addresses to add.
     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
+        uint256 len = allowedBuyers.length;
 
-        validateWhitelistBatch(s, listingId, allowedBuyers.length);
+        validateWhitelistBatch(s, listingId, len);
 
-        for (uint256 i = 0; i < allowedBuyers.length;) {
+        mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+
+        for (uint256 i = 0; i < len;) {
             address allowedBuyer = allowedBuyers[i];
             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-            if (!s.whitelistedBuyersByListingId[listingId][allowedBuyer]) {
-                s.whitelistedBuyersByListingId[listingId][allowedBuyer] = true;
+            if (!listingWhitelist[allowedBuyer]) {
+                listingWhitelist[allowedBuyer] = true;
                 emit BuyerWhitelisted(listingId, allowedBuyer);
             }
             unchecked {
@@ -42,15 +45,18 @@ contract BuyerWhitelistFacet {
     /// @param disallowedBuyers An array of buyer addresses to remove.
     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
         AppStorage storage s = LibAppStorage.appStorage();
+        uint256 len = disallowedBuyers.length;
 
-        validateWhitelistBatch(s, listingId, disallowedBuyers.length);
+        validateWhitelistBatch(s, listingId, len);
 
-        for (uint256 i = 0; i < disallowedBuyers.length;) {
+        mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+
+        for (uint256 i = 0; i < len;) {
             address disallowedBuyer = disallowedBuyers[i];
             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-            if (s.whitelistedBuyersByListingId[listingId][disallowedBuyer]) {
-                s.whitelistedBuyersByListingId[listingId][disallowedBuyer] = false;
+            if (listingWhitelist[disallowedBuyer]) {
+                listingWhitelist[disallowedBuyer] = false;
                 emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
             }
             unchecked {
@@ -62,24 +68,27 @@ contract BuyerWhitelistFacet {
     /// @dev Reverts if batchSize is zero/exceeds cap,
     ///      if listing.seller==0, or msg.sender isn’t authorized.
     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
-        Listing memory listedItem = s.listings[listingId];
-
         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
         if (batchSize > s.buyerWhitelistMaxBatchSize) {
             revert BuyerWhitelist__ExceedsMaxBatchSize();
         }
-        if (listedItem.seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-        if (listedItem.erc1155Quantity > 0) {
-            IERC1155 token = IERC1155(listedItem.tokenAddress);
-            if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
+        address seller = s.listings[listingId].seller;
+        if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+
+        uint256 erc1155Quantity = s.listings[listingId].erc1155Quantity;
+        address tokenAddress = s.listings[listingId].tokenAddress;
+        uint256 tokenId = s.listings[listingId].tokenId;
+        if (erc1155Quantity > 0) {
+            IERC1155 token = IERC1155(tokenAddress);
+            if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }
         } else {
-            IERC721 token = IERC721(listedItem.tokenAddress);
-            address tokenHolder = token.ownerOf(listedItem.tokenId);
+            IERC721 token = IERC721(tokenAddress);
+            address tokenHolder = token.ownerOf(tokenId);
             if (
-                msg.sender != tokenHolder && msg.sender != token.getApproved(listedItem.tokenId)
+                msg.sender != tokenHolder && msg.sender != token.getApproved(tokenId)
                     && !token.isApprovedForAll(tokenHolder, msg.sender)
             ) revert BuyerWhitelist__NotAuthorizedOperator();
         }
