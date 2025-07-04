@@ -169,6 +169,13 @@ contract IdeationMarketFacet {
         bool partialBuyEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
+        AppStorage storage s = LibAppStorage.appStorage();
+
+        // check if the Collection is Whitelisted
+        if (!s.whitelistedCollections[tokenAddress]) {
+            revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
+        }
+
         // check if the user is an authorized Operator
         if (erc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
@@ -204,13 +211,6 @@ contract IdeationMarketFacet {
             if (price % erc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
             }
-        }
-
-        AppStorage storage s = LibAppStorage.appStorage();
-
-        // check if the Collection is Whitelisted
-        if (!s.whitelistedCollections[tokenAddress]) {
-            revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
         }
 
         // Prevent relisting an already-listed ERC721 NFT
@@ -462,7 +462,9 @@ contract IdeationMarketFacet {
                     deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
                     deprecatedListingArray.pop();
                 } else {
-                    i++;
+                    unchecked {
+                        i++;
+                    }
                 }
             }
         }
@@ -757,7 +759,9 @@ contract IdeationMarketFacet {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
             } else {
-                i++;
+                unchecked {
+                    i++;
+                }
             }
         }
     }

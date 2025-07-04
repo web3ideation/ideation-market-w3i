@@ -68,8 +68,8 @@ contract DeployDiamond is Script {
         bytes4[] memory collectionWhitelistSelectors = new bytes4[](4);
         collectionWhitelistSelectors[0] = CollectionWhitelistFacet.addWhitelistedCollection.selector;
         collectionWhitelistSelectors[1] = CollectionWhitelistFacet.removeWhitelistedCollection.selector;
-        collectionWhitelistSelectors[2] = CollectionWhitelistFacet.addWhitelistedCollections.selector;
-        collectionWhitelistSelectors[3] = CollectionWhitelistFacet.removeWhitelistedCollections.selector;
+        collectionWhitelistSelectors[2] = CollectionWhitelistFacet.batchAddWhitelistedCollections.selector;
+        collectionWhitelistSelectors[3] = CollectionWhitelistFacet.batchRemoveWhitelistedCollections.selector;
 
         bytes4[] memory buyerWhitelistSelectors = new bytes4[](2);
         buyerWhitelistSelectors[0] = BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector;

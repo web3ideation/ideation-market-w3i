@@ -22,7 +22,7 @@ contract CollectionWhitelistFacet {
 
     /// @notice Adds a single NFT contract address to the whitelist.
     /// @param tokenAddress The NFT contract address to whitelist.
-    function addWhitelistedCollection(address tokenAddress) public onlyOwner {
+    function addWhitelistedCollection(address tokenAddress) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
 
@@ -36,7 +36,7 @@ contract CollectionWhitelistFacet {
     // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Removes a single NFT contract address from the whitelist.
     /// @param tokenAddress The NFT contract address to remove.
-    function removeWhitelistedCollection(address tokenAddress) public onlyOwner {
+    function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
 
@@ -61,11 +61,25 @@ contract CollectionWhitelistFacet {
 
     /// @notice Batch adds multiple NFT contract addresses to the whitelist.
     /// @param tokenAddresses Array of NFT contract addresses to whitelist.
-    function addWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
-        for (uint256 i = 0; i < tokenAddresses.length; i++) {
-            // Only add if not already whitelisted.
-            if (!LibAppStorage.appStorage().whitelistedCollections[tokenAddresses[i]]) {
-                addWhitelistedCollection(tokenAddresses[i]);
+    function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+        AppStorage storage s = LibAppStorage.appStorage();
+        address[] storage arr = s.whitelistedCollectionsArray;
+
+        uint256 len = tokenAddresses.length;
+
+        for (uint256 i = 0; i < len;) {
+            address addr = tokenAddresses[i];
+
+            if (!s.whitelistedCollections[addr]) {
+                s.whitelistedCollections[addr] = true;
+                s.whitelistedCollectionsIndex[addr] = arr.length;
+                arr.push(addr);
+
+                emit CollectionAddedToWhitelist(addr);
+            }
+
+            unchecked {
+                i++;
             }
         }
     }
@@ -73,11 +87,37 @@ contract CollectionWhitelistFacet {
     // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Batch removes multiple NFT contract addresses from the whitelist.
     /// @param tokenAddresses Array of NFT contract addresses to remove.
-    function removeWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
-        for (uint256 i = 0; i < tokenAddresses.length; i++) {
-            // Only remove if the address is currently whitelisted.
-            if (LibAppStorage.appStorage().whitelistedCollections[tokenAddresses[i]]) {
-                removeWhitelistedCollection(tokenAddresses[i]);
+    function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+        AppStorage storage s = LibAppStorage.appStorage();
+        address[] storage arr = s.whitelistedCollectionsArray;
+
+        uint256 len = tokenAddresses.length;
+
+        for (uint256 i = 0; i < len;) {
+            address addr = tokenAddresses[i];
+
+            if (s.whitelistedCollections[addr]) {
+                // Get the index of the element to remove.
+                uint256 index = s.whitelistedCollectionsIndex[addr];
+                uint256 lastIndex = arr.length - 1;
+                address lastAddress = arr[lastIndex];
+
+                // Swap the element with the last element if it's not the one to remove.
+                if (index != lastIndex) {
+                    arr[index] = lastAddress;
+                    s.whitelistedCollectionsIndex[lastAddress] = index;
+                }
+
+                // Remove the last element.
+                arr.pop();
+                delete s.whitelistedCollectionsIndex[addr];
+                s.whitelistedCollections[addr] = false;
+
+                emit CollectionRemovedFromWhitelist(addr);
+            }
+
+            unchecked {
+                i++;
             }
         }
     }
