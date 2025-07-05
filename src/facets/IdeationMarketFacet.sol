@@ -286,6 +286,7 @@ contract IdeationMarketFacet {
 
     function purchaseListing(
         uint128 listingId,
+        uint256 expectedPrice,
         uint256 expectedErc1155Quantity,
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
@@ -305,7 +306,7 @@ contract IdeationMarketFacet {
 
         // Check if Terms have changed in the meantime (frontrunning Attack)
         if (
-            listedItem.desiredTokenAddress != expectedDesiredTokenAddress
+            listedItem.price != expectedPrice || listedItem.desiredTokenAddress != expectedDesiredTokenAddress
                 || listedItem.desiredTokenId != expectedDesiredTokenId
                 || listedItem.desiredErc1155Quantity != expectedDesiredErc1155Quantity
                 || listedItem.erc1155Quantity != expectedErc1155Quantity

@@ -6,6 +6,7 @@ import "../libraries/LibDiamond.sol";
 
 error CollectionWhitelist__AlreadyWhitelisted();
 error CollectionWhitelist__NotWhitelisted();
+error CollectionWhitelist__ZeroAddress();
 
 contract CollectionWhitelistFacet {
     /// @notice Emitted when a collection is added.
@@ -25,6 +26,7 @@ contract CollectionWhitelistFacet {
     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
+        if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
 
         s.whitelistedCollections[tokenAddress] = true;
         s.whitelistedCollectionsIndex[tokenAddress] = s.whitelistedCollectionsArray.length;
@@ -69,6 +71,7 @@ contract CollectionWhitelistFacet {
 
         for (uint256 i = 0; i < len;) {
             address addr = tokenAddresses[i];
+            if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
 
             if (!s.whitelistedCollections[addr]) {
                 s.whitelistedCollections[addr] = true;
