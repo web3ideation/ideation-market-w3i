@@ -1,0 +1,19 @@
+{
+  "name": "audit",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src"
+  },
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.9",
+    "ethers": "^6.15.0",
+    "hardhat": "^2.9.0",
+    "hardhat-dependency-compiler": "^1.2.1",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0"
+  }
+}

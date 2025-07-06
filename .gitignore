@@ -15,3 +15,22 @@ docs/
 
 # internal ToDo
 /ToDo.md
+
+
+# Node deps
+node_modules/
+audit/node_modules/
+
+# Hardhat / compilation artifacts
+artifacts/
+cache/
+audit/artifacts/
+audit/cache/
+
+# 4nalyz3r output and logs
+*.sarif
+*.log
+audit/diamond-report.sarif
+
+# Flattened or dist files (if you ever generate them)
+dist/
