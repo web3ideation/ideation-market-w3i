@@ -314,17 +314,6 @@ contract IdeationMarketFacet {
             revert IdeationMarket__ListingTermsChanged();
         }
 
-        uint256 purchasePrice = listedItem.price;
-
-        if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
-            purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
-        }
-        //setting the price based on the partialBuy quantity
-
-        if (msg.value < purchasePrice) {
-            revert IdeationMarket__PriceNotMet(listedItem.listingId, purchasePrice, msg.value);
-        }
-
         // Purchase‐quantity validations
         if (
             (listedItem.erc1155Quantity != 0 && erc1155PurchaseQuantity == 0)
@@ -335,6 +324,17 @@ contract IdeationMarketFacet {
         }
         if (!listedItem.partialBuyEnabled && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
             revert IdeationMarket__PartialBuyNotPossible();
+        }
+
+        // setting the purchePrice based on partialBuy quantity
+        uint256 purchasePrice = listedItem.price;
+
+        if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
+            purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+        }
+
+        if (msg.value < purchasePrice) {
+            revert IdeationMarket__PriceNotMet(listedItem.listingId, purchasePrice, msg.value);
         }
 
         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
