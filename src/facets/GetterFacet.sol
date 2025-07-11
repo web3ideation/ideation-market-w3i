@@ -4,8 +4,8 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
-error GetterFacet__ListingNotFound(uint128 listingId);
-error GetterFacet__NoActiveListings(address tokenAddress, uint256 tokenId);
+error Getter__ListingNotFound(uint128 listingId);
+error Getter__NoActiveListings(address tokenAddress, uint256 tokenId);
 
 contract GetterFacet {
     /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
@@ -33,7 +33,7 @@ contract GetterFacet {
         }
 
         if (activeCount == 0) {
-            revert GetterFacet__NoActiveListings(tokenAddress, tokenId);
+            revert Getter__NoActiveListings(tokenAddress, tokenId);
         }
 
         // Allocate a memory array of exactly activeCount size
@@ -62,7 +62,7 @@ contract GetterFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         listing = s.listings[listingId];
         if (listing.seller == address(0)) {
-            revert GetterFacet__ListingNotFound(listingId);
+            revert Getter__ListingNotFound(listingId);
         }
         return listing;
     }
@@ -134,7 +134,7 @@ contract GetterFacet {
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.listings[listingId].seller == address(0)) {
-            revert GetterFacet__ListingNotFound(listingId);
+            revert Getter__ListingNotFound(listingId);
         }
         return s.whitelistedBuyersByListingId[listingId][buyer];
     }
@@ -143,5 +143,10 @@ contract GetterFacet {
     /// @return maxBatchSize The `buyerWhitelistMaxBatchSize` (e.g. 300).
     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
         return LibAppStorage.appStorage().buyerWhitelistMaxBatchSize;
+    }
+
+    /// @notice Returns the address nominated to become owner
+    function getPendingOwner() external view returns (address) {
+        return LibDiamond.diamondStorage().pendingContractOwner;
     }
 }

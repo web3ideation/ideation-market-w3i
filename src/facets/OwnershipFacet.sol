@@ -4,13 +4,31 @@ pragma solidity ^0.8.28;
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 
+error Ownership__CallerIsNotThePendingOwner();
+
 contract OwnershipFacet is IERC173 {
-    function transferOwnership(address _newOwner) external override {
+    /// @notice Emitted once a new owner is nominated
+    event OwnershipTransferInitiated(address indexed previousOwner, address indexed newOwner);
+
+    /// @notice Owner nominates a new owner
+    function transferOwnership(address newOwner) external override {
         LibDiamond.enforceIsContractOwner();
-        LibDiamond.setContractOwner(_newOwner);
+        LibDiamond.diamondStorage().pendingContractOwner = newOwner;
+        emit OwnershipTransferInitiated(msg.sender, newOwner);
     }
 
-    function owner() external view override returns (address owner_) {
-        owner_ = LibDiamond.contractOwner();
+    /// @notice Pending owner calls to accept and finalize transfer
+    function acceptOwnership() external {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        if (msg.sender != ds.pendingContractOwner) {
+            revert Ownership__CallerIsNotThePendingOwner();
+        }
+        LibDiamond.setContractOwner(msg.sender);
+        ds.pendingContractOwner = address(0);
+    }
+
+    /// @inheritdoc IERC173
+    function owner() external view override returns (address) {
+        return LibDiamond.contractOwner();
     }
 }
