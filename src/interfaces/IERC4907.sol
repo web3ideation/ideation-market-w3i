@@ -1,9 +1,12 @@
-// right now this is not in use - for lending (not transfering permanent ownership) of Tokens
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.20;
 
 import {IERC721} from "./IERC721.sol";
+
+//∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇∇
+// right now this is not in use - for lending (not transfering permanent ownership) of Tokens
+//∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆∆
 
 interface IERC4907 is IERC721 {
     // Logged when the user of an NFT is changed or expires is changed

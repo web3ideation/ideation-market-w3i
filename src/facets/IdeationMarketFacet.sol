@@ -447,7 +447,9 @@ contract IdeationMarketFacet {
                 ? desiredErc1155Holder // ERC-1155 swap
                 : desiredOwner; // ERC-721 swap
 
-            for (uint256 i = 0; i < deprecatedListingArray.length;) {
+            uint256 len = deprecatedListingArray.length;
+
+            for (uint256 i = 0; i < len;) {
                 if (
                     s.listings[deprecatedListingArray[i]].seller == obsoleteSeller
                         && remainingBalance <= s.listings[deprecatedListingArray[i]].erc1155Quantity
@@ -755,7 +757,8 @@ contract IdeationMarketFacet {
         delete s.listings[listingId];
 
         uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
-        for (uint256 i = 0; i < listingArray.length;) {
+        uint256 len = listingArray.length;
+        for (uint256 i = 0; i < len;) {
             if (listingArray[i] == listingId) {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
