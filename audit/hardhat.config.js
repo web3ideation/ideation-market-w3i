@@ -12,7 +12,7 @@ module.exports = {
     },
   },
   paths: {
-    sources: "./src", // ← compile your main code
+    sources: "./4analy3er/contracts", // ← compile your main code
     artifacts: "./artifacts", // ← keep artifacts local to audit/
     cache: "./cache",
   },
