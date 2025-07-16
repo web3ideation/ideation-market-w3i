@@ -1,6 +1,6 @@
 import { findAll } from 'solidity-ast/utils';
-import { ASTIssue, InputType, Instance, IssueTypes, RegexIssue } from '../../types';
-import { instanceFromSRC } from '../../utils';
+import { ASTIssue, InputType, Instance, IssueTypes, RegexIssue } from './4naly3er/src/types';
+import { instanceFromSRC } from './4naly3er/src/utils';
 import util from 'util';
 
 const issue: ASTIssue = {

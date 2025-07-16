@@ -4,6 +4,7 @@
     "files": true
   },
   "compilerOptions": {
+    "moduleResolution": "Node16",
     "noImplicitAny": false
   }
 }
