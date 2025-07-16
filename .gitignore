@@ -17,6 +17,8 @@ docs/
 /ToDo.md
 
 
+# ignore 4naly3er stuff
+
 # Node deps
 node_modules/
 audit/node_modules/
@@ -34,3 +36,7 @@ audit/diamond-report.sarif
 
 # Flattened or dist files (if you ever generate them)
 dist/
+
+
+#ignore Openzeppelin
+/lib/openzeppelin-contracts/
