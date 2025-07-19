@@ -32,14 +32,14 @@ library LibDiamond {
     struct DiamondStorage {
         // maps function selector to the facet address and
         // the position of the selector in the facetFunctionSelectors.selectors array
-        mapping(bytes4 => FacetAddressAndPosition) selectorToFacetAndPosition;
+        mapping(bytes4 selector => FacetAddressAndPosition facetInfo) selectorToFacetAndPosition;
         // maps facet addresses to function selectors
-        mapping(address => FacetFunctionSelectors) facetFunctionSelectors;
+        mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
         // facet addresses
         address[] facetAddresses;
         // Used to query if a contract implements an interface.
         // Used to implement ERC-165.
-        mapping(bytes4 => bool) supportedInterfaces;
+        mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
         // owner of the contract
         address contractOwner;
         address pendingContractOwner;

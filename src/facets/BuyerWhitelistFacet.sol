@@ -24,7 +24,8 @@ contract BuyerWhitelistFacet {
 
         validateWhitelistBatch(s, listingId, len);
 
-        mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+        mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+            s.whitelistedBuyersByListingId[listingId];
 
         for (uint256 i = 0; i < len;) {
             address allowedBuyer = allowedBuyers[i];
@@ -49,7 +50,8 @@ contract BuyerWhitelistFacet {
 
         validateWhitelistBatch(s, listingId, len);
 
-        mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+        mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+            s.whitelistedBuyersByListingId[listingId];
 
         for (uint256 i = 0; i < len;) {
             address disallowedBuyer = disallowedBuyers[i];

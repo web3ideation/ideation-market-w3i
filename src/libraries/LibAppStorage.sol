@@ -23,13 +23,13 @@ struct AppStorage {
     uint16 buyerWhitelistMaxBatchSize; // should be 300
     bool reentrancyLock;
     // 9 bytes padding for future tiny vars
-    mapping(uint128 => Listing) listings; // Listings by listinngId
-    mapping(address => mapping(uint256 => uint128[])) tokenToListingIds; // reverse index from token to ListingIds
-    mapping(address => uint256) proceeds; // Proceeds by seller address
-    mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+    mapping(uint128 listingId => Listing listing) listings; // Listings by listingId
+    mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds; // reverse index from token to ListingIds
+    mapping(address seller => uint256 amount) proceeds; // Proceeds by seller address
+    mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
     address[] whitelistedCollectionsArray; // for lookups
-    mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
-    mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+    mapping(address collection => uint256 index) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+    mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 }
 
 library LibAppStorage {
