@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src"
+    "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src",
+    "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --json slither_report.json",
+    "echidna": "docker run --rm -v $(pwd):/project -w /project trailofbits/echidna echidna-test ../src/IdeationMarketDiamond.sol --contract IdeationMarketDiamond --config-file echidna.yaml"
   },
   "main": "index.js",
   "license": "MIT",

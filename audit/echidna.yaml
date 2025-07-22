@@ -1,0 +1,3 @@
+contract: IdeationMarketDiamond
+testMode: assertion
+# you can list facet functions or ignores here if needed
