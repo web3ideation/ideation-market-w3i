@@ -391,7 +391,7 @@ contract IdeationMarketFacet {
 
         // in case it's a swap listing, send that desired token (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredTokenAddress != address(0)) {
-            address desiredOwner; // initializing this for erc721 cleanup
+            address desiredOwner = address(0); // initializing this for erc721 cleanup
             uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
             if (listedItem.desiredErc1155Quantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
@@ -676,7 +676,7 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
-        bool approved;
+        bool approved = false;
 
         // check if the Collection is still Whitelisted
         if (s.whitelistedCollections[listedItem.tokenAddress]) {
