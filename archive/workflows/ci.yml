@@ -1,5 +1,0 @@
-- name: Checkout repository
-  uses: actions/checkout@v4
-  with:
-    submodules: false     # don’t fetch any submodules
-    fetch-depth: 0        # optional—fetch full history if you need it
