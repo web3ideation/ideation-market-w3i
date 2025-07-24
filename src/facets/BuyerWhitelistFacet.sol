@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "../libraries/LibAppStorage.sol";
 import "../interfaces/IERC721.sol";
 import "../interfaces/IERC1155.sol";
+import "../interfaces/IBuyerWhitelistFacet.sol";
 
 error BuyerWhitelist__ListingDoesNotExist();
 error BuyerWhitelist__NotAuthorizedOperator();
@@ -11,14 +12,14 @@ error BuyerWhitelist__ExceedsMaxBatchSize();
 error BuyerWhitelist__ZeroAddress();
 error BuyerWhitelist__EmptyCalldata();
 
-contract BuyerWhitelistFacet {
+contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
 
     /// @notice Batch adds buyer addresses to a listing's whitelist.
     /// @param listingId The ID number of the Listing.
     /// @param allowedBuyers An array of buyer addresses to add.
-    function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
+    function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 len = allowedBuyers.length;
 
@@ -44,7 +45,7 @@ contract BuyerWhitelistFacet {
     /// @notice Batch removes buyer addresses from a listing's whitelist.
     /// @param listingId The ID number of the Listing.
     /// @param disallowedBuyers An array of buyer addresses to remove.
-    function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
+    function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 len = disallowedBuyers.length;
 
