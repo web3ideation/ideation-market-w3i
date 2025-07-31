@@ -6,7 +6,7 @@
     "compile": "hardhat compile",
     "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src",
     "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --checklist > slither_report.md",
-"echidna": "yarn hardhat clean && yarn hardhat compile --force && docker run --rm -v \"$(pwd):/project\" -w /project trailofbits/echidna echidna-test . --all-contracts --config echidna.yaml"
+"echidna": "echidna-test src --all-contracts --config audit/echidna.yaml"
   },
   "main": "index.js",
   "license": "MIT",
