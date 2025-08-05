@@ -1,0 +1,2 @@
+testMode: assertion
+testLimit: 500000   # more calls before stopping

@@ -6,7 +6,7 @@
     "compile": "hardhat compile",
     "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src",
     "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --checklist > slither_report.md",
-    "echidna": "echidna 4naly3er/contracts/src/**/*.sol --all-contracts --solc-args '--allow-paths .,4naly3er/contracts/src --via-ir --optimize' --config echidna.yaml"
+    "echidna": "echidna echidna/EchidnaHarness.sol --contract EchidnaHarness --solc-args '--allow-paths .,echidna/testsrc --via-ir --optimize' --config echidna/echidna.yaml"
   },
   "main": "index.js",
   "license": "MIT",
