@@ -30,16 +30,26 @@ contract DeployDiamond is Script {
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();
+        console.log("Deployed diamondInit contract at address:", address(diamondInit));
         DiamondLoupeFacet diamondLoupeFacet = new DiamondLoupeFacet();
+        console.log("Deployed diamondLoupeFacet contract at address:", address(diamondLoupeFacet));
         OwnershipFacet ownershipFacet = new OwnershipFacet();
+        console.log("Deployed ownershipFacet contract at address:", address(ownershipFacet));
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
+        console.log("Deployed ideationMarketFacet contract at address:", address(ideationMarketFacet));
         CollectionWhitelistFacet collectionWhitelistFacet = new CollectionWhitelistFacet();
+        console.log("Deployed collectionWhitelistFacet contract at address:", address(collectionWhitelistFacet));
         BuyerWhitelistFacet buyerWhitelistFacet = new BuyerWhitelistFacet();
+        console.log("Deployed buyerWhitelistFacet contract at address:", address(buyerWhitelistFacet));
         GetterFacet getterFacet = new GetterFacet();
+        console.log("Deployed getterFacet contract at address:", address(getterFacet));
+        DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
+        console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
 
         // Deploy the diamond with the initial facet cut for DiamondCutFacet
-        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(new DiamondCutFacet()));
-        console.log("Deployed Diamond.sol at address:", address(ideationMarketDiamond));
+        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(diamondCutFacet));
+        console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
+        console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
@@ -129,7 +139,10 @@ contract DeployDiamond is Script {
             cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );
 
-        console.log("Diamond cuts complete. Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
+        // Post-deployment sanity check for the total of the 7 facets
+        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 7, "Diamond cut failed");
+
+        console.log("Diamond cuts complete");
 
         vm.stopBroadcast();
     }
