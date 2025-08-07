@@ -447,27 +447,21 @@ contract IdeationMarketFacet {
                 ? desiredErc1155Holder // ERC-1155 swap
                 : desiredOwner; // ERC-721 swap
 
-            uint256 len = deprecatedListingArray.length;
+            for (uint256 i = deprecatedListingArray.length; i != 0;) {
+                unchecked {
+                    i--;
+                }
+                uint128 depId = deprecatedListingArray[i];
 
-            for (uint256 i = 0; i < len;) {
-                if (
-                    s.listings[deprecatedListingArray[i]].seller == obsoleteSeller
-                        && remainingBalance <= s.listings[deprecatedListingArray[i]].erc1155Quantity
-                ) {
-                    delete s.listings[deprecatedListingArray[i]];
+                if (s.listings[depId].seller == obsoleteSeller && remainingBalance <= s.listings[depId].erc1155Quantity)
+                {
+                    // remove the obsolete listing
+                    delete s.listings[depId];
                     emit ListingCanceled(
-                        deprecatedListingArray[i],
-                        listedItem.desiredTokenAddress,
-                        listedItem.desiredTokenId,
-                        obsoleteSeller,
-                        address(this)
+                        depId, listedItem.desiredTokenAddress, listedItem.desiredTokenId, obsoleteSeller, address(this)
                     );
                     deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
                     deprecatedListingArray.pop();
-                } else {
-                    unchecked {
-                        i++;
-                    }
                 }
             }
         }
@@ -757,15 +751,13 @@ contract IdeationMarketFacet {
         delete s.listings[listingId];
 
         uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
-        uint256 len = listingArray.length;
-        for (uint256 i = 0; i < len;) {
+        for (uint256 i = listingArray.length; i != 0;) {
+            unchecked {
+                i--;
+            }
             if (listingArray[i] == listingId) {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
-            } else {
-                unchecked {
-                    i++;
-                }
             }
         }
     }
