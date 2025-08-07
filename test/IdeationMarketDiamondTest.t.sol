@@ -4,46 +4,24 @@ pragma solidity ^0.8.28;
 import "forge-std/Test.sol";
 
 // Facets and library imports from the marketplace project
-import {IdeationMarketDiamond, Diamond__FunctionDoesNotExist} from "../src/IdeationMarketDiamond.sol";
-import {DiamondInit} from "../src/upgradeInitializers/DiamondInit.sol";
-import {DiamondCutFacet} from "../src/facets/DiamondCutFacet.sol";
-import {DiamondLoupeFacet} from "../src/facets/DiamondLoupeFacet.sol";
-// Import facets along with custom error types used in tests
-import {OwnershipFacet, Ownership__CallerIsNotThePendingOwner} from "../src/facets/OwnershipFacet.sol";
-import {
-    IdeationMarketFacet,
-    IdeationMarket__CollectionNotWhitelisted,
-    IdeationMarket__AlreadyListed,
-    IdeationMarket__PriceNotMet,
-    IdeationMarket__NotAuthorizedOperator,
-    IdeationMarket__NotAuthorizedToCancel,
-    IdeationMarket__StillApproved
-} from "../src/facets/IdeationMarketFacet.sol";
-import {
-    CollectionWhitelistFacet,
-    CollectionWhitelist__AlreadyWhitelisted,
-    CollectionWhitelist__NotWhitelisted,
-    CollectionWhitelist__ZeroAddress
-} from "../src/facets/CollectionWhitelistFacet.sol";
-import {
-    BuyerWhitelistFacet,
-    BuyerWhitelist__ListingDoesNotExist,
-    BuyerWhitelist__NotAuthorizedOperator,
-    BuyerWhitelist__ExceedsMaxBatchSize,
-    BuyerWhitelist__ZeroAddress,
-    BuyerWhitelist__EmptyCalldata
-} from "../src/facets/BuyerWhitelistFacet.sol";
-import {GetterFacet, Getter__ListingNotFound, Getter__NoActiveListings} from "../src/facets/GetterFacet.sol";
-
-import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
-import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
-import {IERC165} from "../src/interfaces/IERC165.sol";
-import {IERC173} from "../src/interfaces/IERC173.sol";
-import {IERC721} from "../src/interfaces/IERC721.sol";
-import {IERC1155} from "../src/interfaces/IERC1155.sol";
-import {IERC2981} from "../src/interfaces/IERC2981.sol";
-
-import {LibAppStorage, AppStorage, Listing} from "../src/libraries/LibAppStorage.sol";
+import "../src/IdeationMarketDiamond.sol";
+import "../src/upgradeInitializers/DiamondInit.sol";
+import "../src/facets/DiamondCutFacet.sol";
+import "../src/facets/DiamondLoupeFacet.sol";
+import "../src/facets/OwnershipFacet.sol";
+import "../src/facets/IdeationMarketFacet.sol";
+import "../src/facets/CollectionWhitelistFacet.sol";
+import "../src/facets/BuyerWhitelistFacet.sol";
+import "../src/facets/GetterFacet.sol";
+import "../src/interfaces/IDiamondCutFacet.sol";
+import "../src/interfaces/IDiamondLoupeFacet.sol";
+import "../src/interfaces/IERC165.sol";
+import "../src/interfaces/IERC173.sol";
+import "../src/interfaces/IERC721.sol";
+import "../src/interfaces/IERC1155.sol";
+import "../src/interfaces/IERC2981.sol";
+import "../src/libraries/LibAppStorage.sol";
+import "../src/libraries/LibDiamond.sol";
 
 /*
  * @title IdeationMarketDiamondTest
@@ -337,7 +315,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
         // Non‑owner cannot add
         vm.startPrank(buyer);
-        vm.expectRevert();
+        vm.expectRevert("LibDiamond: Must be contract owner");
         collections.addWhitelistedCollection(address(erc1155));
         vm.stopPrank();
         // Remove by owner
@@ -494,11 +472,9 @@ contract IdeationMarketDiamondTest is Test {
     function testCreateListingERC721Reverts() public {
         // Require whitelisted collection
         vm.startPrank(seller);
-        // Expect a revert because the collection is not whitelisted. We do not
-        // assert a specific error selector here because the underlying
-        // implementation may encode custom errors differently.  Any revert
-        // suffices to indicate the operation failed as expected.
-        vm.expectRevert();
+        // Expect a revert because the collection is not whitelisted. The createListing
+        // function will revert with IdeationMarket__CollectionNotWhitelisted(tokenAddress).
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
         );
@@ -509,10 +485,9 @@ contract IdeationMarketDiamondTest is Test {
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
         );
-        // Second time should revert because the NFT has already been listed.  We
-        // do not assert a specific error selector; any revert indicates
-        // correct behaviour.
-        vm.expectRevert();
+        // Second time should revert because the NFT has already been listed.
+        // The createListing function will revert with IdeationMarket__AlreadyListed().
+        vm.expectRevert(IdeationMarket__AlreadyListed.selector);
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
         );
@@ -526,23 +501,23 @@ contract IdeationMarketDiamondTest is Test {
         vm.deal(buyer, 10 ether);
         // Buyer attempts purchase with insufficient value
         vm.startPrank(buyer);
-        // Expect revert because the sent value does not cover the price.  We do not
-        // assert a specific error selector; any revert indicates the purchase
-        // was rejected due to insufficient payment.
-        vm.expectRevert();
+        // Expect revert because the sent value does not cover the price.
+        // Expect revert due to insufficient payment; the price is 1 ETH but only 0.5 ETH is sent.
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, id, 1 ether, 0.5 ether));
         market.purchaseListing{value: 0.5 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
-        // Attempt a full purchase.  Due to the same out-of-bounds bug that affects
-        // cancelling and cleaning listings, the call will revert with a panic
-        // rather than completing successfully.  We therefore expect a revert on
-        // this call and afterwards assert that the listing still exists.
+        // Attempt a full purchase. This should succeed and transfer the token to the buyer.
         vm.startPrank(buyer);
-        vm.expectRevert();
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
-        // Listing should still exist because the purchase did not complete
-        Listing memory l = getter.getListingByListingId(id);
-        assertEq(l.listingId, id);
+        // The listing should be removed after purchase.
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+        // Ownership of the token should now be with the buyer.
+        assertEq(erc721.ownerOf(1), buyer);
+        // Seller's proceeds should equal sale price minus the innovation fee (1% of 1 ether).
+        uint256 sellerProceeds = getter.getProceeds(seller);
+        assertEq(sellerProceeds, 0.99 ether);
     }
 
     function testUpdateListing() public {
@@ -571,18 +546,17 @@ contract IdeationMarketDiamondTest is Test {
 
     function testCancelListing() public {
         uint128 id = _createListingERC721(false, new address[](0));
-        // 1) Unauthorized caller must revert with NotAuthorizedToCancel
+        // An unauthorized caller should revert with the NotAuthorizedToCancel error.
         vm.startPrank(buyer);
         vm.expectRevert(IdeationMarket__NotAuthorizedToCancel.selector);
         market.cancelListing(id);
         vm.stopPrank();
-
-        // 2) Seller cancels successfully
+        // The seller can cancel the listing successfully.
         vm.startPrank(seller);
         market.cancelListing(id);
         vm.stopPrank();
-
-        // Listing is now gone: getter must revert with ListingNotFound(listingId)
+        // After cancellation, the listing should no longer exist. Expect the
+        // GetterFacet to revert with Getter__ListingNotFound(listingId).
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
     }
@@ -590,22 +564,21 @@ contract IdeationMarketDiamondTest is Test {
     function testCleanListing() public {
         // Create listing
         uint128 id = _createListingERC721(false, new address[](0));
-        // 1) While the NFT is still approved, cleanListing should revert with StillApproved
+        // With approvals still present, cleanListing should revert with the StillApproved error.
         vm.startPrank(operator);
         vm.expectRevert(IdeationMarket__StillApproved.selector);
         market.cleanListing(id);
         vm.stopPrank();
 
-        // 2) Withdraw the approval → now cleanListing succeeds
+        // Remove approval and call cleanListing again. This should succeed and remove the listing.
         vm.startPrank(seller);
         erc721.approve(address(0), 1);
         vm.stopPrank();
-
         vm.startPrank(operator);
         market.cleanListing(id);
         vm.stopPrank();
-
-        // And the listing is removed
+        // After cleaning, the listing should no longer exist. Expect the
+        // GetterFacet to revert with Getter__ListingNotFound(listingId).
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
     }
