@@ -213,7 +213,7 @@ contract IdeationMarketDiamondTest is Test {
     // Diamond & Loupe Tests
     // -------------------------------------------------------------------------
 
-    function testDiamondInitialization() public {
+    function testDiamondInitialization() public view {
         // Owner should be set correctly via IERC173
         assertEq(IERC173(address(diamond)).owner(), owner);
         // Innovation fee and max batch size set in initializer
@@ -225,7 +225,7 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(getter.getPendingOwner(), address(0));
     }
 
-    function testDiamondLoupeFacets() public {
+    function testDiamondLoupeFacets() public view {
         // The diamond should have the cut facet plus six additional facets = 7
         IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
         // After deployment the diamond has the diamondCut facet plus six added facets
@@ -236,7 +236,7 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(cutAddr, diamondCutFacetAddr);
     }
 
-    function testSupportsInterface() public {
+    function testSupportsInterface() public view {
         // Diamond supports ERC165, cut, loupe and ownership interfaces set in initializer
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC165).interfaceId));
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondCutFacet).interfaceId));
