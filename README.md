@@ -1,7 +1,7 @@
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+ 
 ## Third-Party Libraries
 
 This project includes code from the following open-source project(s):
