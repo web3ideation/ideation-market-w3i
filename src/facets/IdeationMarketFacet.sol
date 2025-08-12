@@ -178,6 +178,10 @@ contract IdeationMarketFacet {
 
         // check if the user is an authorized Operator
         if (erc1155Quantity > 0) {
+            // check that the quantity matches the token Type
+            if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                revert IdeationMarket__WrongQuantityParameter();
+            }
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized or the holder himself
             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
@@ -188,6 +192,10 @@ contract IdeationMarketFacet {
                 revert IdeationMarket__WrongErc1155HolderParameter();
             }
         } else {
+            // check that the quantity matches the token Type
+            if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+                revert IdeationMarket__WrongQuantityParameter();
+            }
             IERC721 token = IERC721(tokenAddress);
             address tokenHolder = token.ownerOf(tokenId);
             if (
@@ -226,17 +234,10 @@ contract IdeationMarketFacet {
         // if the interacting user is an approved Operator set the token Owner as the seller
         address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
 
-        // ensure the quantity matches the token Type and the MarketPlace has been Approved for transfer.
+        // ensure the MarketPlace has been Approved for transfer.
         if (erc1155Quantity > 0) {
-            if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
             requireERC1155Approval(tokenAddress, seller);
         } else {
-            if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
-
             requireERC721Approval(tokenAddress, tokenId);
         }
 
@@ -553,13 +554,25 @@ contract IdeationMarketFacet {
         uint256 tokenId = listedItem.tokenId;
         uint256 erc1155Quantity = listedItem.erc1155Quantity;
 
-        // check if the user is an authorized operator
+        // ensure the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
+        if (newErc1155Quantity > 0) {
+            if (erc1155Quantity == 0) {
+                revert IdeationMarket__WrongQuantityParameter();
+            }
+        } else {
+            if (erc1155Quantity > 0) {
+                revert IdeationMarket__WrongQuantityParameter();
+            }
+        }
+
+        // check if the user is an authorized operator and Use interface check to ensure the MarketPlace is still Approved for transfer
         if (newErc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized
             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
+            requireERC1155Approval(tokenAddress, seller);
         } else {
             IERC721 token = IERC721(tokenAddress);
             address tokenHolder = token.ownerOf(tokenId);
@@ -569,6 +582,7 @@ contract IdeationMarketFacet {
             ) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
+            requireERC721Approval(tokenAddress, tokenId);
         }
 
         // check if the Collection is still Whitelisted - even tho it would not have been able to get listed in the first place, if the collection has been revoked in the meantime, updating would cancel the listing
@@ -595,19 +609,6 @@ contract IdeationMarketFacet {
         validateSwapParameters(
             tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredErc1155Quantity
         );
-
-        // Use interface check to ensure the MarketPlace is still Approved for transfer and the newQuantity is still valid according to the token Standard ( 0 for ERC721, >0 for ERC1155)
-        if (newErc1155Quantity > 0) {
-            if (erc1155Quantity == 0) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
-            requireERC1155Approval(tokenAddress, seller);
-        } else {
-            if (erc1155Quantity > 0) {
-                revert IdeationMarket__WrongQuantityParameter();
-            }
-            requireERC721Approval(tokenAddress, tokenId);
-        }
 
         listedItem.price = newPrice;
         listedItem.desiredTokenAddress = newDesiredTokenAddress;
