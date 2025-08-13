@@ -583,6 +583,319 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
+    /// -----------------------------------------------------------------------
+    /// ERC1155 purchase-time quantity rules
+    /// -----------------------------------------------------------------------
+
+    function testERC1155BuyingMoreThanListedReverts() public {
+        // Whitelist ERC1155 and approve the marketplace
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        // List quantity = 10, price = 10 ether, partial buys enabled (divisible)
+        market.createListing(
+            address(erc1155),
+            1,
+            seller, // erc1155Holder
+            10 ether, // price
+            address(0),
+            0,
+            0, // desiredErc1155Quantity
+            10, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            true, // partialBuyEnabled
+            new address
+        );
+        vm.stopPrank();
+
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer tries to buy more than listed (11 > 10) → InvalidPurchaseQuantity
+        vm.deal(buyer, 20 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__InvalidPurchaseQuantity.selector);
+        market.purchaseListing{value: 20 ether}(
+            id,
+            10 ether, // expectedPrice
+            10, // expectedErc1155Quantity
+            address(0),
+            0,
+            0,
+            11, // erc1155PurchaseQuantity > listed
+            address(0)
+        );
+        vm.stopPrank();
+    }
+
+    function testERC1155PartialBuyDisabledReverts() public {
+        // Whitelist ERC1155 and approve the marketplace
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        // List quantity = 10, price = 10 ether, partial buys DISABLED
+        market.createListing(
+            address(erc1155),
+            1,
+            seller, // erc1155Holder
+            10 ether, // price
+            address(0),
+            0,
+            0, // desiredErc1155Quantity
+            10, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled (disabled)
+            new address
+        );
+        vm.stopPrank();
+
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer attempts partial buy (5 of 10) while partials are disabled
+        vm.deal(buyer, 10 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__PartialBuyNotPossible.selector);
+        market.purchaseListing{value: 5 ether}(
+            id,
+            10 ether, // expectedPrice
+            10, // expectedErc1155Quantity
+            address(0),
+            0,
+            0,
+            5, // partial purchase
+            address(0)
+        );
+        vm.stopPrank();
+    }
+
+    // listingId starts at 1 and increments
+    function testListingIdIncrements() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.startPrank(seller);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(address(erc721), 2, address(0), 2 ether, address(0), 0, 0, 0, false, false, new address);
+        vm.stopPrank();
+
+        // next id should be 3, last created is 2
+        assertEq(getter.getNextListingId(), 3);
+        Listing memory l1 = getter.getListingByListingId(1);
+        Listing memory l2 = getter.getListingByListingId(2);
+        assertEq(l1.listingId, 1);
+        assertEq(l2.listingId, 2);
+    }
+
+    // owner (diamond owner) can cancel any listing
+    function testOwnerCanCancelAnyListing() public {
+        uint128 id = _createListingERC721(false, new address);
+
+        // Owner cancels although not token owner nor approved
+        vm.startPrank(owner);
+        market.cancelListing(id);
+        vm.stopPrank();
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    // purchase fails if approval revoked between listing and purchase
+    function testPurchaseRevertsIfApprovalRevokedBeforeBuy() public {
+        uint128 id = _createListingERC721(false, new address);
+
+        // Revoke marketplace approval
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    // update keeps same listingId even with other activity in between
+    function testUpdateKeepsListingId() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // First listing (id=1)
+        vm.prank(seller);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        uint128 id1 = 1;
+
+        // Create & cancel another listing to disturb state
+        vm.prank(seller);
+        erc721.approve(address(diamond), 2);
+        vm.prank(seller);
+        market.createListing(address(erc721), 2, address(0), 2 ether, address(0), 0, 0, 0, false, false, new address);
+        uint128 id2 = 2;
+        vm.prank(seller);
+        market.cancelListing(id2);
+
+        // Update the first listing, id must remain 1
+        vm.prank(seller);
+        market.updateListing(id1, 3 ether, address(0), 0, 0, 0, false, false, new address);
+
+        Listing memory l = getter.getListingByListingId(id1);
+        assertEq(l.listingId, 1);
+        assertEq(l.price, 3 ether);
+    }
+
+    // whitelist of exactly MAX_BATCH succeeds on create; >MAX_BATCH reverts
+    function testCreateWithWhitelistExactlyMaxBatchSucceeds() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory buyersList = new address[](MAX_BATCH);
+        for (uint256 i = 0; i < buyersList.length; i++) {
+            buyersList[i] = vm.addr(10_000 + i);
+        }
+
+        vm.prank(seller);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, buyersList);
+
+        uint128 id = getter.getNextListingId() - 1;
+        // Spot check a couple of entries made it in
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[0]));
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[buyersList.length - 1]));
+    }
+
+    function testCreateWithWhitelistOverMaxBatchReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory tooMany = new address[](uint256(MAX_BATCH) + 1);
+        for (uint256 i = 0; i < tooMany.length; i++) {
+            tooMany[i] = vm.addr(20_000 + i);
+        }
+
+        vm.startPrank(seller);
+        vm.expectRevert(BuyerWhitelist__ExceedsMaxBatchSize.selector);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, tooMany);
+        vm.stopPrank();
+    }
+
+    // purchase-time royalty > proceeds reverts (listing itself may succeed)
+    function testPurchaseRevertsWhenRoyaltyExceedsProceeds() public {
+        // High-royalty token (e.g., 99.5%)
+        MockERC721Royalty royaltyNft = new MockERC721Royalty();
+        royaltyNft.mint(seller, 1);
+        royaltyNft.setRoyalty(address(0xB0B), 99_500);
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(royaltyNft));
+
+        vm.prank(seller);
+        royaltyNft.approve(address(diamond), 1);
+
+        // Listing will succeed with your current code (no listing-time check)
+        vm.prank(seller);
+        market.createListing(
+            address(royaltyNft), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 2 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__RoyaltyFeeExceedsProceeds.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    // swap with same NFT reverts
+    function testSwapWithSameNFTReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__NoSwapForSameToken.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            0, // price 0 (swap-only) ok
+            address(erc721),
+            1,
+            0, // same token desired
+            0,
+            false,
+            false,
+            new address
+        );
+        vm.stopPrank();
+    }
+
+    // ERC1155 createListing wrong quantity flags → should revert with WrongQuantityParameter
+    // NOTE: With your current code, this may fail earlier due to calling ERC1155 methods before checking interface.
+    function testWrongQuantityParameterPaths() public {
+        // Try to list ERC721 but with erc1155Quantity > 0
+        _whitelistCollectionAndApproveERC721();
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            seller,
+            1 ether,
+            address(0),
+            0,
+            0,
+            5, // wrongly treating ERC721 as ERC1155
+            false,
+            false,
+            new address
+        );
+        vm.stopPrank();
+
+        // List ERC1155 but with erc1155Quantity == 0
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            1 ether,
+            address(0),
+            0,
+            0,
+            0, // wrongly treating ERC1155 as ERC721
+            false,
+            false,
+            new address
+        );
+        vm.stopPrank();
+    }
+
+    // withdraw with 0 balance reverts
+    function testWithdrawZeroBalanceReverts() public {
+        vm.expectRevert(IdeationMarket__NoProceeds.selector);
+        market.withdrawProceeds();
+    }
+
+    // buyer not on whitelist cannot purchase when whitelist enabled
+    function testWhitelistPreventsPurchase() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address;
+        allowed[0] = operator; // NOT buyer
+
+        vm.prank(seller);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, allowed);
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, buyer));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
     // End of test contract
 }
 
@@ -686,5 +999,81 @@ contract MockERC1155 {
         require(_balances[id][from] >= amount, "insufficient");
         _balances[id][from] -= amount;
         _balances[id][to] += amount;
+    }
+}
+
+// Minimal ERC721 + ERC2981 mock with adjustable royalty (denominator = 100_000)
+contract MockERC721Royalty {
+    mapping(uint256 => address) internal _owners;
+    mapping(uint256 => address) internal _tokenApprovals;
+    mapping(address => mapping(address => bool)) internal _operatorApprovals;
+    mapping(address => uint256) internal _balances;
+
+    address public royaltyReceiver;
+    uint256 public royaltyBps; // out of 100_000
+
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC721).interfaceId
+            || interfaceId == type(IERC2981).interfaceId;
+    }
+
+    function mint(address to, uint256 tokenId) external {
+        _owners[tokenId] = to;
+        _balances[to] += 1;
+    }
+
+    function setRoyalty(address receiver, uint256 bps) external {
+        royaltyReceiver = receiver;
+        royaltyBps = bps; // e.g., 99_500 = 99.5%
+    }
+
+    function royaltyInfo(uint256, /*tokenId*/ uint256 salePrice) external view returns (address, uint256) {
+        uint256 amount = salePrice * royaltyBps / 100_000;
+        return (royaltyReceiver, amount);
+    }
+
+    function balanceOf(address owner) external view returns (uint256) {
+        return _balances[owner];
+    }
+
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return _owners[tokenId];
+    }
+
+    function getApproved(uint256 tokenId) external view returns (address) {
+        return _tokenApprovals[tokenId];
+    }
+
+    function approve(address to, uint256 tokenId) external {
+        require(msg.sender == _owners[tokenId], "not owner");
+        _tokenApprovals[tokenId] = to;
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _operatorApprovals[msg.sender][operator] = approved;
+    }
+
+    function isApprovedForAll(address owner, address operator) external view returns (bool) {
+        return _operatorApprovals[owner][operator];
+    }
+
+    function transferFrom(address from, address to, uint256 tokenId) public {
+        require(_owners[tokenId] == from, "not owner");
+        require(
+            msg.sender == from || msg.sender == _tokenApprovals[tokenId] || _operatorApprovals[from][msg.sender],
+            "not approved"
+        );
+        _owners[tokenId] = to;
+        _balances[from] -= 1;
+        _balances[to] += 1;
+        _tokenApprovals[tokenId] = address(0);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external {
+        transferFrom(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
+        transferFrom(from, to, tokenId);
     }
 }

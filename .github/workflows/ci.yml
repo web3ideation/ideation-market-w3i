@@ -5,47 +5,61 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Use your local profile (via_ir = true in [profile.default])
 env:
-  FOUNDRY_PROFILE: ci
+  FOUNDRY_PROFILE: default
 
 jobs:
   check:
-    strategy:
-      fail-fast: true
-
     name: Foundry project
     runs-on: ubuntu-latest
+
+    # <<< key part: run all steps inside Ubuntu 20.04 like your local machine
+    container:
+      image: ubuntu:20.04
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Prepare apt
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git python3 jq xz-utils
+          update-ca-certificates
+
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: nightly
-
-      - name: Show Forge version
+      - name: Install Foundry (stable, same as local)
         run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+          ~/.foundry/bin/foundryup
+
+      - name: Show versions & config
+        run: |
+          cat /etc/os-release
           forge --version
+          forge config
 
       - name: Run Forge fmt
-        run: |
-          forge fmt --check
+        run: forge fmt --check
         id: fmt
 
-      - name: Run Forge build
+      - name: Run Forge build (pin solc exactly)
         run: |
-          forge build --sizes
+          svm install 0.8.28
+          forge clean
+          forge build --sizes --use 0.8.28 --no-auto-detect
         id: build
 
       - name: Run selector clash check
         run: |
-         chmod +x script/check-selectors.sh
-         script/check-selectors.sh
+          chmod +x script/check-selectors.sh
+          script/check-selectors.sh
         id: selectorClash
 
-      - name: Run Forge tests
-        run: |
-          forge test -vvv
+      - name: Run Forge tests (pin solc exactly)
+        run: forge test -vvv --use 0.8.28 --no-auto-detect
         id: test
