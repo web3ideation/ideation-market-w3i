@@ -5,15 +5,19 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Ensure CI uses the same Foundry profile as your local default (with via_ir = true)
+# Force CI to match your local build settings exactly.
 env:
   FOUNDRY_PROFILE: default
+  FOUNDRY_SOLC: "0.8.28"
+  FOUNDRY_VIA_IR: "true"
+  FOUNDRY_OPTIMIZER: "true"
+  FOUNDRY_OPTIMIZER_RUNS: "5000"
+  FOUNDRY_EVM_VERSION: "cancun"
 
 jobs:
   check:
     strategy:
       fail-fast: true
-
     name: Foundry project
     runs-on: ubuntu-latest
 
