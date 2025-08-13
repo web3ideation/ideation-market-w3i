@@ -6,15 +6,17 @@ on:
   workflow_dispatch:
 
 env:
+  # Use your default profile (via_ir = true) from foundry.toml
   FOUNDRY_PROFILE: default
-  # OPTIONAL: set this to your local forge commit to be 100% identical.
-  # Find it with: `forge --version` (it prints a commit hash).
-  FOUNDRY_COMMIT: "v1.4.0"  # or a commit like "e8aac2f"
+  # Pin Foundry to your local commit so CI matches your box exactly
+  FOUNDRY_COMMIT: "70ef94a"
 
 jobs:
   check:
     name: Foundry project
     runs-on: ubuntu-latest
+
+    # Run everything inside Ubuntu 20.04 (matches your local OS)
     container:
       image: ubuntu:20.04
 
@@ -33,20 +35,25 @@ jobs:
         with:
           submodules: recursive
 
-      # Build Foundry from source so it links to 20.04's glibc (2.31)
       - name: Install Rust toolchain
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
-      - name: Build Foundry (forge/cast/anvil/chisel)
+      - name: Build Foundry (forge/cast/anvil/chisel) from source
         run: |
-          git clone https://github.com/foundry-rs/foundry.git
+          set -euo pipefail
+          git clone --filter=blob:none https://github.com/foundry-rs/foundry.git
           cd foundry
-          # Checkout your exact local version (tag or commit)
-          git checkout "${FOUNDRY_COMMIT}"
-          $HOME/.cargo/bin/cargo build --release --locked \
-            -p forge -p cast -p anvil -p chisel
+          git fetch --tags --force
+          if [ -n "${FOUNDRY_COMMIT:-}" ] && git rev-parse -q --verify "${FOUNDRY_COMMIT}^{commit}" >/dev/null; then
+            git checkout --quiet "${FOUNDRY_COMMIT}"
+          else
+            LATEST_TAG="$(git describe --tags --abbrev=0)"
+            echo "Using Foundry tag: ${LATEST_TAG}"
+            git checkout --quiet "${LATEST_TAG}"
+          fi
+          "$HOME/.cargo/bin/cargo" build --release --locked -p forge -p cast -p anvil -p chisel
           echo "$PWD/target/release" >> "$GITHUB_PATH"
 
       - name: Show versions & config
