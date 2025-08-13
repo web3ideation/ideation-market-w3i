@@ -5,16 +5,16 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Use your local profile (via_ir = true in [profile.default])
 env:
   FOUNDRY_PROFILE: default
+  # OPTIONAL: set this to your local forge commit to be 100% identical.
+  # Find it with: `forge --version` (it prints a commit hash).
+  FOUNDRY_COMMIT: "v1.4.0"  # or a commit like "e8aac2f"
 
 jobs:
   check:
     name: Foundry project
     runs-on: ubuntu-latest
-
-    # <<< key part: run all steps inside Ubuntu 20.04 like your local machine
     container:
       image: ubuntu:20.04
 
@@ -23,7 +23,9 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates curl git python3 jq xz-utils
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git build-essential pkg-config libssl-dev \
+            clang cmake llvm make unzip xz-utils python3 jq
           update-ca-certificates
 
       - name: Checkout
@@ -31,11 +33,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install Foundry (stable, same as local)
+      # Build Foundry from source so it links to 20.04's glibc (2.31)
+      - name: Install Rust toolchain
         run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
-          ~/.foundry/bin/foundryup
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Foundry (forge/cast/anvil/chisel)
+        run: |
+          git clone https://github.com/foundry-rs/foundry.git
+          cd foundry
+          # Checkout your exact local version (tag or commit)
+          git checkout "${FOUNDRY_COMMIT}"
+          $HOME/.cargo/bin/cargo build --release --locked \
+            -p forge -p cast -p anvil -p chisel
+          echo "$PWD/target/release" >> "$GITHUB_PATH"
 
       - name: Show versions & config
         run: |
