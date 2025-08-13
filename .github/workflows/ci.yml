@@ -6,79 +6,48 @@ on:
   workflow_dispatch:
 
 env:
-  # Use your default profile (via_ir = true) from foundry.toml
-  FOUNDRY_PROFILE: default
-  # Pin Foundry to your local commit so CI matches your box exactly
-  FOUNDRY_COMMIT: "70ef94a"
+  FOUNDRY_PROFILE: ci
+  SKIP_FORGE: 'true'   # <- flip to 'false' later to re-enable Foundry steps
+
 
 jobs:
   check:
+    strategy:
+      fail-fast: true
+
     name: Foundry project
     runs-on: ubuntu-latest
-
-    # Run everything inside Ubuntu 20.04 (matches your local OS)
-    container:
-      image: ubuntu:20.04
-
     steps:
-      - name: Prepare apt
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y --no-install-recommends \
-            ca-certificates curl git build-essential pkg-config libssl-dev \
-            clang cmake llvm make unzip xz-utils python3 jq
-          update-ca-certificates
-
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Rust toolchain
-        run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
 
-      - name: Build Foundry (forge/cast/anvil/chisel) from source
+      - name: Show Forge version
         run: |
-          set -euo pipefail
-          git clone --filter=blob:none https://github.com/foundry-rs/foundry.git
-          cd foundry
-          git fetch --tags --force
-          if [ -n "${FOUNDRY_COMMIT:-}" ] && git rev-parse -q --verify "${FOUNDRY_COMMIT}^{commit}" >/dev/null; then
-            git checkout --quiet "${FOUNDRY_COMMIT}"
-          else
-            LATEST_TAG="$(git describe --tags --abbrev=0)"
-            echo "Using Foundry tag: ${LATEST_TAG}"
-            git checkout --quiet "${LATEST_TAG}"
-          fi
-          "$HOME/.cargo/bin/cargo" build --release --locked -p forge -p cast -p anvil -p chisel
-          echo "$PWD/target/release" >> "$GITHUB_PATH"
-
-      - name: Show versions & config
-        run: |
-          cat /etc/os-release
           forge --version
-          forge config
 
       - name: Run Forge fmt
-        run: forge fmt --check
+        run: |
+          forge fmt --check
         id: fmt
 
-      - name: Run Forge build (pin solc exactly)
+      - name: Run Forge build
         run: |
-          svm install 0.8.28
-          forge clean
-          forge build --sizes --use 0.8.28 --no-auto-detect
+          forge build --sizes
         id: build
 
       - name: Run selector clash check
         run: |
-          chmod +x script/check-selectors.sh
-          script/check-selectors.sh
+         chmod +x script/check-selectors.sh
+         script/check-selectors.sh
         id: selectorClash
 
-      - name: Run Forge tests (pin solc exactly)
-        run: forge test -vvv --use 0.8.28 --no-auto-detect
+      - name: Run Forge tests
+        run: |
+          forge test -vvv
         id: test
