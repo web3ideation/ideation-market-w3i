@@ -5,8 +5,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Ensure CI uses the same Foundry profile as your local default (with via_ir = true)
 env:
-  FOUNDRY_PROFILE: ci
+  FOUNDRY_PROFILE: default
 
 jobs:
   check:
@@ -15,19 +16,22 @@ jobs:
 
     name: Foundry project
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install Foundry
+      - name: Install Foundry (stable)
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
 
-      - name: Show Forge version
+      - name: Show versions & config
         run: |
           forge --version
+          forge config
 
       - name: Run Forge fmt
         run: |
@@ -41,8 +45,8 @@ jobs:
 
       - name: Run selector clash check
         run: |
-         chmod +x script/check-selectors.sh
-         script/check-selectors.sh
+          chmod +x script/check-selectors.sh
+          script/check-selectors.sh
         id: selectorClash
 
       - name: Run Forge tests
