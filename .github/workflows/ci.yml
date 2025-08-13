@@ -5,21 +5,17 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Force CI to match your local build settings exactly.
+# Use the same profile as local (your [profile.default] has via_ir = true)
 env:
   FOUNDRY_PROFILE: default
-  FOUNDRY_SOLC: "0.8.28"
-  FOUNDRY_VIA_IR: "true"
-  FOUNDRY_OPTIMIZER: "true"
-  FOUNDRY_OPTIMIZER_RUNS: "5000"
-  FOUNDRY_EVM_VERSION: "cancun"
 
 jobs:
   check:
+    name: Foundry project
+    # Pin the runner to avoid ubuntu-latest drift (24.04). 22.04 is stable on Actions.
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
-    name: Foundry project
-    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -27,24 +23,30 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Show runner OS
+        run: |
+          cat /etc/os-release
+          uname -a
+
       - name: Install Foundry (stable)
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: stable
 
-      - name: Show versions & config
+      - name: Show Foundry versions & config
         run: |
           forge --version
           forge config
+          svm which 0.8.28 || true
 
       - name: Run Forge fmt
-        run: |
-          forge fmt --check
+        run: forge fmt --check
         id: fmt
 
-      - name: Run Forge build
+      - name: Run Forge build (pin solc exactly)
         run: |
-          forge build --sizes
+          forge clean
+          forge build --sizes --use 0.8.28 --no-auto-detect
         id: build
 
       - name: Run selector clash check
@@ -53,7 +55,6 @@ jobs:
           script/check-selectors.sh
         id: selectorClash
 
-      - name: Run Forge tests
-        run: |
-          forge test -vvv
+      - name: Run Forge tests (pin solc exactly)
+        run: forge test -vvv --use 0.8.28 --no-auto-detect
         id: test
