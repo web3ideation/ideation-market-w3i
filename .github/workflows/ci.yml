@@ -9,7 +9,6 @@ env:
   FOUNDRY_PROFILE: ci
   SKIP_FORGE: 'true'   # <- flip to 'false' later to re-enable Foundry steps
 
-
 jobs:
   check:
     strategy:
@@ -23,31 +22,37 @@ jobs:
           submodules: recursive
 
       - name: Install Foundry
+        if: ${{ env.SKIP_FORGE != 'true' }}
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
 
       - name: Show Forge version
+        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge --version
 
       - name: Run Forge fmt
+        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge fmt --check
         id: fmt
 
       - name: Run Forge build
+        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge build --sizes
         id: build
 
       - name: Run selector clash check
+        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
-         chmod +x script/check-selectors.sh
-         script/check-selectors.sh
+          chmod +x script/check-selectors.sh
+          script/check-selectors.sh
         id: selectorClash
 
       - name: Run Forge tests
+        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge test -vvv
         id: test
