@@ -38,16 +38,6 @@ import "../src/libraries/LibDiamond.sol";
  * as intended.
  */
 contract IdeationMarketDiamondTest is Test {
-    // Precomputed error selectors for custom errors used in this test suite.  We define
-    // these manually rather than rely on imported error names because we observed
-    // mismatches between the imported constants and the actual selector values during
-    // testing.  Each selector is calculated as the first four bytes of the keccak256
-    // hash of the error signature.
-    bytes4 private constant COLLECTION_NOT_WHITELISTED_SEL =
-        bytes4(keccak256("IdeationMarket__CollectionNotWhitelisted(address)"));
-    bytes4 private constant ALREADY_LISTED_SEL = bytes4(keccak256("IdeationMarket__AlreadyListed()"));
-    bytes4 private constant PRICE_NOT_MET_SEL =
-        bytes4(keccak256("IdeationMarket__PriceNotMet(uint128,uint256,uint256)"));
     IdeationMarketDiamond internal diamond;
 
     // Cached facet references for convenience
@@ -403,7 +393,7 @@ contract IdeationMarketDiamondTest is Test {
         for (uint256 i = 0; i < largeList.length; i++) {
             largeList[i] = vm.addr(0x2000 + i);
         }
-        vm.startPrank(address(diamond));
+        vm.startPrank(seller);
         vm.expectRevert(BuyerWhitelist__ExceedsMaxBatchSize.selector);
         buyers.addBuyerWhitelistAddresses(listingId, largeList);
         vm.stopPrank();
@@ -903,6 +893,206 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
+    function testERC1155PartialBuyHappyPath() public {
+        // Whitelist & approve
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // List qty=10, price=10 ETH, partials enabled
+        vm.prank(seller);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer buys 4 → purchasePrice=4 ETH; remains: qty=6, price=6 ETH
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 4 ether}(id, 10 ether, 10, address(0), 0, 0, 4, address(0));
+
+        // Listing mutated correctly
+        Listing memory l = getter.getListingByListingId(id);
+        assertEq(l.erc1155Quantity, 6);
+        assertEq(l.price, 6 ether);
+
+        // Proceeds reflect fee (1% default): seller gets 3.96 ETH
+        assertEq(getter.getProceeds(seller), 3.96 ether);
+        assertEq(getter.getProceeds(owner), 0.04 ether);
+    }
+
+    function testInnovationFeeUpdateSemantics() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Listing #1 under initial fee (1000 = 1%)
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id1 = getter.getNextListingId() - 1;
+        assertEq(getter.getListingByListingId(id1).feeRate, 1000);
+
+        // Update fee to 2.5% and create Listing #2 using new fee
+        vm.prank(owner);
+        market.setInnovationFee(2500);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 2);
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 2, address(0), 2 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id2 = getter.getNextListingId() - 1;
+        assertEq(getter.getListingByListingId(id2).feeRate, 2500);
+
+        // Listing #1 still has old fee until updated
+        assertEq(getter.getListingByListingId(id1).feeRate, 1000);
+
+        // Updating #1 "refreshes" fee to current (2500)
+        vm.prank(seller);
+        market.updateListing(id1, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        assertEq(getter.getListingByListingId(id1).feeRate, 2500);
+    }
+
+    function testExcessPaymentCreditAndWithdraw() public {
+        uint128 id = _createListingERC721(false, new address[](0)); // price = 1 ETH
+
+        vm.deal(buyer, 3 ether);
+        uint256 balBefore = buyer.balance;
+
+        // Overpay 1.5 ETH → excess 0.5 ETH credited to buyer's proceeds
+        vm.prank(buyer);
+        market.purchaseListing{value: 1.5 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(getter.getProceeds(buyer), 0.5 ether);
+        // Seller 0.99, owner 0.01 (1% fee)
+        assertEq(getter.getProceeds(seller), 0.99 ether);
+        assertEq(getter.getProceeds(owner), 0.01 ether);
+
+        // Withdraw buyer credit → net spend becomes exactly 1 ETH
+        vm.prank(buyer);
+        market.withdrawProceeds();
+        uint256 balAfterBuyerWithdraw = buyer.balance;
+        assertEq(balBefore - balAfterBuyerWithdraw, 1 ether);
+
+        // Drain remaining proceeds; diamond balance should go to zero
+        vm.prank(owner);
+        market.withdrawProceeds();
+        vm.prank(seller);
+        market.withdrawProceeds();
+        assertEq(getter.getBalance(), 0);
+    }
+
+    function testGetterNoActiveListingsReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create & cancel listing
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+        vm.prank(seller);
+        market.cancelListing(id);
+
+        // No active listings → revert
+        vm.expectRevert(abi.encodeWithSelector(Getter__NoActiveListings.selector, address(erc721), 1));
+        getter.getListingsByNFT(address(erc721), 1);
+    }
+
+    function testUpdateAfterCollectionDeWhitelistingCancels() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // De-whitelist the collection
+        vm.prank(owner);
+        collections.removeWhitelistedCollection(address(erc721));
+
+        // Calling updateListing should cancel and return (no revert)
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+
+        // Listing is gone
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testWithdrawHappyPathWithRoyaltyAndOwner() public {
+        // Prepare royalty NFT (10%) and whitelist
+        MockERC721Royalty royaltyNft = new MockERC721Royalty();
+        royaltyNft.mint(seller, 1);
+        address royaltyReceiver = address(0xB0B);
+        royaltyNft.setRoyalty(royaltyReceiver, 10_000); // 10% of 100_000
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(royaltyNft));
+
+        // Approve & list for 1 ETH
+        vm.prank(seller);
+        royaltyNft.approve(address(diamond), 1);
+        vm.prank(seller);
+        market.createListing(
+            address(royaltyNft), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Purchase at 1 ETH
+        vm.deal(buyer, 2 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Fee math: fee(1%)=0.01; sellerProceeds=0.99; royalty(10%) of sale=0.1 → seller takes 0.89
+        assertEq(getter.getProceeds(owner), 0.01 ether);
+        assertEq(getter.getProceeds(royaltyReceiver), 0.1 ether);
+        assertEq(getter.getProceeds(seller), 0.89 ether);
+
+        // Withdraws transfer correctly and contract drains
+        uint256 sBefore = seller.balance;
+        uint256 oBefore = owner.balance;
+        uint256 rBefore = royaltyReceiver.balance;
+
+        vm.prank(royaltyReceiver);
+        market.withdrawProceeds();
+        vm.prank(owner);
+        market.withdrawProceeds();
+        vm.prank(seller);
+        market.withdrawProceeds();
+
+        assertEq(seller.balance - sBefore, 0.89 ether);
+        assertEq(owner.balance - oBefore, 0.01 ether);
+        assertEq(royaltyReceiver.balance - rBefore, 0.1 ether);
+        assertEq(getter.getBalance(), 0);
+    }
+
+    function testInvalidUnitPriceOnCreateReverts() public {
+        // ERC1155 listing with qty=3, price=10 (not divisible) and partials enabled → revert
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__InvalidUnitPrice.selector);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            10, // price
+            address(0),
+            0,
+            0,
+            3, // quantity
+            false,
+            true, // partialBuyEnabled
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
     // End of test contract
 }
 
@@ -974,6 +1164,22 @@ contract MockERC721 {
     function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
         transferFrom(from, to, tokenId);
     }
+
+    /// Trap: someone called the ERC1155 balanceOf on an ERC721 mock.
+    function balanceOf(address, /*account*/ uint256 /*id*/ ) external pure returns (uint256) {
+        revert("MockERC721: ERC1155.balanceOf(account,id) called on ERC721");
+    }
+
+    /// Trap: someone called the 5-arg ERC1155 safeTransferFrom on an ERC721 mock.
+    function safeTransferFrom(
+        address, /*from*/
+        address, /*to*/
+        uint256, /*id*/
+        uint256, /*amount*/
+        bytes calldata /*data*/
+    ) external pure {
+        revert("MockERC721: ERC1155.safeTransferFrom used on ERC721");
+    }
 }
 
 // A minimal ERC‑1155 implementing balance and approval logic
@@ -1006,6 +1212,29 @@ contract MockERC1155 {
         require(_balances[id][from] >= amount, "insufficient");
         _balances[id][from] -= amount;
         _balances[id][to] += amount;
+    }
+
+    /// Trap: someone called the ERC721 ownerOf on an ERC1155 mock.
+    function ownerOf(uint256 /*tokenId*/ ) external pure returns (address) {
+        revert("MockERC1155: ERC721.ownerOf called on ERC1155");
+    }
+
+    /// Trap: someone called the ERC721 getApproved on an ERC1155 mock.
+    function getApproved(uint256 /*tokenId*/ ) external pure returns (address) {
+        revert("MockERC1155: ERC721.getApproved called on ERC1155");
+    }
+
+    /// Trap: someone called the 3-arg ERC721 safeTransferFrom on an ERC1155 mock.
+    function safeTransferFrom(address, /*from*/ address, /*to*/ uint256 /*tokenId*/ ) external pure {
+        revert("MockERC1155: ERC721.safeTransferFrom(3) used on ERC1155");
+    }
+
+    /// Trap: someone called the 4-arg ERC721 safeTransferFrom on an ERC1155 mock.
+    function safeTransferFrom(address, /*from*/ address, /*to*/ uint256, /*tokenId*/ bytes calldata /*data*/ )
+        external
+        pure
+    {
+        revert("MockERC1155: ERC721.safeTransferFrom(4) used on ERC1155");
     }
 }
 
@@ -1082,5 +1311,19 @@ contract MockERC721Royalty {
 
     function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
         transferFrom(from, to, tokenId);
+    }
+
+    function balanceOf(address, /*account*/ uint256 /*id*/ ) external pure returns (uint256) {
+        revert("MockERC721Royalty: ERC1155.balanceOf(account,id) called on ERC721");
+    }
+
+    function safeTransferFrom(
+        address, /*from*/
+        address, /*to*/
+        uint256, /*id*/
+        uint256, /*amount*/
+        bytes calldata /*data*/
+    ) external pure {
+        revert("MockERC721Royalty: ERC1155.safeTransferFrom used on ERC721");
     }
 }
