@@ -671,6 +671,10 @@ contract IdeationMarketDiamondTest is Test {
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
         );
+
+        // Approve token #2 before creating its listing
+        erc721.approve(address(diamond), 2);
+
         market.createListing(
             address(erc721), 2, address(0), 2 ether, address(0), 0, 0, 0, false, false, new address[](0)
         );
@@ -880,10 +884,13 @@ contract IdeationMarketDiamondTest is Test {
     function testWhitelistPreventsPurchase() public {
         _whitelistCollectionAndApproveERC721();
 
+        // Whitelist someone else (not the buyer) so creation succeeds
+
+        address[] memory allowed = new address[](1);
+        allowed[0] = operator;
+
         vm.prank(seller);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, new address[](0)
-        );
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, allowed);
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
