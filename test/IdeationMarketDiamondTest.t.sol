@@ -1100,6 +1100,242 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
+    /// -----------------------------------------------------------------------
+    /// Diamond upgrade & owner auth tests
+    /// -----------------------------------------------------------------------
+
+    // Tests that only the contract owner can call diamondCut, and that
+    // selectors can be added, replaced and removed correctly.
+    function testDiamondCutAuthAndUpgradeFlow() public {
+        // Prepare a dummy facet with a version() function.
+        VersionFacetV1 v1 = new VersionFacetV1();
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = VersionFacetV1.version.selector;
+        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
+        addCut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(v1),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+
+        // Only the owner may call diamondCut.
+        vm.prank(buyer);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+
+        // Owner adds the new facet.
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+
+        // Call the function through the diamond; should return 1.
+        (bool ok1, bytes memory ret1) = address(diamond).call(abi.encodeWithSelector(VersionFacetV1.version.selector));
+        assertTrue(ok1);
+        assertEq(abi.decode(ret1, (uint256)), 1);
+
+        // Replace the facet with another returning 2.
+        VersionFacetV2 v2 = new VersionFacetV2();
+        IDiamondCutFacet.FacetCut[] memory replaceCut = new IDiamondCutFacet.FacetCut[](1);
+        replaceCut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(v2),
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: sels
+        });
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(replaceCut, address(0), "");
+
+        (bool ok2, bytes memory ret2) = address(diamond).call(abi.encodeWithSelector(VersionFacetV1.version.selector));
+        assertTrue(ok2);
+        assertEq(abi.decode(ret2, (uint256)), 2);
+
+        // Remove the selector entirely.
+        IDiamondCutFacet.FacetCut[] memory removeCut = new IDiamondCutFacet.FacetCut[](1);
+        removeCut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(0),
+            action: IDiamondCutFacet.FacetCutAction.Remove,
+            functionSelectors: sels
+        });
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(removeCut, address(0), "");
+
+        // Calling it now should revert via the diamond fallback.
+        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
+        VersionFacetV1(address(diamond)).version();
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Whitelisted buyer success path
+    /// -----------------------------------------------------------------------
+
+    // Confirms that a buyer on the whitelist can purchase successfully.
+    function testWhitelistedBuyerPurchaseSuccess() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Whitelist the buyer.
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+
+        vm.prank(seller);
+        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, allowed);
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer pays the exact price and should succeed.
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Listing is removed, token ownership transferred.
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// ERC721 Approval-for-All creation path
+    /// -----------------------------------------------------------------------
+
+    // Tests that setApprovalForAll (without per-token approval) allows listing.
+    function testERC721SetApprovalForAllCreateListing() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Seller grants blanket approval instead of approve(1).
+        vm.prank(seller);
+        erc721.setApprovalForAll(address(diamond), true);
+
+        // Create listing for token ID 1; should succeed.
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+
+        uint128 id = getter.getNextListingId() - 1;
+        Listing memory l = getter.getListingByListingId(id);
+        assertEq(l.tokenId, 1);
+        assertEq(l.seller, seller);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// ERC721 creation without approval should revert
+    /// -----------------------------------------------------------------------
+
+    // A stand-alone check that creating a listing without any approval reverts.
+    function testCreateListingWithoutApprovalReverts() public {
+        // Whitelist the ERC721 collection.
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Attempt to list token ID 2 without approve() or setApprovalForAll().
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.createListing(
+            address(erc721), 2, address(0), 2 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Reentrancy: withdrawProceeds attempt
+    /// -----------------------------------------------------------------------
+
+    // Attacker contract attempts to re-enter withdrawProceeds from within its
+    // receive() fallback. The lock in withdrawProceeds should prevent this.
+    function testReentrancyOnWithdrawProceeds() public {
+        // Deploy attacker, mint an NFT to it, and whitelist.
+        ReentrantWithdrawer attacker = new ReentrantWithdrawer(address(diamond));
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+        erc721.mint(address(attacker), 3);
+
+        // Attacker approves the marketplace and lists the token.
+        vm.prank(address(attacker));
+        erc721.approve(address(diamond), 3);
+        vm.prank(address(attacker));
+        market.createListing(
+            address(erc721), 3, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer purchases the listing.
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Attacker withdraws; reentrant call in receive() should be blocked.
+        uint256 beforeBal = address(attacker).balance;
+        vm.prank(address(attacker));
+        market.withdrawProceeds();
+        uint256 afterBal = address(attacker).balance;
+
+        // Only one withdrawal should occur.
+        assertEq(afterBal - beforeBal, 0.99 ether);
+        assertEq(getter.getProceeds(address(attacker)), 0);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Reentrancy: ERC1155 transfer attempt
+    /// -----------------------------------------------------------------------
+
+    // A malicious ERC1155 token tries to re-enter withdrawProceeds inside its
+    // safeTransferFrom. The nonReentrant modifier should prevent success.
+    function testReentrancyDuringERC1155Transfer() public {
+        // Deploy malicious ERC1155 and mint tokens to seller.
+        MaliciousERC1155 mal1155 = new MaliciousERC1155(address(diamond));
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(mal1155));
+        mal1155.mint(seller, 1, 10);
+
+        // Seller grants approval for all and lists the entire stack.
+        vm.prank(seller);
+        mal1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(mal1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer purchases all 10 units.
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
+
+        // Ensure token balances updated and proceeds calculated correctly.
+        assertEq(mal1155.balanceOf(buyer, 1), 10);
+        assertEq(getter.getProceeds(seller), 9.9 ether);
+        assertEq(getter.getProceeds(owner), 0.1 ether);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Reentrancy: ERC721 transfer attempt
+    /// -----------------------------------------------------------------------
+
+    // A malicious ERC721 token tries to re-enter withdrawProceeds inside its
+    // transferFrom. The nonReentrant modifier should prevent success.
+    function testReentrancyDuringERC721Transfer() public {
+        // Deploy malicious ERC721 and mint a token to seller.
+        MaliciousERC721 mal721 = new MaliciousERC721(address(diamond));
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(mal721));
+        mal721.mint(seller, 1);
+
+        // Seller approves and lists the token.
+        vm.prank(seller);
+        mal721.approve(address(diamond), 1);
+        vm.prank(seller);
+        market.createListing(
+            address(mal721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer purchases the NFT.
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Ownership transfers and proceeds reflect the fee.
+        assertEq(mal721.ownerOf(1), buyer);
+        assertEq(getter.getProceeds(seller), 0.99 ether);
+        assertEq(getter.getProceeds(owner), 0.01 ether);
+    }
+
     // End of test contract
 }
 
@@ -1332,5 +1568,185 @@ contract MockERC721Royalty {
         bytes calldata /*data*/
     ) external pure {
         revert("MockERC721Royalty: ERC1155.safeTransferFrom used on ERC721");
+    }
+}
+
+// -------------------------------------------------------------------------
+// Helper facets for upgrade testing
+// -------------------------------------------------------------------------
+
+contract VersionFacetV1 {
+    function version() external pure returns (uint256) {
+        return 1;
+    }
+}
+
+contract VersionFacetV2 {
+    function version() external pure returns (uint256) {
+        return 2;
+    }
+}
+
+// -------------------------------------------------------------------------
+// Reentrant withdraw attacker
+// -------------------------------------------------------------------------
+
+// Attempts to re-enter withdrawProceeds from its receive() callback. The
+// nonReentrant modifier on withdrawProceeds should prevent success.
+contract ReentrantWithdrawer {
+    IdeationMarketFacet public market;
+    bool internal attacked;
+
+    constructor(address diamond) {
+        market = IdeationMarketFacet(diamond);
+    }
+
+    receive() external payable {
+        if (!attacked) {
+            attacked = true;
+            try market.withdrawProceeds() {
+                // ignore success; should revert due to nonReentrant
+            } catch {
+                // ignore revert
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------
+// Malicious ERC1155 token
+// -------------------------------------------------------------------------
+
+// Minimal ERC1155 that calls withdrawProceeds during safeTransferFrom to
+// attempt a reentrant attack. It catches the revert to allow the transfer.
+contract MaliciousERC1155 {
+    mapping(uint256 => mapping(address => uint256)) internal _balances;
+    mapping(address => mapping(address => bool)) internal _operatorApprovals;
+    IdeationMarketFacet public market;
+    bool internal attacked;
+
+    constructor(address diamond) {
+        market = IdeationMarketFacet(diamond);
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC1155).interfaceId;
+    }
+
+    function mint(address to, uint256 id, uint256 amount) external {
+        _balances[id][to] += amount;
+    }
+
+    function balanceOf(address account, uint256 id) external view returns (uint256) {
+        return _balances[id][account];
+    }
+
+    function isApprovedForAll(address account, address operator) external view returns (bool) {
+        return _operatorApprovals[account][operator];
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _operatorApprovals[msg.sender][operator] = approved;
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata) external {
+        // Attempt to re-enter withdrawProceeds once.
+        if (!attacked) {
+            attacked = true;
+            try market.withdrawProceeds() {
+                // no-op: should revert due to reentrancy lock
+            } catch {
+                // ignore the revert
+            }
+        }
+        require(msg.sender == from || _operatorApprovals[from][msg.sender], "not approved");
+        require(_balances[id][from] >= amount, "insufficient");
+        _balances[id][from] -= amount;
+        _balances[id][to] += amount;
+    }
+}
+
+// -------------------------------------------------------------------------
+// Malicious ERC721 token
+// -------------------------------------------------------------------------
+
+// Minimal ERC721 that calls withdrawProceeds during transferFrom to attempt
+// a reentrant attack. It catches the revert to allow the transfer.
+contract MaliciousERC721 {
+    mapping(uint256 => address) internal _owners;
+    mapping(uint256 => address) internal _tokenApprovals;
+    mapping(address => mapping(address => bool)) internal _operatorApprovals;
+    IdeationMarketFacet public market;
+    bool internal attacked;
+
+    constructor(address diamond) {
+        market = IdeationMarketFacet(diamond);
+    }
+
+    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
+        return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC721).interfaceId;
+    }
+
+    function mint(address to, uint256 tokenId) external {
+        _owners[tokenId] = to;
+    }
+
+    function balanceOf(address owner) external view returns (uint256) {
+        uint256 count;
+        // Count tokens owned by 'owner'
+        // Not needed for test logic but provided for completeness
+        for (uint256 i = 0; i < 10; i++) {
+            if (_owners[i] == owner) count++;
+        }
+        return count;
+    }
+
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return _owners[tokenId];
+    }
+
+    function getApproved(uint256 tokenId) external view returns (address) {
+        return _tokenApprovals[tokenId];
+    }
+
+    function approve(address to, uint256 tokenId) external {
+        require(msg.sender == _owners[tokenId], "not owner");
+        _tokenApprovals[tokenId] = to;
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _operatorApprovals[msg.sender][operator] = approved;
+    }
+
+    function isApprovedForAll(address owner, address operator) external view returns (bool) {
+        return _operatorApprovals[owner][operator];
+    }
+
+    function transferFrom(address from, address to, uint256 tokenId) public {
+        require(_owners[tokenId] == from, "not owner");
+        // caller must be owner or approved
+        require(
+            msg.sender == from || msg.sender == _tokenApprovals[tokenId] || _operatorApprovals[from][msg.sender],
+            "not approved"
+        );
+        // Attempt reentrancy once.
+        if (!attacked) {
+            attacked = true;
+            try market.withdrawProceeds() {
+                // will revert due to reentrancy lock; ignore
+            } catch {
+                // ignore revert
+            }
+        }
+        _owners[tokenId] = to;
+        _tokenApprovals[tokenId] = address(0);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId) external {
+        transferFrom(from, to, tokenId);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
+        transferFrom(from, to, tokenId);
     }
 }
