@@ -384,11 +384,11 @@ contract IdeationMarketDiamondTest is Test {
         vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
         buyers.addBuyerWhitelistAddresses(listingId, emptyList);
         vm.stopPrank();
-        // Batch size exceeding cap should revert. When buyerWhitelistEnabled is true the marketplace
-        // itself (the diamond contract) calls into the BuyerWhitelistFacet to add buyers. Thus we
-        // impersonate the diamond contract address here to match the internal call context. Passing
-        // an oversized array should trigger BuyerWhitelist__ExceedsMaxBatchSize before any other
-        // checks.
+        /// Batch size exceeding cap should revert.
+        /// We call the BuyerWhitelistFacet through the diamond **as the seller** (an authorized operator)
+        /// against an existing listing, then pass an oversized array (MAX_BATCH+1).
+        /// Because the caller is authorized and the listing exists, the only failing condition is the
+        /// batch-size guard, so the call must revert with BuyerWhitelist__ExceedsMaxBatchSize.
         address[] memory largeList = new address[](uint256(MAX_BATCH) + 1);
         for (uint256 i = 0; i < largeList.length; i++) {
             largeList[i] = vm.addr(0x2000 + i);
@@ -1402,7 +1402,7 @@ contract IdeationMarketDiamondTest is Test {
         });
 
         vm.prank(owner);
-        vm.expectRevert(); // must not allow Add with zero facet address
+        vm.expectRevert("LibDiamondCut: Add facet can't be address(0)");
         IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
     }
 
@@ -1430,13 +1430,13 @@ contract IdeationMarketDiamondTest is Test {
         });
 
         vm.prank(owner);
-        vm.expectRevert();
+        vm.expectRevert("LibDiamondCut: Add facet can't be address(0)");
         IDiamondCutFacet(address(diamond)).diamondCut(repCut, address(0), "");
     }
 
     function testCollectionWhitelistZeroAddressReverts() public {
         vm.prank(owner);
-        vm.expectRevert(); // zero address should not be whitelisted
+        vm.expectRevert(CollectionWhitelist__ZeroAddress.selector);
         collections.addWhitelistedCollection(address(0));
     }
 
@@ -1512,21 +1512,21 @@ contract IdeationMarketDiamondTest is Test {
     function testCreateWithZeroTokenAddressReverts() public {
         // No whitelist entry can exist for address(0), expect revert
         vm.prank(seller);
-        vm.expectRevert(); // most likely IdeationMarket__CollectionNotWhitelisted(address(0))
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(0)));
         market.createListing(address(0), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testCreatePriceZeroWithoutSwapReverts() public {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
-        vm.expectRevert(); // price==0 but also no desired swap params
+        vm.expectRevert(IdeationMarket__FreeListingsNotSupported.selector);
         market.createListing(address(erc721), 1, address(0), 0, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testBuyNonexistentListingIdReverts() public {
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.purchaseListing{value: 1 ether}(999_999, 1 ether, 0, address(0), 0, 0, 0, address(0));
     }
 
@@ -1539,7 +1539,7 @@ contract IdeationMarketDiamondTest is Test {
         // Buyer sends enough ETH but insists expectedPrice=1 ether -> should revert
         vm.deal(buyer, 2 ether);
         vm.prank(buyer);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
         market.purchaseListing{value: 2 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
     }
 
@@ -1558,8 +1558,7 @@ contract IdeationMarketDiamondTest is Test {
 
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
-        vm.expectRevert();
-        // expectedErc1155Quantity=9 (mismatch with listed 10)
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
         market.purchaseListing{value: 10 ether}(id, 10 ether, 9, address(0), 0, 0, 10, address(0));
     }
 
@@ -1604,13 +1603,13 @@ contract IdeationMarketDiamondTest is Test {
         // Second attempt should revert since listing is gone
         vm.deal(operator, 1 ether);
         vm.prank(operator);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
     }
 
     function testUpdateNonexistentListingReverts() public {
         vm.prank(seller);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.updateListing(999_999, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
@@ -1655,7 +1654,7 @@ contract IdeationMarketDiamondTest is Test {
 
     function testCancelNonexistentListingReverts() public {
         vm.prank(seller);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.cancelListing(999_999);
     }
 
@@ -1671,7 +1670,7 @@ contract IdeationMarketDiamondTest is Test {
 
         // Second clean should revert (listing gone)
         vm.prank(operator);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.cleanListing(id);
     }
 
