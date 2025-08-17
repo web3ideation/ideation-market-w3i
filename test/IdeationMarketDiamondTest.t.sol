@@ -1344,8 +1344,9 @@ contract IdeationMarketDiamondTest is Test {
         // Add v1
         VersionFacetV1 v1 = new VersionFacetV1();
         bytes4 sel = VersionFacetV1.version.selector;
-        IDiamondCutFacet.FacetCut;
-        bytes4;
+        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](1);
+
         sels[0] = sel;
         addCut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(v1),
@@ -1361,7 +1362,7 @@ contract IdeationMarketDiamondTest is Test {
 
         // Replace with v2
         VersionFacetV2 v2 = new VersionFacetV2();
-        IDiamondCutFacet.FacetCut;
+        IDiamondCutFacet.FacetCut[] memory repCut = new IDiamondCutFacet.FacetCut[](1);
         repCut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(v2),
             action: IDiamondCutFacet.FacetCutAction.Replace,
@@ -1375,7 +1376,7 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(loupe.facetAddress(sel), address(v2));
 
         // Remove selector
-        IDiamondCutFacet.FacetCut;
+        IDiamondCutFacet.FacetCut[] memory remCut = new IDiamondCutFacet.FacetCut[](1);
         remCut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
             action: IDiamondCutFacet.FacetCutAction.Remove,
@@ -1390,10 +1391,10 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testDiamondCutAddZeroAddressReverts() public {
-        bytes4;
+        bytes4[] memory sels = new bytes4[](1);
         sels[0] = VersionFacetV1.version.selector;
 
-        IDiamondCutFacet.FacetCut;
+        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
         cut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
             action: IDiamondCutFacet.FacetCutAction.Add,
@@ -1408,10 +1409,10 @@ contract IdeationMarketDiamondTest is Test {
     function testDiamondCutReplaceZeroAddressReverts() public {
         // First add v1 so there is something to replace
         VersionFacetV1 v1 = new VersionFacetV1();
-        bytes4;
+        bytes4[] memory sels = new bytes4[](1);
         sels[0] = VersionFacetV1.version.selector;
 
-        IDiamondCutFacet.FacetCut;
+        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
         addCut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(v1),
             action: IDiamondCutFacet.FacetCutAction.Add,
@@ -1421,7 +1422,7 @@ contract IdeationMarketDiamondTest is Test {
         IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
 
         // Now attempt to replace with zero facet address -> revert
-        IDiamondCutFacet.FacetCut;
+        IDiamondCutFacet.FacetCut[] memory repCut = new IDiamondCutFacet.FacetCut[](1);
         repCut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
             action: IDiamondCutFacet.FacetCutAction.Replace,
@@ -1440,7 +1441,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testSellerCancelAfterApprovalRevoked() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         // Revoke approval then cancel as seller
         vm.prank(seller);
         erc721.approve(address(0), 1);
@@ -1456,20 +1457,22 @@ contract IdeationMarketDiamondTest is Test {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, new address);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, new address[](0)
+        );
     }
 
     function testUpdateEnableWhitelistWithEmptyArrayReverts() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         vm.prank(seller);
         vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
-        market.updateListing(id, 1 ether, address(0), 0, 0, 0, true, false, new address);
+        market.updateListing(id, 1 ether, address(0), 0, 0, 0, true, false, new address[](0));
     }
 
     function testUpdateDisableWhitelistThenOpenPurchase() public {
         _whitelistCollectionAndApproveERC721();
 
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = operator;
 
         vm.prank(seller);
@@ -1478,7 +1481,7 @@ contract IdeationMarketDiamondTest is Test {
 
         // Disable whitelist on update
         vm.prank(seller);
-        market.updateListing(id, 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.updateListing(id, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
 
         // Now anyone can buy
         vm.deal(buyer, 1 ether);
@@ -1490,7 +1493,7 @@ contract IdeationMarketDiamondTest is Test {
     function testCreateWithWhitelistDisabledNonEmptyListIgnored() public {
         _whitelistCollectionAndApproveERC721();
 
-        address;
+        address[] memory bogus = new address[](1);
         bogus[0] = buyer;
 
         vm.prank(seller);
@@ -1510,14 +1513,14 @@ contract IdeationMarketDiamondTest is Test {
         // No whitelist entry can exist for address(0), expect revert
         vm.prank(seller);
         vm.expectRevert(); // most likely IdeationMarket__CollectionNotWhitelisted(address(0))
-        market.createListing(address(0), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(address(0), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testCreatePriceZeroWithoutSwapReverts() public {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         vm.expectRevert(); // price==0 but also no desired swap params
-        market.createListing(address(erc721), 1, address(0), 0, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(address(erc721), 1, address(0), 0, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testBuyNonexistentListingIdReverts() public {
@@ -1528,10 +1531,10 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testExpectedPriceMismatchReverts() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         // Seller changes price to 2 ether
         vm.prank(seller);
-        market.updateListing(id, 2 ether, address(0), 0, 0, 0, false, false, new address);
+        market.updateListing(id, 2 ether, address(0), 0, 0, 0, false, false, new address[](0));
 
         // Buyer sends enough ETH but insists expectedPrice=1 ether -> should revert
         vm.deal(buyer, 2 ether);
@@ -1548,7 +1551,9 @@ contract IdeationMarketDiamondTest is Test {
         erc1155.setApprovalForAll(address(diamond), true);
 
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 10 ether);
@@ -1565,7 +1570,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         // Buy 4, then buy remaining 6
@@ -1583,7 +1588,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testERC721PurchaseWithNonZero1155QuantityReverts() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         vm.expectRevert(); // cannot pass erc1155PurchaseQuantity for ERC721
@@ -1591,7 +1596,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testRepurchaseAfterBuyReverts() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
@@ -1606,11 +1611,11 @@ contract IdeationMarketDiamondTest is Test {
     function testUpdateNonexistentListingReverts() public {
         vm.prank(seller);
         vm.expectRevert();
-        market.updateListing(999_999, 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.updateListing(999_999, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testNoOpUpdateKeepsValues() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         Listing memory beforeL = getter.getListingByListingId(id);
 
         vm.prank(seller);
@@ -1623,7 +1628,7 @@ contract IdeationMarketDiamondTest is Test {
             beforeL.erc1155Quantity,
             beforeL.buyerWhitelistEnabled,
             beforeL.partialBuyEnabled,
-            new address
+            new address[](0)
         );
 
         Listing memory afterL = getter.getListingByListingId(id);
@@ -1639,13 +1644,13 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         // Update to price=7 ether with qty=10 and partials enabled -> not divisible -> revert
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__InvalidUnitPrice.selector);
-        market.updateListing(id, 7 ether, address(0), 0, 0, 10, false, true, new address);
+        market.updateListing(id, 7 ether, address(0), 0, 0, 10, false, true, new address[](0));
     }
 
     function testCancelNonexistentListingReverts() public {
@@ -1655,7 +1660,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testDoubleCleanReverts() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
 
         // Revoke approval, clean once
         vm.prank(seller);
@@ -1671,7 +1676,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testWithdrawTwiceRevertsNoProceeds() public {
-        uint128 id = _createListingERC721(false, new address);
+        uint128 id = _createListingERC721(false, new address[](0));
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
@@ -1703,7 +1708,7 @@ contract IdeationMarketDiamondTest is Test {
         r.approve(address(diamond), 1);
 
         vm.prank(seller);
-        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
@@ -1728,7 +1733,7 @@ contract IdeationMarketDiamondTest is Test {
         r.approve(address(diamond), 1);
 
         vm.prank(seller);
-        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
@@ -1757,7 +1762,7 @@ contract IdeationMarketDiamondTest is Test {
             0,
             false, // buyerWhitelistEnabled
             false, // partialBuyEnabled
-            new address
+            new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -1781,7 +1786,9 @@ contract IdeationMarketDiamondTest is Test {
 
         // Create listing with whitelist disabled
         vm.prank(seller);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         address[] memory tooMany = new address[](uint256(MAX_BATCH) + 1);
@@ -1798,12 +1805,12 @@ contract IdeationMarketDiamondTest is Test {
     // Whitelist: adding duplicates should be idempotent (no revert, end state true)
     function testBuyerWhitelistAddDuplicatesIdempotent() public {
         // Create listing with whitelist enabled and one buyer
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = buyer;
         uint128 id = _createListingERC721(true, allowed);
 
         // Add [buyer, buyer] again; should not revert and still be whitelisted
-        address;
+        address[] memory dups = new address[](2);
         dups[0] = buyer;
         dups[1] = buyer;
 
@@ -1815,11 +1822,11 @@ contract IdeationMarketDiamondTest is Test {
 
     // Whitelist: removing with empty calldata should revert
     function testBuyerWhitelistRemoveEmptyCalldataReverts() public {
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = buyer;
         uint128 id = _createListingERC721(true, allowed);
 
-        address;
+        address[] memory empty = new address[](1);
         vm.startPrank(seller);
         vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
         buyers.removeBuyerWhitelistAddresses(id, empty);
@@ -1828,11 +1835,11 @@ contract IdeationMarketDiamondTest is Test {
 
     // Whitelist: removing by unauthorized address should revert
     function testBuyerWhitelistRemoveUnauthorizedReverts() public {
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = buyer;
         uint128 id = _createListingERC721(true, allowed);
 
-        address;
+        address[] memory one = new address[](1);
         one[0] = buyer;
 
         vm.startPrank(buyer);
@@ -1843,12 +1850,12 @@ contract IdeationMarketDiamondTest is Test {
 
     // Whitelist: after removal, purchase should fail for that buyer
     function testPurchaseRevertsAfterWhitelistRemoval() public {
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = buyer;
         uint128 id = _createListingERC721(true, allowed);
 
         // Remove buyer from whitelist
-        address;
+        address[] memory one = new address[](1);
         one[0] = buyer;
         vm.prank(seller);
         buyers.removeBuyerWhitelistAddresses(id, one);
@@ -1878,7 +1885,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         // Buy 0 units → InvalidPurchaseQuantity
@@ -1905,7 +1912,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         // First partial: buy 7
@@ -1946,7 +1953,7 @@ contract IdeationMarketDiamondTest is Test {
             10, // quantity
             false,
             false,
-            new address
+            new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -1967,7 +1974,7 @@ contract IdeationMarketDiamondTest is Test {
     function testCreateListingWhitelistWithZeroAddressReverts() public {
         _whitelistCollectionAndApproveERC721();
 
-        address;
+        address[] memory allowed = new address[](1);
         allowed[0] = address(0);
 
         vm.startPrank(seller);
@@ -1994,10 +2001,12 @@ contract IdeationMarketDiamondTest is Test {
 
         // Create listing with whitelist disabled
         vm.prank(seller);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
-        address;
+        address[] memory invalid = new address[](1);
         invalid[0] = address(0);
 
         vm.startPrank(seller);
@@ -2024,12 +2033,12 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
         // Flip partials to disabled, keep price same
         vm.prank(seller);
-        market.updateListing(id, 10 ether, address(0), 0, 0, 0, false, false, new address);
+        market.updateListing(id, 10 ether, address(0), 0, 0, 0, false, false, new address[](0));
 
         // Attempt a partial purchase (4 of 10) → revert
         vm.deal(buyer, 10 ether);
