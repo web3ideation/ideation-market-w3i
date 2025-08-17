@@ -1826,7 +1826,7 @@ contract IdeationMarketDiamondTest is Test {
         allowed[0] = buyer;
         uint128 id = _createListingERC721(true, allowed);
 
-        address[] memory empty = new address[](1);
+        address[] memory empty = new address[](0);
         vm.startPrank(seller);
         vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
         buyers.removeBuyerWhitelistAddresses(id, empty);
