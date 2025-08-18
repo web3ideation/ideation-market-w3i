@@ -176,7 +176,8 @@ contract IdeationMarketFacet {
             revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
         }
 
-        // check if the user is an authorized Operator
+        // check if the user is an authorized Operator and set the seller Address
+        address seller = address(0);
         if (erc1155Quantity > 0) {
             // check that the quantity matches the token Type
             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
@@ -195,6 +196,7 @@ contract IdeationMarketFacet {
             if (balance < erc1155Quantity) {
                 revert IdeationMarket__SellerInsufficientTokenBalance(erc1155Quantity, balance);
             }
+            seller = erc1155Holder;
         } else {
             // check that the quantity matches the token Type
             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
@@ -208,6 +210,7 @@ contract IdeationMarketFacet {
             ) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
+            seller = tokenHolder;
         }
 
         // check validity of partialBuyEnabled Flag
@@ -236,9 +239,6 @@ contract IdeationMarketFacet {
         validateSwapParameters(
             tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredErc1155Quantity
         );
-
-        // if the interacting user is an approved Operator set the token Owner as the seller
-        address seller = (erc1155Holder != address(0)) ? erc1155Holder : msg.sender;
 
         // ensure the MarketPlace has been Approved for transfer.
         if (erc1155Quantity > 0) {
@@ -333,7 +333,7 @@ contract IdeationMarketFacet {
             revert IdeationMarket__PartialBuyNotPossible();
         }
 
-        // setting the purchePrice based on partialBuy quantity
+        // setting the purchasePrice based on partialBuy quantity
         uint256 purchasePrice = listedItem.price;
 
         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
