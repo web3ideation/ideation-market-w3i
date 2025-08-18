@@ -187,9 +187,13 @@ contract IdeationMarketFacet {
             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
-            // check that this 'erc1155Holder' is really the holder
-            if (token.balanceOf(erc1155Holder, tokenId) == 0) {
+            // check that this 'erc1155Holder' is really the holder and that they hold enough token
+            uint256 balance = token.balanceOf(erc1155Holder, tokenId);
+            if (balance == 0) {
                 revert IdeationMarket__WrongErc1155HolderParameter();
+            }
+            if (balance < erc1155Quantity) {
+                revert IdeationMarket__SellerInsufficientTokenBalance(erc1155Quantity, balance);
             }
         } else {
             // check that the quantity matches the token Type
@@ -400,7 +404,7 @@ contract IdeationMarketFacet {
                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
                 if (
-                    desiredToken.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
+                    msg.sender != desiredErc1155Holder
                         && !desiredToken.isApprovedForAll(desiredErc1155Holder, msg.sender)
                 ) {
                     revert IdeationMarket__NotAuthorizedOperator();
@@ -565,12 +569,16 @@ contract IdeationMarketFacet {
             }
         }
 
-        // check if the user is an authorized operator and Use interface check to ensure the MarketPlace is still Approved for transfer
+        // check if the user is an authorized operator and Use interface check to ensure the MarketPlace is still Approved for transfer and holds enough token
         if (newErc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized
             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
                 revert IdeationMarket__NotAuthorizedOperator();
+            }
+            uint256 balance = token.balanceOf(seller, tokenId);
+            if (balance < erc1155Quantity) {
+                revert IdeationMarket__SellerInsufficientTokenBalance(erc1155Quantity, balance);
             }
             requireERC1155Approval(tokenAddress, seller);
         } else {
