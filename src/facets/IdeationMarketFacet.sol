@@ -437,7 +437,7 @@ contract IdeationMarketFacet {
                 requireERC721Approval(listedItem.desiredTokenAddress, listedItem.desiredTokenId);
 
                 // Perform the safe swap transfer buyer to seller.
-                desiredToken.safeTransferFrom(msg.sender, listedItem.seller, listedItem.desiredTokenId);
+                desiredToken.safeTransferFrom(desiredOwner, listedItem.seller, listedItem.desiredTokenId);
             }
 
             // in case the desiredToken is listed already, delete that now deprecated listing to cleanup
