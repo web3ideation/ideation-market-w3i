@@ -211,17 +211,19 @@ contract IdeationMarketFacet {
         }
 
         // check validity of partialBuyEnabled Flag
-        if (erc1155Quantity <= 1) {
-            if (partialBuyEnabled) {
-                revert IdeationMarket__PartialBuyNotPossible();
-            }
+        if (erc1155Quantity <= 1 && partialBuyEnabled) {
+            revert IdeationMarket__PartialBuyNotPossible();
         }
 
         // if partial buys allowed, require even per-unit price
+        // forbid partialbuys if its a swap listing
         if (partialBuyEnabled) {
             // price must be divisible by quantity
             if (price % erc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
+            }
+            if (desiredTokenAddress != address(0)) {
+                revert IdeationMarket__PartialBuyNotPossible();
             }
         }
 
@@ -606,10 +608,14 @@ contract IdeationMarketFacet {
         }
 
         // if partial buys allowed, require even per-unit price
+        // forbid partialbuys if its a swap listing
         if (newPartialBuyEnabled) {
             // price must be divisible by quantity
             if (newPrice % newErc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
+            }
+            if (newDesiredTokenAddress != address(0)) {
+                revert IdeationMarket__PartialBuyNotPossible();
             }
         }
 
