@@ -1490,23 +1490,28 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(erc721.ownerOf(1), buyer);
     }
 
-    function testCreateWithWhitelistDisabledNonEmptyListIgnored() public {
+    function testCreateWithWhitelistDisabledNonEmptyListReverts() public {
         _whitelistCollectionAndApproveERC721();
 
         address[] memory bogus = new address[](1);
         bogus[0] = buyer;
 
-        vm.prank(seller);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, bogus);
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Whitelist is disabled, so getter should report false and purchase should still be open.
-        assertFalse(getter.isBuyerWhitelisted(id, buyer));
-
-        vm.deal(operator, 1 ether);
-        vm.prank(operator);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-        assertEq(erc721.ownerOf(1), operator);
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WhitelistDisabled.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            1 ether,
+            address(0),
+            0,
+            0,
+            0,
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            bogus // non-empty -> must revert per facet
+        );
+        vm.stopPrank();
     }
 
     function testCreateWithZeroTokenAddressReverts() public {
@@ -1637,7 +1642,6 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     function testERC1155UpdateInvalidUnitPriceReverts() public {
-        // Create valid listing qty=10 price=10 (divisible)
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
         vm.prank(seller);
@@ -1646,10 +1650,10 @@ contract IdeationMarketDiamondTest is Test {
         market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
-        // Update to price=7 ether with qty=10 and partials enabled -> not divisible -> revert
+        // 7 ether % 3 != 0 in wei -> MUST revert
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__InvalidUnitPrice.selector);
-        market.updateListing(id, 7 ether, address(0), 0, 0, 10, false, true, new address[](0));
+        market.updateListing(id, 7 ether, address(0), 0, 0, 3, false, true, new address[](0));
     }
 
     function testCancelNonexistentListingReverts() public {
@@ -1928,45 +1932,36 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
-    // ERC1155: holder different from seller (holder approved); proceeds go to seller, tokens from holder
     function testERC1155HolderDifferentFromSellerHappyPath() public {
-        // Mint to holder (operator), whitelist collection
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
         erc1155.mint(operator, 1, 10);
 
-        // Holder approves marketplace
+        // Holder approvals
         vm.prank(operator);
-        erc1155.setApprovalForAll(address(diamond), true);
+        erc1155.setApprovalForAll(seller, true); // seller may act for holder
+        vm.prank(operator);
+        erc1155.setApprovalForAll(address(diamond), true); // marketplace may transfer
 
-        // Seller lists tokens held by operator
+        // Seller creates the listing on behalf of holder
         vm.prank(seller);
         market.createListing(
-            address(erc1155),
-            1,
-            operator, // erc1155Holder (different from seller)
-            10 ether, // total price
-            address(0),
-            0,
-            0,
-            10, // quantity
-            false,
-            false,
-            new address[](0)
+            address(erc1155), 1, operator, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
-        // Purchase all 10
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
         market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
 
-        // Tokens moved from holder to buyer; proceeds to seller; fee to owner
+        // Tokens left holder → buyer
         assertEq(erc1155.balanceOf(operator, 1), 0);
         assertEq(erc1155.balanceOf(buyer, 1), 10);
-        assertEq(getter.getProceeds(seller), 9.9 ether);
+
+        // Proceeds go to the holder (the Listing.seller), not msg.sender(seller)
+        assertEq(getter.getProceeds(operator), 9.9 ether);
         assertEq(getter.getProceeds(owner), 0.1 ether);
-        assertEq(getter.getProceeds(operator), 0);
+        assertEq(getter.getProceeds(seller), 0);
     }
 
     // Whitelist: passing address(0) in create should revert
@@ -2024,9 +2019,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
-    // Toggle partialBuyEnabled without price change; ensure behavior flips
     function testTogglePartialBuyEnabledWithoutPriceChange() public {
-        // List ERC1155 qty=10, price=10 ETH, partials initially enabled
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
         vm.prank(seller);
@@ -2035,21 +2028,20 @@ contract IdeationMarketDiamondTest is Test {
         market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
 
-        // Flip partials to disabled, keep price same
+        // Flip partials to disabled; keep qty the same (ERC1155 stays ERC1155)
         vm.prank(seller);
-        market.updateListing(id, 10 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.updateListing(id, 10 ether, address(0), 0, 0, 10, false, false, new address[](0));
 
-        // Attempt a partial purchase (4 of 10) → revert
         vm.deal(buyer, 10 ether);
         vm.startPrank(buyer);
         vm.expectRevert(IdeationMarket__PartialBuyNotPossible.selector);
         market.purchaseListing{value: 4 ether}(id, 10 ether, 10, address(0), 0, 0, 4, address(0));
         vm.stopPrank();
 
-        // Listing price unchanged
         Listing memory l = getter.getListingByListingId(id);
         assertEq(l.price, 10 ether);
         assertFalse(l.partialBuyEnabled);
+        assertEq(l.erc1155Quantity, 10);
     }
 
     // End of test contract
