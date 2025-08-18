@@ -1595,7 +1595,7 @@ contract IdeationMarketDiamondTest is Test {
         uint128 id = _createListingERC721(false, new address[](0));
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        vm.expectRevert(); // cannot pass erc1155PurchaseQuantity for ERC721
+        vm.expectRevert(IdeationMarket__InvalidPurchaseQuantity.selector);
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 1, address(0));
     }
 
@@ -1950,6 +1950,9 @@ contract IdeationMarketDiamondTest is Test {
         );
         uint128 id = getter.getNextListingId() - 1;
 
+        Listing memory beforeBuy = getter.getListingByListingId(id);
+        assertEq(beforeBuy.seller, operator);
+
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
         market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
@@ -2045,7 +2048,7 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     // Lister is NOT approved by the ERC1155 holder -> NotAuthorizedOperator
-    function testERC1155OperatorNotApprovedReverts() public {
+    function testERC1155OperatorNotApprovedReverts_thenSucceedsAfterApproval() public {
         // Whitelist ERC1155 and mint balance to the HOLDER (operator).
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
@@ -2068,6 +2071,20 @@ contract IdeationMarketDiamondTest is Test {
             new address[](0)
         );
         vm.stopPrank();
+
+        // Grant seller operator rights and marketplace transfer rights; then it should work
+        vm.prank(operator);
+        erc1155.setApprovalForAll(seller, true);
+        vm.prank(operator);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, operator, 1 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+        Listing memory l = getter.getListingByListingId(id);
+        assertEq(l.erc1155Quantity, 10);
     }
 
     // Listing-time guard: erc1155Holder has ZERO balance for the token id -> WrongErc1155HolderParameter
