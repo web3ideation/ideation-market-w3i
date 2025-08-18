@@ -353,8 +353,8 @@ contract IdeationMarketFacet {
         // Check if the seller still owns the token and if the marketplace is still approved
         if (listedItem.erc1155Quantity > 0) {
             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
-            if (balance < listedItem.erc1155Quantity) {
-                revert IdeationMarket__SellerInsufficientTokenBalance(listedItem.erc1155Quantity, balance);
+            if (balance < erc1155PurchaseQuantity) {
+                revert IdeationMarket__SellerInsufficientTokenBalance(erc1155PurchaseQuantity, balance);
             }
             requireERC1155Approval(listedItem.tokenAddress, listedItem.seller);
         } else {
@@ -577,8 +577,8 @@ contract IdeationMarketFacet {
                 revert IdeationMarket__NotAuthorizedOperator();
             }
             uint256 balance = token.balanceOf(seller, tokenId);
-            if (balance < erc1155Quantity) {
-                revert IdeationMarket__SellerInsufficientTokenBalance(erc1155Quantity, balance);
+            if (balance < newErc1155Quantity) {
+                revert IdeationMarket__SellerInsufficientTokenBalance(newErc1155Quantity, balance);
             }
             requireERC1155Approval(tokenAddress, seller);
         } else {
