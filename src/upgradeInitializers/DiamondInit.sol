@@ -29,11 +29,6 @@ contract DiamondInit {
         ds.supportedInterfaces[type(IDiamondLoupeFacet).interfaceId] = true;
         ds.supportedInterfaces[type(IERC173).interfaceId] = true;
 
-        // NFT and multi-token interfaces
-        ds.supportedInterfaces[type(IERC721).interfaceId] = true;
-        ds.supportedInterfaces[type(IERC1155).interfaceId] = true;
-        ds.supportedInterfaces[type(IERC2981).interfaceId] = true;
-
         // Initialize marketplace state variables. / Constructor for IdeationMarketFacet.
         AppStorage storage s = LibAppStorage.appStorage();
         s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)

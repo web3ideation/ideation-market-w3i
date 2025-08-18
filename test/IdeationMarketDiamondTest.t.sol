@@ -233,9 +233,9 @@ contract IdeationMarketDiamondTest is Test {
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondLoupeFacet).interfaceId));
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC173).interfaceId));
         // NFT interfaces also registered
-        assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC721).interfaceId));
-        assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC1155).interfaceId));
-        assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC2981).interfaceId));
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC721).interfaceId));
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC1155).interfaceId));
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC2981).interfaceId));
     }
 
     function testUnknownFunctionReverts() public {
@@ -2490,8 +2490,6 @@ contract IdeationMarketDiamondTest is Test {
     }
 
     /// ERC-721 by operator: operator creates listing; purchase succeeds.
-    /// CURRENTLY this will FAIL with your code because ERC-721 listings set seller = msg.sender (operator)
-    /// causing SellerNotTokenOwner during purchase. Uncomment after you fix seller to the token owner.
     function testERC721OperatorListsAndPurchaseSucceeds_AfterFix() public {
         MockERC721 x = new MockERC721();
         vm.prank(owner);
@@ -2507,7 +2505,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(holder);
         x.approve(address(diamond), 9);
 
-        // Operator creates listing on behalf of holder (after your fix, seller should be 'holder')
+        // Operator creates listing on behalf of holder
         vm.prank(operator);
         market.createListing(address(x), 9, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
         uint128 id = getter.getNextListingId() - 1;
