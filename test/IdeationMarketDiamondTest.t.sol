@@ -2247,6 +2247,285 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
+    /// Ensures ListingTermsChanged also trips on expectedDesired* mismatches.
+    function testExpectedDesiredFieldsMismatchReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0)); // price = 1 ether
+
+        vm.deal(buyer, 2 ether);
+
+        // 1) Mismatch expectedDesiredTokenAddress (non-swap listing has address(0))
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(
+            id,
+            1 ether, // expectedPrice OK
+            0, // expectedErc1155Quantity OK (ERC721)
+            address(0xBEEF), // <-- mismatch
+            0, // OK
+            0, // OK
+            0, // ERC721
+            address(0)
+        );
+        vm.stopPrank();
+
+        // 2) Mismatch expectedDesiredTokenId (non-swap listing has 0)
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(
+            id,
+            1 ether,
+            0,
+            address(0), // OK
+            123, // <-- mismatch
+            0, // OK
+            0,
+            address(0)
+        );
+        vm.stopPrank();
+
+        // 3) Mismatch expectedDesiredErc1155Quantity (non-swap listing has 0)
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(
+            id,
+            1 ether,
+            0,
+            address(0),
+            0,
+            1, // <-- mismatch
+            0,
+            address(0)
+        );
+        vm.stopPrank();
+    }
+
+    /// Assert ListingCanceledDueToMissingApproval is emitted by cleanListing.
+    function testCleanListingEmitsCancellationEvent() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Revoke approval so cleanListing may cancel the listing.
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        // Expect the event from the diamond.
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToMissingApproval(id, address(erc721), 1, seller, operator);
+
+        // Trigger as any caller (operator in this test).
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        // Listing gone.
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    // ERC-1155 partials: 10 units at 1e18 each; buy 3, then 2; check exact residual price/qty and proceeds/fees.
+    function testERC1155MultiStepPartialsMaintainPriceProportions() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // List 10 units for total 10 ETH; partials enabled (unit price = 1 ETH).
+        vm.prank(seller);
+        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buy 3 units -> pay 3 ETH ; remaining: qty=7, price=7 ETH
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 3 ether}(id, 10 ether, 10, address(0), 0, 0, 3, address(0));
+
+        Listing memory after3 = getter.getListingByListingId(id);
+        assertEq(after3.erc1155Quantity, 7);
+        assertEq(after3.price, 7 ether);
+        // Proceeds so far: seller 2.97, owner 0.03
+        assertEq(getter.getProceeds(seller), 2.97 ether);
+        assertEq(getter.getProceeds(owner), 0.03 ether);
+
+        // Buy 2 more -> pay 2 ETH ; remaining: qty=5, price=5 ETH
+        address buyer2 = vm.addr(0x4242);
+        vm.deal(buyer2, 10 ether);
+        vm.prank(buyer2);
+        market.purchaseListing{value: 2 ether}(id, 7 ether, 7, address(0), 0, 0, 2, address(0));
+
+        Listing memory after5 = getter.getListingByListingId(id);
+        assertEq(after5.erc1155Quantity, 5);
+        assertEq(after5.price, 5 ether);
+
+        // Totals: seller 2.97 + 1.98 = 4.95 ; owner 0.03 + 0.02 = 0.05
+        assertEq(getter.getProceeds(seller), 4.95 ether);
+        assertEq(getter.getProceeds(owner), 0.05 ether);
+    }
+
+    /// Swap (ERC-721 <-> ERC-721): happy path, requires buyer's token approval to marketplace + cleanup of buyer's pre-existing listing.
+    function testSwapERC721ToERC721_WithCleanupOfObsoleteListing() public {
+        // Fresh ERC721 collections
+        MockERC721 a = new MockERC721();
+        MockERC721 b = new MockERC721();
+
+        // Whitelist both
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(a));
+        collections.addWhitelistedCollection(address(b));
+        vm.stopPrank();
+
+        // Mint A#100 to seller; B#200 to buyer
+        a.mint(seller, 100);
+        b.mint(buyer, 200);
+
+        // Approvals: marketplace for A#100 (by seller), marketplace for B#200 (by buyer)
+        vm.prank(seller);
+        a.approve(address(diamond), 100);
+        vm.prank(buyer);
+        b.approve(address(diamond), 200);
+
+        // Buyer pre-lists B#200 (to verify cleanup)
+        vm.prank(buyer);
+        market.createListing(address(b), 200, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 buyersBListingId = getter.getNextListingId() - 1;
+
+        // Seller lists A#100 wanting B#200 (swap only, price=0)
+        vm.prank(seller);
+        market.createListing(address(a), 100, address(0), 0, address(b), 200, 0, 0, false, false, new address[](0));
+        uint128 swapId = getter.getNextListingId() - 1;
+
+        // Buyer executes swap; pays 0; expected fields must match.
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(
+            swapId,
+            0, // expectedPrice
+            0, // expectedErc1155Quantity (ERC721)
+            address(b), // expectedDesiredTokenAddress
+            200, // expectedDesiredTokenId
+            0, // expectedDesiredErc1155Quantity
+            0, // erc1155PurchaseQuantity
+            address(0) // desiredErc1155Holder N/A for 721
+        );
+
+        // Ownership swapped
+        assertEq(a.ownerOf(100), buyer);
+        assertEq(b.ownerOf(200), seller);
+
+        // Buyer's obsolete listing for B#200 must be removed
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, buyersBListingId));
+        getter.getListingByListingId(buyersBListingId);
+    }
+
+    function testSwapERC1155ToERC1155_OperatorNoMarketApprovalReverts_ThenSucceeds() public {
+        // Whitelist collections
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc721)); // unused but harmless
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        // Mint ERC721 to seller (will be swapped away)
+        erc721.mint(seller, 111);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 111);
+
+        // Use a fresh ERC1155 id so seller has zero starting balance for this id
+        uint256 desiredId = 2;
+        erc1155.mint(operator, desiredId, 10);
+
+        // Buyer is operator of 'operator', but marketplace NOT approved yet
+        vm.prank(operator);
+        erc1155.setApprovalForAll(buyer, true);
+
+        // Seller lists ERC721 wanting 6 units of ERC1155 desiredId
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 111, address(0), 0, address(erc1155), desiredId, 6, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Attempt purchase -> revert: holder hasn't approved marketplace
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.purchaseListing{value: 0}(id, 0, 0, address(erc1155), desiredId, 6, 0, operator);
+
+        // Grant marketplace approval by holder; try again -> succeeds
+        vm.prank(operator);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(id, 0, 0, address(erc1155), desiredId, 6, 0, operator);
+
+        // Post-conditions
+        assertEq(erc721.ownerOf(111), buyer);
+        assertEq(erc1155.balanceOf(operator, desiredId), 4);
+        assertEq(erc1155.balanceOf(seller, desiredId), 6);
+    }
+
+    /// Royalty edge: bump fee high and royalty so fee+royalty>price -> reverts with RoyaltyFeeExceedsProceeds.
+    function testRoyaltyEdge_HighFeePlusRoyaltyExceedsProceeds() public {
+        // Royalty NFT: 50% royalty
+        MockERC721Royalty r = new MockERC721Royalty();
+        r.mint(seller, 1);
+        r.setRoyalty(address(0xB0B), 50_000); // 50% of 100_000
+
+        // Whitelist and approve
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        // Set innovation fee to 60%
+        vm.prank(owner);
+        market.setInnovationFee(60_000);
+
+        // List for 1 ETH (non-swap)
+        vm.prank(seller);
+        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Purchase must revert: sellerProceeds = 0.4 ETH, royalty = 0.5 ETH -> exceeds proceeds.
+        vm.deal(buyer, 2 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__RoyaltyFeeExceedsProceeds.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    /// ERC-721 by operator: operator creates listing; purchase succeeds.
+    /// CURRENTLY this will FAIL with your code because ERC-721 listings set seller = msg.sender (operator)
+    /// causing SellerNotTokenOwner during purchase. Uncomment after you fix seller to the token owner.
+    function testERC721OperatorListsAndPurchaseSucceeds_AfterFix() public {
+        MockERC721 x = new MockERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(x));
+
+        // holder owns token; operator is approved-for-all
+        address holder = vm.addr(0xAAAA);
+        x.mint(holder, 9);
+        vm.prank(holder);
+        x.setApprovalForAll(operator, true);
+
+        // Marketplace approval by holder
+        vm.prank(holder);
+        x.approve(address(diamond), 9);
+
+        // Operator creates listing on behalf of holder (after your fix, seller should be 'holder')
+        vm.prank(operator);
+        market.createListing(address(x), 9, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Confirm listing seller is the holder (post-fix behavior)
+        Listing memory L = getter.getListingByListingId(id);
+        assertEq(L.seller, holder);
+
+        // Buyer purchases successfully
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Token moved to buyer; proceeds to holder
+        assertEq(x.ownerOf(9), buyer);
+        assertEq(getter.getProceeds(holder), 0.99 ether);
+    }
+
     // End of test contract
 }
 
