@@ -2044,6 +2044,84 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(l.erc1155Quantity, 10);
     }
 
+    // Lister is NOT approved by the ERC1155 holder -> NotAuthorizedOperator
+    function testERC1155OperatorNotApprovedReverts() public {
+        // Whitelist ERC1155 and mint balance to the HOLDER (operator).
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(operator, 1, 10);
+
+        // Seller tries to list tokens held by 'operator' without being approved by operator.
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
+        market.createListing(
+            address(erc1155),
+            1,
+            operator, // erc1155Holder
+            1 ether,
+            address(0),
+            0,
+            0,
+            10, // quantity
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
+    // Listing-time guard: erc1155Holder has ZERO balance for the token id -> WrongErc1155HolderParameter
+    function testERC1155HolderZeroBalanceAtCreateRevertsWrongHolder() public {
+        // Use a fresh tokenId that no one owns (e.g., 42).
+        uint256 freshTokenId = 42;
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Seller claims to be the erc1155Holder but has zero balance for freshTokenId.
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WrongErc1155HolderParameter.selector);
+        market.createListing(
+            address(erc1155),
+            freshTokenId,
+            seller, // claimed erc1155Holder
+            1 ether,
+            address(0),
+            0,
+            0,
+            10, // quantity
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
+    // Update while whitelist is DISABLED but a non-empty address list is provided -> WhitelistDisabled
+    function testUpdateWhitelistDisabledWithAddressesReverts() public {
+        // Create a simple ERC721 listing with whitelist disabled.
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Attempt to update while keeping whitelist disabled but passing addresses.
+        address[] memory bogus = new address[](1);
+        bogus[0] = buyer;
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WhitelistDisabled.selector);
+        market.updateListing(
+            id,
+            1 ether, // keep same price
+            address(0), // no swap
+            0,
+            0,
+            0, // still ERC721
+            false, // whitelist remains disabled
+            false, // partialBuy irrelevant for ERC721
+            bogus // <-- non-empty list should trigger revert
+        );
+        vm.stopPrank();
+    }
+
     // End of test contract
 }
 
