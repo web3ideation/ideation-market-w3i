@@ -2524,6 +2524,102 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(getter.getProceeds(holder), 0.99 ether);
     }
 
+    function testPurchaseRevertsWhenBuyerIsSeller() public {
+        // seller lists ERC721 (price = 1 ETH)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // seller tries to buy own listing -> must revert
+        vm.deal(seller, 1 ether);
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__SameBuyerAsSeller.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    function testSwap1155MissingHolderParamReverts() public {
+        // Whitelist listed collection (ERC721). Desired (ERC1155) need not be whitelisted, only must pass interface check.
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Seller approval for the listed ERC721
+        vm.prank(seller);
+        erc721.approve(address(diamond), 1);
+
+        // Create swap listing: want ERC1155 id=1, quantity=2; price=0 (pure swap)
+        vm.prank(seller);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            0, // price
+            address(erc1155), // desiredTokenAddress (ERC1155)
+            1, // desiredTokenId
+            2, // desiredErc1155Quantity > 0
+            0, // erc1155Quantity (listed is ERC721)
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer attempts purchase but omits desiredErc1155Holder -> must revert early
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__WrongErc1155HolderParameter.selector);
+        market.purchaseListing{value: 0}(
+            id,
+            0, // expectedPrice
+            0, // expectedErc1155Quantity (listed is ERC721)
+            address(erc1155), // expectedDesiredTokenAddress
+            1, // expectedDesiredTokenId
+            2, // expectedDesiredErc1155Quantity
+            0, // erc1155PurchaseQuantity (ERC721 path)
+            address(0) // desiredErc1155Holder MISSING -> revert
+        );
+        vm.stopPrank();
+    }
+
+    function testCancelListingByERC721ApprovedOperator() public {
+        // Whitelist ERC721 collection
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Seller: grant blanket approval to marketplace (so createListing passes)
+        vm.prank(seller);
+        erc721.setApprovalForAll(address(diamond), true);
+
+        // Seller: set per-token approval to 'operator' (this is the authority we want to test)
+        vm.prank(seller);
+        erc721.approve(operator, 1);
+
+        // Create listing for token 1
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Operator cancels via getApproved(tokenId) path
+        vm.prank(operator);
+        market.cancelListing(id);
+
+        // Listing is removed
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testSetInnovationFeeEmitsEvent() public {
+        uint32 previous = getter.getInnovationFee();
+        uint32 next = previous + 123; // any value; you keep fee unbounded by design
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.InnovationFeeUpdated(previous, next);
+
+        vm.prank(owner);
+        market.setInnovationFee(next);
+
+        assertEq(getter.getInnovationFee(), next);
+    }
+
     // End of test contract
 }
 
