@@ -2139,6 +2139,114 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
+    function testLoupeSelectorsPerFacet() public view {
+        // ===== Market facet =====
+        address marketAddr = loupe.facetAddress(IdeationMarketFacet.createListing.selector);
+        assertTrue(marketAddr != address(0));
+
+        // All market selectors should live on the same facet
+        assertEq(loupe.facetAddress(IdeationMarketFacet.purchaseListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.cancelListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.updateListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.withdrawProceeds.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.setInnovationFee.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.cleanListing.selector), marketAddr);
+
+        // Spot-check the facet’s selector list actually includes them
+        bytes4[] memory m = loupe.facetFunctionSelectors(marketAddr);
+        assertTrue(_hasSel(m, IdeationMarketFacet.createListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.purchaseListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.cancelListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.updateListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.withdrawProceeds.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.setInnovationFee.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.cleanListing.selector));
+
+        // ===== Ownership facet =====
+        address ownershipAddr = loupe.facetAddress(IERC173.owner.selector);
+        assertTrue(ownershipAddr != address(0));
+        assertEq(loupe.facetAddress(IERC173.transferOwnership.selector), ownershipAddr);
+        assertEq(loupe.facetAddress(OwnershipFacet.acceptOwnership.selector), ownershipAddr);
+        bytes4[] memory o = loupe.facetFunctionSelectors(ownershipAddr);
+        assertTrue(_hasSel(o, IERC173.owner.selector));
+        assertTrue(_hasSel(o, IERC173.transferOwnership.selector));
+        assertTrue(_hasSel(o, OwnershipFacet.acceptOwnership.selector));
+
+        // ===== Loupe facet =====
+        address loupeAddr = loupe.facetAddress(IDiamondLoupeFacet.facets.selector);
+        assertTrue(loupeAddr != address(0));
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetFunctionSelectors.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetAddresses.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetAddress.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IERC165.supportsInterface.selector), loupeAddr);
+        bytes4[] memory l = loupe.facetFunctionSelectors(loupeAddr);
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facets.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetFunctionSelectors.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetAddresses.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetAddress.selector));
+        assertTrue(_hasSel(l, IERC165.supportsInterface.selector));
+
+        // ===== Collection whitelist facet =====
+        address colAddr = loupe.facetAddress(CollectionWhitelistFacet.addWhitelistedCollection.selector);
+        assertTrue(colAddr != address(0));
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.removeWhitelistedCollection.selector), colAddr);
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.batchAddWhitelistedCollections.selector), colAddr);
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.batchRemoveWhitelistedCollections.selector), colAddr);
+
+        // ===== Buyer whitelist facet =====
+        address bwAddr = loupe.facetAddress(BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector);
+        assertTrue(bwAddr != address(0));
+        assertEq(loupe.facetAddress(BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector), bwAddr);
+
+        // ===== Getter facet =====
+        address getterAddr = loupe.facetAddress(GetterFacet.getNextListingId.selector);
+        assertTrue(getterAddr != address(0));
+        assertEq(loupe.facetAddress(GetterFacet.getListingsByNFT.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getListingByListingId.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getProceeds.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getBalance.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getInnovationFee.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.isCollectionWhitelisted.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getWhitelistedCollections.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getContractOwner.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.isBuyerWhitelisted.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getBuyerWhitelistMaxBatchSize.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getPendingOwner.selector), getterAddr);
+    }
+
+    function _hasSel(bytes4[] memory arr, bytes4 sel) internal pure returns (bool) {
+        for (uint256 i; i < arr.length; i++) {
+            if (arr[i] == sel) return true;
+        }
+        return false;
+    }
+
+    function testSupportsInterfaceNegative() public view {
+        assertFalse(IERC165(address(diamond)).supportsInterface(0x12345678));
+    }
+
+    function testCleanListingERC1155() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Revoke marketplace approval so cleanListing is allowed
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     // End of test contract
 }
 
