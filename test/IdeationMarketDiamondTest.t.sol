@@ -3196,6 +3196,27 @@ contract IdeationMarketDiamondTest is Test {
         );
     }
 
+    function testSwapExpectedDesiredFieldsMismatchReverts() public {
+        // create 721->721 swap listing (price 0)
+        _whitelistCollectionAndApproveERC721();
+        MockERC721 other = new MockERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(other));
+        other.mint(buyer, 42);
+        vm.prank(buyer);
+        other.approve(address(diamond), 42);
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 0, address(other), 42, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // wrong expectedDesiredTokenId
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 0}(id, 0, 0, address(other), 999, 0, 0, address(0));
+    }
+
     /// Duplicates in the buyer whitelist on update are idempotent.
     function testWhitelistDuplicatesOnUpdateIdempotent() public {
         uint128 id = _createListingERC721(false, new address[](0));
@@ -3298,12 +3319,14 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(getter.getProceeds(owner), 0.01 ether);
     }
 
-    /// Setting a pathological fee (>100%) should cause purchase to revert (arithmetic underflow).
+    // Misconfigured fee (>100%) should make purchase impossible.
+    // Underflow in `sellerProceeds = purchasePrice - innovationProceeds` triggers
+    // Solidity 0.8 arithmetic revert.
     function testPathologicalFeeCausesRevert() public {
         _whitelistCollectionAndApproveERC721();
-        // Set fee to 200% (>100%)
+
         vm.prank(owner);
-        market.setInnovationFee(200000);
+        market.setInnovationFee(200_000); // 200% with denominator 100_000
 
         vm.prank(seller);
         market.createListing(
@@ -3313,8 +3336,34 @@ contract IdeationMarketDiamondTest is Test {
 
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        vm.expectRevert(); // underflow in sellerProceeds
+        vm.expectRevert(stdError.arithmeticError); // forge-std
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+    }
+
+    function testFeeExactly100Percent_SucceedsSellerGetsZero() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(owner);
+        market.setInnovationFee(100_000); // exactly 100%
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Seller gets 0, owner gets full 1 ETH (no royalty in this test)
+        assertEq(getter.getProceeds(seller), 0);
+        assertEq(getter.getProceeds(owner), 1 ether);
+
+        // Listing is gone and ownership transferred
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
     }
 
     /// ERC2981 token returning zero royalty should succeed and pay only fee.
@@ -3605,12 +3654,37 @@ contract IdeationMarketDiamondTest is Test {
     function testCreateListingWithNonNFTContractReverts() public {
         NotAnNFT bad = new NotAnNFT();
         vm.prank(owner);
-        // You can’t whitelist this; but even if you did, quantity/type check still fails.
         collections.addWhitelistedCollection(address(bad));
+
+        // Note: the whitelist does NOT enforce interfaces—you can whitelist any address.
+        // The revert happens inside createListing’s interface check:
+        // with erc1155Quantity == 0 it requires ERC721 via IERC165; a non-NFT reverts with WrongQuantityParameter.
 
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
         market.createListing(address(bad), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+    }
+
+    function testUpdatePriceZeroWithoutSwapReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__FreeListingsNotSupported.selector);
+        market.updateListing(id, 0, address(0), 0, 0, 0, false, false, new address[](0));
+    }
+
+    function testCancelERC721ByOperatorForAll() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        erc721.setApprovalForAll(operator, true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+        vm.prank(operator);
+        market.cancelListing(id);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
     }
 
     // End of test contract
