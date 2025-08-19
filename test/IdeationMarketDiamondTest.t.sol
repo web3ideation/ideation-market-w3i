@@ -2414,7 +2414,7 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(buyersBListingId);
     }
 
-    function testSwapERC1155ToERC1155_OperatorNoMarketApprovalReverts_ThenSucceeds() public {
+    function testSwapERC721ToERC1155_OperatorNoMarketApprovalReverts_ThenSucceeds() public {
         // Whitelist collections
         vm.startPrank(owner);
         collections.addWhitelistedCollection(address(erc721)); // unused but harmless
@@ -2618,6 +2618,139 @@ contract IdeationMarketDiamondTest is Test {
         market.setInnovationFee(next);
 
         assertEq(getter.getInnovationFee(), next);
+    }
+
+    function testPurchaseRevertsIfOwnerChangedOffMarket() public {
+        // Create a normal ERC721 listing (price = 1 ETH)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Off-market transfer: seller moves token #1 to operator
+        vm.prank(seller);
+        erc721.transferFrom(seller, operator, 1);
+
+        // Buyer has enough ETH but purchase must revert because stored seller no longer owns the token
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerNotTokenOwner.selector, id));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    function testSwapWithEth_ERC721toERC721_HappyPath() public {
+        // Fresh collections to avoid interference with other tests
+        MockERC721 a = new MockERC721();
+        MockERC721 b = new MockERC721();
+
+        // Only the listed collection must be whitelisted, but whitelisting both is harmless
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(a));
+        collections.addWhitelistedCollection(address(b));
+        vm.stopPrank();
+
+        // Seller owns A#100, buyer owns B#200
+        a.mint(seller, 100);
+        b.mint(buyer, 200);
+
+        // Approvals for marketplace transfers
+        vm.prank(seller);
+        a.approve(address(diamond), 100);
+        vm.prank(buyer);
+        b.approve(address(diamond), 200);
+
+        // Seller lists A#100 wanting B#200 *and* 0.4 ETH
+        vm.prank(seller);
+        market.createListing(
+            address(a),
+            100,
+            address(0),
+            0.4 ether, // price > 0: buyer must pay ETH in addition to providing desired token
+            address(b), // desired ERC721
+            200,
+            0, // desiredErc1155Quantity = 0 (since desired is ERC721)
+            0, // erc1155Quantity = 0 (listed is ERC721)
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer executes swap + ETH
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 0.4 ether}(
+            id,
+            0.4 ether, // expectedPrice
+            0, // expectedErc1155Quantity (listed is ERC721)
+            address(b), // expectedDesiredTokenAddress
+            200, // expectedDesiredTokenId
+            0, // expectedDesiredErc1155Quantity
+            0, // erc1155PurchaseQuantity (ERC721 path)
+            address(0) // desiredErc1155Holder N/A for ERC721
+        );
+
+        // Ownership swapped and proceeds credited (fee 1% of 0.4 = 0.004)
+        assertEq(a.ownerOf(100), buyer);
+        assertEq(b.ownerOf(200), seller);
+        assertEq(getter.getProceeds(seller), 0.396 ether);
+        assertEq(getter.getProceeds(owner), 0.004 ether);
+    }
+
+    function testSwapWithEth_ERC721toERC1155_HappyPath() public {
+        // Listed collection must be whitelisted; desired ERC1155 only needs to pass interface checks.
+        MockERC721 a = new MockERC721();
+        MockERC1155 m1155 = new MockERC1155();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(a));
+
+        // Seller owns A#101
+        a.mint(seller, 101);
+        vm.prank(seller);
+        a.approve(address(diamond), 101);
+
+        // Buyer holds 5 units of desired ERC1155 id=77 and approves marketplace
+        uint256 desiredId = 77;
+        m1155.mint(buyer, desiredId, 5);
+        vm.prank(buyer);
+        m1155.setApprovalForAll(address(diamond), true);
+
+        // Seller lists A#101 wanting 3x (ERC1155 id=77) *and* 0.3 ETH
+        vm.prank(seller);
+        market.createListing(
+            address(a),
+            101,
+            address(0),
+            0.3 ether, // ETH component
+            address(m1155), // desired ERC1155
+            desiredId,
+            3, // desiredErc1155Quantity > 0
+            0, // erc1155Quantity = 0 (listed is ERC721)
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer executes swap + ETH (must pass desiredErc1155Holder)
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 0.3 ether}(
+            id,
+            0.3 ether, // expectedPrice
+            0, // expectedErc1155Quantity (listed is ERC721)
+            address(m1155), // expectedDesiredTokenAddress
+            desiredId, // expectedDesiredTokenId
+            3, // expectedDesiredErc1155Quantity
+            0, // erc1155PurchaseQuantity (ERC721 path)
+            buyer // desiredErc1155Holder (buyer is the holder)
+        );
+
+        // Token and balance changes; proceeds reflect fee 1% of 0.3 = 0.003
+        assertEq(a.ownerOf(101), buyer);
+        assertEq(m1155.balanceOf(buyer, desiredId), 2);
+        assertEq(m1155.balanceOf(seller, desiredId), 3);
+        assertEq(getter.getProceeds(seller), 0.297 ether);
+        assertEq(getter.getProceeds(owner), 0.003 ether);
     }
 
     // End of test contract
