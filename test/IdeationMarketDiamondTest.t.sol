@@ -3687,6 +3687,173 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
+    /// ListingCreated fires with exact parameters for ERC721 listing
+    function testEmitListingCreated() public {
+        _whitelistCollectionAndApproveERC721();
+        uint128 expectedId = getter.getNextListingId();
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCreated(
+            expectedId,
+            address(erc721),
+            1,
+            0, // erc1155Quantity (ERC721 -> 0)
+            1 ether,
+            getter.getInnovationFee(),
+            seller,
+            false,
+            false,
+            address(0),
+            0,
+            0
+        );
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
+    /// ListingUpdated fires with exact parameters on price change
+    function testEmitListingUpdated() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingUpdated(
+            id, address(erc721), 1, 0, 2 ether, getter.getInnovationFee(), seller, false, false, address(0), 0, 0
+        );
+
+        vm.prank(seller);
+        market.updateListing(id, 2 ether, address(0), 0, 0, 0, false, false, new address[](0));
+    }
+
+    /// ListingPurchased fires with exact parameters on ERC721 full purchase
+    function testEmitListingPurchased() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingPurchased(
+            id, address(erc721), 1, 0, false, 1 ether, INNOVATION_FEE, seller, buyer, address(0), 0, 0
+        );
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+    }
+
+    /// RoyaltyPaid fires with exact parameters
+    function testEmitRoyaltyPaid() public {
+        // Prepare royalty NFT (10%) and whitelist
+        MockERC721Royalty royaltyNft = new MockERC721Royalty();
+        address royaltyReceiver = address(0xB0B);
+        royaltyNft.setRoyalty(royaltyReceiver, 10_000); // 10% of 100_000
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(royaltyNft));
+        royaltyNft.mint(seller, 1);
+
+        vm.prank(seller);
+        royaltyNft.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(royaltyNft), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.RoyaltyPaid(id, royaltyReceiver, address(royaltyNft), 1, 0.1 ether);
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+    }
+
+    /// ListingCanceled fires with exact parameters
+    function testEmitListingCanceled() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, seller);
+
+        vm.prank(seller);
+        market.cancelListing(id);
+    }
+
+    /// ListingCanceledDueToMissingApproval fires with exact parameters
+    function testEmitListingCanceledDueToMissingApproval() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToMissingApproval(id, address(erc721), 1, seller, operator);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+    }
+
+    /// InnovationFeeUpdated fires with exact parameters
+    function testEmitInnovationFeeUpdated() public {
+        uint32 prev = getter.getInnovationFee();
+        uint32 next = 777;
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.InnovationFeeUpdated(prev, next);
+
+        // prank applies to the NEXT call only — apply it to the setter
+        vm.prank(owner);
+        market.setInnovationFee(next);
+
+        // sanity check
+        assertEq(getter.getInnovationFee(), next);
+    }
+
+    /// ProceedsWithdrawn fires with exact parameters
+    function testEmitProceedsWithdrawn() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        uint256 proceedsBefore = getter.getProceeds(seller);
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ProceedsWithdrawn(seller, proceedsBefore);
+
+        vm.prank(seller);
+        market.withdrawProceeds();
+    }
+
     // End of test contract
 }
 
