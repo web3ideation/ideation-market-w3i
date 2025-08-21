@@ -109,7 +109,7 @@ contract IdeationMarketFacet {
     event InnovationFeeUpdated(uint32 previousFee, uint32 newFee);
 
     // Event emitted when a listing is canceled due to revoked approval.
-    event ListingCanceledDueToMissingApproval(
+    event ListingCanceledDueToInvalidListing(
         uint128 indexed listingId,
         address indexed tokenAddress,
         uint256 indexed tokenId,
@@ -510,34 +510,67 @@ contract IdeationMarketFacet {
         );
     }
 
-    // natspec info: the token owner or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing in case there are issues with a listing
+    // natspec info: the seller or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing, for example in case there are issues with a listing
     function cancelListing(uint128 listingId) public listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
+        // allow the diamondOwner to force cancel any listing
         address diamondOwner = LibDiamond.contractOwner();
-        bool isAuthorized;
+        if (msg.sender == diamondOwner) {
+            // delete Listing
+            deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
+            return;
+        }
+
+        bool isAuthorized = false;
+        // check if its an ERC721 or ERC1155 token contract
         if (listedItem.erc1155Quantity == 0) {
             IERC721 token = IERC721(listedItem.tokenAddress);
-            isAuthorized = (
-                msg.sender == listedItem.seller || msg.sender == token.getApproved(listedItem.tokenId)
-                    || token.isApprovedForAll(listedItem.seller, msg.sender)
-            );
+
+            // check if the caller is the item seller
+            isAuthorized = (msg.sender == listedItem.seller);
+
+            if (!isAuthorized) {
+                // try check if the caller is approved for the sellers token by the token contract
+                try token.getApproved(listedItem.tokenId) returns (address approvedAddress) {
+                    if (approvedAddress == msg.sender) {
+                        isAuthorized = true;
+                    }
+                } catch { /* ignore */ }
+            }
+
+            if (!isAuthorized) {
+                // try check if the caller is approvedForAll the sellers tokens by the token contract
+                try token.isApprovedForAll(listedItem.seller, msg.sender) returns (bool approved) {
+                    if (approved) {
+                        isAuthorized = true;
+                    }
+                } catch { /* ignore */ }
+            }
         } else {
-            isAuthorized = (
-                msg.sender == listedItem.seller
-                    || IERC1155(listedItem.tokenAddress).isApprovedForAll(listedItem.seller, msg.sender)
-            );
-        }
-        // allows the diamondOwner to cancel any Listing
-        if (!isAuthorized && msg.sender != diamondOwner) {
-            revert IdeationMarket__NotAuthorizedToCancel();
+            // check if the caller is the item seller
+            isAuthorized = (msg.sender == listedItem.seller);
+
+            if (!isAuthorized) {
+                try IERC1155(listedItem.tokenAddress).isApprovedForAll(listedItem.seller, msg.sender) returns (
+                    bool approved
+                ) {
+                    if (approved) {
+                        isAuthorized = true;
+                    }
+                } catch { /* ignore */ }
+            }
         }
 
-        // delete Listing
-        deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
-
-        emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
+        if (isAuthorized) {
+            // delete Listing
+            deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
+            return;
+        }
+        revert IdeationMarket__NotAuthorizedToCancel();
     }
 
     function updateListing(
@@ -680,35 +713,90 @@ contract IdeationMarketFacet {
         emit InnovationFeeUpdated(previousFee, newFee);
     }
 
-    // checks for token contract approval and for collection whitelist
+    // checks for token ownership, contract approval and for collection whitelist
     function cleanListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
-        bool approved = false;
+        bool invalid = false;
 
-        // check if the Collection is still Whitelisted
-        if (s.whitelistedCollections[listedItem.tokenAddress]) {
-            // check approval depending on token type
-            if (listedItem.erc1155Quantity > 0) {
-                approved = IERC1155(listedItem.tokenAddress).isApprovedForAll(listedItem.seller, address(this));
+        // using a loop just for breaking out of condition testing in case of invalid listing
+        do {
+            // check if the Collection is still Whitelisted
+            if (s.whitelistedCollections[listedItem.tokenAddress]) {
+                // check ownership and approval depending on token type
+                if (listedItem.erc1155Quantity > 0) {
+                    IERC1155 token = IERC1155(listedItem.tokenAddress);
+
+                    // balanceOf may revert on invalid tokens → delete
+                    try token.balanceOf(listedItem.seller, listedItem.tokenId) returns (uint256 balance) {
+                        if (balance < listedItem.erc1155Quantity) {
+                            invalid = true;
+                            break;
+                        }
+                    } catch {
+                        invalid = true;
+                        break;
+                    }
+
+                    // isApprovedForAll may revert → delete
+                    try token.isApprovedForAll(listedItem.seller, address(this)) returns (bool approved) {
+                        if (!approved) {
+                            invalid = true;
+                            break;
+                        }
+                    } catch {
+                        invalid = true;
+                        break;
+                    }
+                } else {
+                    IERC721 token = IERC721(listedItem.tokenAddress);
+
+                    // ownerOf may revert for burned/nonexistent → delete
+                    try token.ownerOf(listedItem.tokenId) returns (address currOwner) {
+                        if (currOwner != listedItem.seller) {
+                            invalid = true;
+                            break;
+                        }
+                    } catch {
+                        invalid = true;
+                        break;
+                    }
+
+                    // getApproved may revert → delete
+                    try token.getApproved(listedItem.tokenId) returns (address approved) {
+                        if (approved != address(this)) {
+                            // isApprovedForAll may also revert → delete
+                            try token.isApprovedForAll(listedItem.seller, address(this)) returns (bool approvedForAll) {
+                                if (!approvedForAll) {
+                                    invalid = true;
+                                    break;
+                                }
+                            } catch {
+                                invalid = true;
+                                break;
+                            }
+                        }
+                    } catch {
+                        invalid = true;
+                        break;
+                    }
+                }
             } else {
-                IERC721 token = IERC721(listedItem.tokenAddress);
-                approved = token.getApproved(listedItem.tokenId) == address(this)
-                    || token.isApprovedForAll(listedItem.seller, address(this));
+                invalid = true;
+                break;
             }
-        }
+        } while (false);
 
-        // If approval is missing, cancel the listing by deleting it from storage.
-        if (!approved) {
+        if (invalid) {
             deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
-
-            emit ListingCanceledDueToMissingApproval(
+            emit ListingCanceledDueToInvalidListing(
                 listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender
             );
-        } else {
-            revert IdeationMarket__StillApproved();
+            return;
         }
+
+        revert IdeationMarket__StillApproved();
     }
 
     //////////////////////
@@ -748,7 +836,7 @@ contract IdeationMarketFacet {
         if (desiredTokenAddress == address(0)) {
             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-            if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
+            if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
         } else if (desiredErc1155Quantity > 0) {
             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
                 revert IdeationMarket__NotSupportedTokenStandard();
