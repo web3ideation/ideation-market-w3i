@@ -4473,6 +4473,268 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
+    /* ============================================================
+    Additional tests: burns, operator-for-all cancels, 1155 partial
+    burn cleanup, and ERC1155 swap cleanup boundary behavior.
+    Copy/paste into IdeationMarketDiamondTest.
+    ============================================================ */
+
+    /// Purchase after ERC721 burn should revert (distinct from off-market transfer).
+    function testPurchaseRevertsAfterERC721Burn() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing: ERC721 #1, price = 1 ETH
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // "Burn" token by sending to the zero address (owner becomes address(0))
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1);
+
+        // Buyer attempts purchase → must revert with SellerNotTokenOwner(listingId)
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerNotTokenOwner.selector, id));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    /// Diamond owner can cancel an ERC721 listing after the token is burned.
+    function testCancelAfterERC721BurnByOwner() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn it
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1);
+
+        // Diamond owner cancels
+        vm.prank(owner);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// Operator-for-all (without per-token approval) can cancel after ERC721 burn.
+    function testCancelAfterERC721BurnByOperatorForAll() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Seller grants operator-for-all; approve marketplace for creation
+        vm.prank(seller);
+        erc721.setApprovalForAll(operator, true);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn token
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1);
+
+        // Operator-for-all cancels
+        vm.prank(operator);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// ERC-1155 partial burn leaving less than listed quantity → purchase reverts, then clean().
+    function testERC1155PartialBurnBelowListed_PurchaseRevertsThenClean() public {
+        // Whitelist & approve
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Seller has 10 of id=1 from setUp. List qty=10, price=10 ETH.
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            10 ether,
+            address(0),
+            0,
+            0,
+            10, // listed quantity
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn 7 → seller balance becomes 3 (< 10 listed)
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, address(0), 1, 7, "");
+
+        // Purchase (attempt to buy all 10) → must revert with SellerInsufficientTokenBalance(10, 3)
+        vm.deal(buyer, 10 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerInsufficientTokenBalance.selector, 10, 3));
+        market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
+        vm.stopPrank();
+
+        // Revoke marketplace approval or cleanListing will revert with StillApproved
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        // Third party can clean the invalid listing
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(id, address(erc1155), 1, seller, operator);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /* ============================================================
+    ERC1155 swap cleanup boundary behavior
+    - If buyer’s post-swap remaining balance == their own listed qty → not deleted
+    - If remaining balance < their listed qty → listing is deleted
+    ============================================================ */
+
+    /// Buyer has a pre-existing ERC1155 listing with qty = QL.
+    /// After swapping away QS units, remaining == QL → should NOT delete.
+    function testSwapCleanupERC1155_RemainingEqualsListed_NotDeleted() public {
+        // Fresh ERC721 for the listed side
+        MockERC721 A = new MockERC721();
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(A)); // listed collection must be whitelisted
+        collections.addWhitelistedCollection(address(erc1155)); // needed so buyer can list ERC1155
+        vm.stopPrank();
+
+        // Mint A#100 to seller and approve marketplace
+        A.mint(seller, 100);
+        vm.prank(seller);
+        A.approve(address(diamond), 100);
+
+        uint256 id1155 = 777;
+        uint256 QL = 5; // buyer's own ERC1155 listing quantity
+        uint256 QS = 3; // units required by the swap
+        // Mint buyer QL + QS so remaining == QL after swap
+        erc1155.mint(buyer, id1155, QL + QS);
+        vm.prank(buyer);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Buyer pre-lists ERC1155(id=777) qty=QL
+        vm.prank(buyer);
+        market.createListing(
+            address(erc1155),
+            id1155,
+            buyer,
+            5 ether,
+            address(0),
+            0,
+            0,
+            uint16(QL), // erc1155Quantity
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 buyerListingId = getter.getNextListingId() - 1;
+
+        // Seller lists A#100 wanting QS units of that ERC1155; price=0 (pure swap)
+        vm.prank(seller);
+        market.createListing(
+            address(A),
+            100,
+            address(0),
+            0,
+            address(erc1155),
+            id1155,
+            uint16(QS), // desire ERC1155
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 swapListingId = getter.getNextListingId() - 1;
+
+        // Buyer performs the swap; must pass desiredErc1155Holder=buyer
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(
+            swapListingId,
+            0, // expectedPrice
+            0, // expectedErc1155Quantity (listed is ERC721)
+            address(erc1155),
+            id1155,
+            uint16(QS),
+            0, // erc1155PurchaseQuantity (ERC721 path)
+            buyer // desiredErc1155Holder
+        );
+
+        // Buyer’s ERC1155 listing should still exist (remaining == QL)
+        Listing memory L = getter.getListingByListingId(buyerListingId);
+        assertEq(L.erc1155Quantity, QL);
+        // Spot-check balances: buyer kept exactly QL
+        assertEq(erc1155.balanceOf(buyer, id1155), QL);
+    }
+
+    /// Buyer’s remaining balance falls BELOW their listed qty → marketplace should delete that listing.
+    function testSwapCleanupERC1155_RemainingBelowListed_Deleted() public {
+        // Fresh ERC721
+        MockERC721 A = new MockERC721();
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(A));
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        // Mint/approve A#101 to seller
+        A.mint(seller, 101);
+        vm.prank(seller);
+        A.approve(address(diamond), 101);
+
+        uint256 id1155 = 888;
+        uint256 QL = 5; // buyer's listing quantity
+        uint256 QS = 3; // required by swap
+        // Mint buyer QL + QS - 1 so post-swap remaining = QL - 1 (insufficient)
+        erc1155.mint(buyer, id1155, QL + QS - 1);
+        vm.prank(buyer);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Buyer pre-lists ERC1155(id=888) qty=QL
+        vm.prank(buyer);
+        market.createListing(
+            address(erc1155), id1155, buyer, 5 ether, address(0), 0, 0, uint16(QL), false, false, new address[](0)
+        );
+        uint128 buyerListingId = getter.getNextListingId() - 1;
+
+        // Seller lists ERC721 wanting QS of that ERC1155 (pure swap)
+        vm.prank(seller);
+        market.createListing(
+            address(A), 101, address(0), 0, address(erc1155), id1155, uint16(QS), 0, false, false, new address[](0)
+        );
+        uint128 swapListingId = getter.getNextListingId() - 1;
+
+        // Execute swap
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(swapListingId, 0, 0, address(erc1155), id1155, uint16(QS), 0, buyer);
+
+        // The buyer's ERC1155 listing should have been deleted by the swap cleanup
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, buyerListingId));
+        getter.getListingByListingId(buyerListingId);
+
+        // Remaining balance is QL-1 as constructed
+        assertEq(erc1155.balanceOf(buyer, id1155), QL - 1);
+    }
+
     // End of test contract
 }
 
