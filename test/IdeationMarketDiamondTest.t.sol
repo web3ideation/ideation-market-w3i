@@ -4349,12 +4349,137 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(sum, getter.getBalance());
     }
 
+    function testCleanListingAfterERC721BurnByThirdUser() public {
+        // Create simple ERC721 listing for token #1 (price = 1 ETH)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // "Burn" by transferring to address(0) — clears per-token approval in the mock
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1);
+
+        // Any third party may clean an invalid listing
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(
+            id,
+            address(erc721),
+            1,
+            seller,
+            operator // cleaner
+        );
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        // Listing removed
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListingAfterERC721BurnByOwner() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1); // burn
+
+        // Diamond owner can cancel any listing, even after burn
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, owner);
+
+        vm.prank(owner);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListingAfterERC721BurnBySeller() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1); // burn
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, seller);
+
+        vm.prank(seller);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListingAfterERC721BurnByOperatorForAll() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Grant blanket operator rights (NOT the marketplace; a real operator)
+        vm.prank(seller);
+        erc721.setApprovalForAll(operator, true);
+
+        // Burn after listing
+        vm.prank(seller);
+        erc721.transferFrom(seller, address(0), 1);
+
+        // Operator-for-all may cancel on behalf of the (former) seller
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, operator);
+
+        vm.prank(operator);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCleanListingAfterERC1155BurnAllByThirdUser() public {
+        // Whitelist & approve marketplace for ERC1155
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // IMPORTANT: seller has 10 units from setUp(); list all 10 so a full burn invalidates the listing
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            10 ether, // total price
+            address(0),
+            0,
+            0,
+            10, // list the full 10
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn all 10 units by sending to the zero address -> seller balance becomes 0 (< listed 10)
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, address(0), 1, 10, "");
+
+        // Revoke marketplace approval; cleanListing requires the listing to be invalid AND not approved
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        // Third party can now clean the invalid listing
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(id, address(erc1155), 1, seller, operator);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     // End of test contract
 }
 
 // -------------------------------------------------------------------------
-// Mock Token Implementations
+// Helper and Mock Token Implementations
 // -------------------------------------------------------------------------
+
 // A minimal ERC‑721 that implements owner/approval logic sufficient for the marketplace
 contract MockERC721 {
     mapping(uint256 => address) internal _owners;
@@ -4584,10 +4709,7 @@ contract MockERC721Royalty {
     }
 }
 
-// -------------------------------------------------------------------------
 // Helper facets for upgrade testing
-// -------------------------------------------------------------------------
-
 contract VersionFacetV1 {
     function version() external pure returns (uint256) {
         return 1;
@@ -4599,10 +4721,6 @@ contract VersionFacetV2 {
         return 2;
     }
 }
-
-// -------------------------------------------------------------------------
-// Reentrant withdraw attacker
-// -------------------------------------------------------------------------
 
 // Attempts to re-enter withdrawProceeds from its receive() callback. The
 // nonReentrant modifier on withdrawProceeds should prevent success.
@@ -4625,10 +4743,6 @@ contract ReentrantWithdrawer {
         }
     }
 }
-
-// -------------------------------------------------------------------------
-// Malicious ERC1155 token
-// -------------------------------------------------------------------------
 
 // Minimal ERC1155 that calls withdrawProceeds during safeTransferFrom to
 // attempt a reentrant attack. It catches the revert to allow the transfer.
@@ -4678,10 +4792,6 @@ contract MaliciousERC1155 {
         _balances[id][to] += amount;
     }
 }
-
-// -------------------------------------------------------------------------
-// Malicious ERC721 token
-// -------------------------------------------------------------------------
 
 // Minimal ERC721 that calls withdrawProceeds during transferFrom to attempt
 // a reentrant attack. It catches the revert to allow the transfer.
@@ -4763,10 +4873,6 @@ contract MaliciousERC721 {
         transferFrom(from, to, tokenId);
     }
 }
-
-// -------------------------------------------------------------------------
-// Helpers for royalty reversion & revert on receive
-// -------------------------------------------------------------------------
 
 // ERC721 + ERC2981 mock whose royaltyInfo REVERTS
 contract MockERC721RoyaltyReverting {
