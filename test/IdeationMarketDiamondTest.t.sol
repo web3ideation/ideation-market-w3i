@@ -5087,6 +5087,183 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(address(diamond).balance, price);
     }
 
+    function testSwapERC1155toERC1155_PureSwap_HappyPath() public {
+        // Listed 1155 (A) must be whitelisted; desired 1155 (B) only needs to pass interface checks.
+        MockERC1155 A = new MockERC1155();
+        MockERC1155 B = new MockERC1155();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(A));
+
+        // Seller lists 10x A#1
+        A.mint(seller, 1, 10);
+        vm.prank(seller);
+        A.setApprovalForAll(address(diamond), true);
+
+        // Buyer holds 6x B#7 and approves marketplace
+        B.mint(buyer, 7, 6);
+        vm.prank(buyer);
+        B.setApprovalForAll(address(diamond), true);
+
+        // Create pure swap: want 6x B#7 for 10x A#1 (price=0, partials disabled)
+        vm.prank(seller);
+        market.createListing(address(A), 1, seller, 0, address(B), 7, 6, 10, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Execute swap
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(id, 0, 10, address(B), 7, 6, 10, buyer);
+
+        // Balances swapped
+        assertEq(A.balanceOf(buyer, 1), 10);
+        assertEq(B.balanceOf(seller, 7), 6);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testSwapERC1155toERC1155_WithEth_AndBuyerIsOperatorForDesired() public {
+        MockERC1155 A = new MockERC1155();
+        MockERC1155 B = new MockERC1155();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(A));
+
+        // Seller lists 8x A#2
+        A.mint(seller, 2, 8);
+        vm.prank(seller);
+        A.setApprovalForAll(address(diamond), true);
+
+        // Desired B#9 is held by 'operatorHolder'; buyer is its operator (NOT holder)
+        address operatorHolder = vm.addr(0x5155);
+        B.mint(operatorHolder, 9, 5);
+        vm.prank(operatorHolder);
+        B.setApprovalForAll(buyer, true); // buyer can move holder's B
+        vm.prank(operatorHolder);
+        B.setApprovalForAll(address(diamond), true); // marketplace can pull B from holder
+
+        // Create swap+ETH: want 5x B#9 + 0.25 ETH for 8x A#2
+        vm.prank(seller);
+        market.createListing(address(A), 2, seller, 0.25 ether, address(B), 9, 5, 8, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 0.25 ether}(id, 0.25 ether, 8, address(B), 9, 5, 8, operatorHolder);
+
+        // Results: A goes to buyer, B to seller, proceeds to seller (minus fee)
+        assertEq(A.balanceOf(buyer, 2), 8);
+        assertEq(B.balanceOf(seller, 9), 5);
+        assertEq(getter.getProceeds(seller), 0.2475 ether); // 0.25 * 99%
+        assertEq(getter.getProceeds(owner), 0.0025 ether);
+    }
+
+    function testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels2() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tid = 600;
+        erc1155.mint(seller, tid, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tid, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Drift: seller sends 7 away -> left with 3 (< listed 10); approval remains TRUE
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, buyer, tid, 7, "");
+
+        // Anyone should be able to clean now
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCleanListingERC721_OwnerChangedButApprovalIntact_Cancels() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Off-market transfer to operator; marketplace approval on token 1 is still the diamond
+        vm.prank(seller);
+        erc721.transferFrom(seller, operator, 1);
+        // (no approval changes)
+
+        // Anyone should be able to clean this stale listing
+        vm.prank(buyer);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCleanListing_BurnedERC721_Cancels() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc721.burn(1);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListing_BurnedERC1155_BySeller() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(seller, 42, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(erc1155), 42, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc1155.burn(seller, 42, 5);
+
+        vm.prank(seller);
+        market.cancelListing(id);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testERC721ReceiverSwallowsRevert_DoesNotMaskMarketplaceChecks() public {
+        _whitelistCollectionAndApproveERC721();
+        SwallowingERC721Receiver recv = new SwallowingERC721Receiver();
+
+        // list and sell to receiver
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // Then send to receiver via normal transfer to assert hook didn’t break semantics
+        vm.prank(buyer);
+        erc721.safeTransferFrom(buyer, address(recv), 1);
+
+        assertEq(erc721.ownerOf(1), address(recv));
+    }
+
     // End of test contract
 }
 
@@ -5175,6 +5352,23 @@ contract MockERC721 {
     ) external pure {
         revert("MockERC721: ERC1155.safeTransferFrom used on ERC721");
     }
+
+    // Add this helper anywhere in MockERC721
+    function _isApprovedOrOwner(address spender, uint256 tokenId) internal view returns (bool) {
+        address owner = _owners[tokenId];
+        return (spender == owner || spender == _tokenApprovals[tokenId] || _operatorApprovals[owner][spender]);
+    }
+
+    // Replace your current burn with this (no _burn() call needed)
+    function burn(uint256 tokenId) external {
+        address owner = _owners[tokenId];
+        require(owner != address(0), "nonexistent");
+        require(_isApprovedOrOwner(msg.sender, tokenId), "not approved");
+
+        _balances[owner] -= 1;
+        _owners[tokenId] = address(0);
+        _tokenApprovals[tokenId] = address(0);
+    }
 }
 
 // A minimal ERC‑1155 implementing balance and approval logic
@@ -5230,6 +5424,17 @@ contract MockERC1155 {
         pure
     {
         revert("MockERC1155: ERC721.safeTransferFrom(4) used on ERC1155");
+    }
+
+    // assumes these exist in MockERC1155:
+    // mapping(address => mapping(uint256 => uint256)) internal _balances;
+    // mapping(address => mapping(address => bool)) internal _operatorApprovals;
+
+    function burn(address from, uint256 id, uint256 amount) external {
+        require(from == msg.sender || _operatorApprovals[from][msg.sender], "not approved");
+        uint256 bal = _balances[id][from];
+        require(bal >= amount, "insufficient");
+        _balances[id][from] = bal - amount;
     }
 }
 
@@ -5576,5 +5781,17 @@ contract RevertOnReceive {
 contract NotAnNFT {
     function supportsInterface(bytes4) external pure returns (bool) {
         return false;
+    }
+}
+
+contract SwallowingERC721Receiver {
+    function onERC721Received(address, address, uint256, bytes calldata) external viewreturns(bytes4) {
+        // attempt something that would normally revert, but swallow it
+        try this._doFail() {} catch { /* swallow */ }
+        return this.onERC721Received.selector;
+    }
+
+    function _doFail() external pure {
+        require(false, "internal");
     }
 }
