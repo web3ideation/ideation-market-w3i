@@ -5785,7 +5785,7 @@ contract NotAnNFT {
 }
 
 contract SwallowingERC721Receiver {
-    function onERC721Received(address, address, uint256, bytes calldata) external viewreturns(bytes4) {
+    function onERC721Received(address, address, uint256, bytes calldata) external view returns (bytes4) {
         // attempt something that would normally revert, but swallow it
         try this._doFail() {} catch { /* swallow */ }
         return this.onERC721Received.selector;
