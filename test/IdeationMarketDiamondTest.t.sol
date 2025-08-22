@@ -4735,6 +4735,358 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(erc1155.balanceOf(buyer, id1155), QL - 1);
     }
 
+    /* ========== 1155 ↔ 1155 swaps ========== */
+
+    /// Pure 1155(A) ↔ 1155(B) swap (price = 0).
+    function testERC1155toERC1155Swap_Pure() public {
+        // Token A is the shared fixture erc1155; deploy token B.
+        MockERC1155 tokenB = new MockERC1155();
+
+        // Whitelist both 1155 collections.
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        collections.addWhitelistedCollection(address(tokenB));
+        vm.stopPrank();
+
+        // Mint balances.
+        uint256 idA = 11;
+        uint256 idB = 22;
+        uint16 qtyA = 5;
+        uint16 qtyB = 3;
+
+        erc1155.mint(seller, idA, 10);
+        tokenB.mint(buyer, idB, 10);
+
+        // Approvals.
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(buyer);
+        tokenB.setApprovalForAll(address(diamond), true);
+
+        // Seller lists A:idA qtyA desiring B:idB qtyB, price = 0 (pure swap).
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), idA, seller, 0, address(tokenB), idB, qtyB, qtyA, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        // Execute swap by buyer (supplying tokenB from buyer).
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(
+            listingId,
+            0, // expectedPrice
+            qtyA, // expectedErc1155Quantity (listed is 1155)
+            address(tokenB),
+            idB,
+            qtyB, // desired 1155 qty to deliver
+            qtyA, // purchase qty of listed 1155
+            buyer // desiredErc1155Holder = buyer
+        );
+
+        // Post conditions: A moved seller->buyer, B moved buyer->seller, no ETH moved.
+        assertEq(erc1155.balanceOf(seller, idA), 10 - qtyA);
+        assertEq(erc1155.balanceOf(buyer, idA), qtyA);
+        assertEq(tokenB.balanceOf(buyer, idB), 10 - qtyB);
+        assertEq(tokenB.balanceOf(seller, idB), qtyB);
+        assertEq(address(diamond).balance, 0);
+    }
+
+    /// 1155(A) ↔ 1155(B) + ETH (seller charges ETH in addition to ERC1155 consideration).
+    function testERC1155toERC1155Swap_WithEth() public {
+        MockERC1155 tokenB = new MockERC1155();
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        collections.addWhitelistedCollection(address(tokenB));
+        vm.stopPrank();
+
+        uint256 idA = 33;
+        uint256 idB = 44;
+        uint16 qtyA = 6;
+        uint16 qtyB = 2;
+        uint256 price = 1 ether;
+
+        erc1155.mint(seller, idA, 20);
+        tokenB.mint(buyer, idB, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(buyer);
+        tokenB.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), idA, seller, price, address(tokenB), idB, qtyB, qtyA, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, price);
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(listingId, price, qtyA, address(tokenB), idB, qtyB, qtyA, buyer);
+
+        assertEq(erc1155.balanceOf(seller, idA), 20 - qtyA);
+        assertEq(erc1155.balanceOf(buyer, idA), qtyA);
+        assertEq(tokenB.balanceOf(buyer, idB), 10 - qtyB);
+        assertEq(tokenB.balanceOf(seller, idB), qtyB);
+
+        // Contract should now hold the price until proceeds withdrawal.
+        assertEq(address(diamond).balance, price);
+    }
+
+    /// Buyer is ONLY an authorized operator for the desired 1155(B) holder (not the holder).
+    /// Your contract checks isApprovedForAll(holder, buyer), so grant that, and also approve the diamond to move tokens.
+    function testERC1155toERC1155Swap_BuyerIsOperatorForDesired() public {
+        MockERC1155 tokenB = new MockERC1155();
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        collections.addWhitelistedCollection(address(tokenB));
+        vm.stopPrank();
+
+        address holder = makeAddr("holder"); // third-party holder of tokenB
+
+        uint256 idA = 55;
+        uint256 idB = 66;
+        uint16 qtyA = 4;
+        uint16 qtyB = 3;
+
+        erc1155.mint(seller, idA, 10);
+        tokenB.mint(holder, idB, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Holder authorizes the DIAMOND (for the actual transfer) and the BUYER (authZ check your market performs)
+        vm.startPrank(holder);
+        tokenB.setApprovalForAll(address(diamond), true);
+        tokenB.setApprovalForAll(buyer, true); // <<< important: satisfies IdeationMarket__NotAuthorizedOperator guard
+        vm.stopPrank();
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), idA, seller, 0, address(tokenB), idB, qtyB, qtyA, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        // Buyer executes swap, supplying B from `holder` via marketplace pull.
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(
+            listingId,
+            0,
+            qtyA,
+            address(tokenB),
+            idB,
+            qtyB,
+            qtyA,
+            holder // desiredErc1155Holder is the third-party holder
+        );
+
+        // Effects: holder lost B, seller gained B, buyer received A.
+        assertEq(tokenB.balanceOf(holder, idB), 10 - qtyB);
+        assertEq(tokenB.balanceOf(seller, idB), qtyB);
+        assertEq(erc1155.balanceOf(buyer, idA), qtyA);
+        assertEq(erc1155.balanceOf(seller, idA), 10 - qtyA);
+    }
+
+    /* ========== Clean-listing on ERC1155 balance drift while approval INTACT ========== */
+
+    /// If lister’s 1155 balance drops below listed qty AND approval remains true,
+    /// your cleanListing cancels the listing (it is invalid). Assert deletion.
+    function testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Seller lists qty=8 of id=77; seller currently owns 10.
+        uint256 id = 77;
+        erc1155.mint(seller, id, 10);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Use a non-zero price to avoid FreeListingsNotSupported
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            id,
+            seller,
+            1, // 1 wei
+            address(0),
+            0,
+            0,
+            8,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        // Balance drifts down to 5 (< 8) but approval still true.
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, address(0), id, 5, "");
+
+        // Third party cleans → should delete the listing.
+        vm.prank(operator);
+        market.cleanListing(listingId);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
+        getter.getListingByListingId(listingId);
+    }
+
+    /// Same as above but demonstrate it also cancels after approval is revoked.
+    function testCleanListingERC1155_BalanceDrift_AfterApprovalRevoked_Cleans() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        uint256 id = 88;
+        erc1155.mint(seller, id, 10);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Non-zero price
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            id,
+            seller,
+            1, // 1 wei
+            address(0),
+            0,
+            0,
+            9,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        // Drift down to 7 (< 9).
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, address(0), id, 3, "");
+
+        // Revoke approval; listing is invalid regardless in your implementation.
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        // Clean succeeds and deletes the listing.
+        vm.prank(operator);
+        market.cleanListing(listingId);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
+        getter.getListingByListingId(listingId);
+    }
+
+    /* ========== Invariant: sum of recorded proceeds == contract balance ========== */
+
+    address[] internal __trackedProceedsAddrs;
+
+    /// Optional helper to register addresses once.
+    function __ensureTrackedInit() internal {
+        if (__trackedProceedsAddrs.length == 0) {
+            __trackedProceedsAddrs.push(owner);
+            __trackedProceedsAddrs.push(seller);
+            __trackedProceedsAddrs.push(buyer);
+            __trackedProceedsAddrs.push(operator);
+            // Add more if your suite mints/credits different actors:
+            // __trackedProceedsAddrs.push(makeAddr("royaltyReceiver"));
+        }
+    }
+
+    /// Foundry will run any function prefixed with `invariant_` during invariant tests.
+    /// This asserts the escrowed ETH in the diamond equals the sum of per-user proceeds.
+    function invariant_RecordedProceedsEqualsDiamondBalance() public {
+        __ensureTrackedInit();
+
+        uint256 sum;
+        for (uint256 i = 0; i < __trackedProceedsAddrs.length; i++) {
+            sum += getter.getProceeds(__trackedProceedsAddrs[i]);
+        }
+        assertEq(sum, address(diamond).balance, "sum(proceeds) must equal contract balance");
+    }
+
+    /* ========== Receiver hooks that swallow reverts (malicious tokens) ========== */
+
+    /// Listed token is MaliciousERC1155 which tries (and catches) reentrant withdrawProceeds.
+    /// Purchase must succeed and not break accounting.
+    function testPurchaseWithMaliciousERC1155Listed_Succeeds_NoReentrancy() public {
+        // Deploy malicious 1155 bound to this diamond.
+        MaliciousERC1155 m1155 = new MaliciousERC1155(address(diamond));
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(m1155));
+        vm.stopPrank();
+
+        uint256 id = 909;
+        m1155.mint(seller, id, 5);
+
+        vm.prank(seller);
+        m1155.setApprovalForAll(address(diamond), true);
+
+        // List qty=5 for 1 ETH.
+        vm.prank(seller);
+        market.createListing(address(m1155), id, seller, 1 ether, address(0), 0, 0, 5, false, false, new address[](0));
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(listingId, 1 ether, 5, address(0), 0, 0, 5, address(0));
+
+        // Buyer received all 5; diamond holds ETH; reentrancy attempt was swallowed by the token.
+        assertEq(m1155.balanceOf(buyer, id), 5);
+        assertEq(address(diamond).balance, 1 ether);
+    }
+
+    /// Desired token is MaliciousERC1155; its transfer hook tries (and catches) reentrant withdrawProceeds.
+    /// Swap+ETH purchase must succeed.
+    function testPurchaseWithMaliciousERC1155Desired_Succeeds_NoReentrancy() public {
+        // Listed side uses regular erc1155; desired side is malicious.
+        MaliciousERC1155 m1155 = new MaliciousERC1155(address(diamond));
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        collections.addWhitelistedCollection(address(m1155));
+        vm.stopPrank();
+
+        uint256 idListed = 1001;
+        uint256 idDesired = 2002;
+        uint16 qtyListed = 2;
+        uint16 qtyDesired = 1;
+        uint256 price = 0.25 ether;
+
+        erc1155.mint(seller, idListed, 10);
+        m1155.mint(buyer, idDesired, 5);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(buyer);
+        m1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            idListed,
+            seller,
+            price,
+            address(m1155),
+            idDesired,
+            qtyDesired,
+            qtyListed,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, price);
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(
+            listingId, price, qtyListed, address(m1155), idDesired, qtyDesired, qtyListed, buyer
+        );
+
+        // Transfer should have succeeded despite malicious hook swallowing the internal revert.
+        assertEq(erc1155.balanceOf(buyer, idListed), qtyListed);
+        assertEq(m1155.balanceOf(seller, idDesired), qtyDesired);
+        assertEq(address(diamond).balance, price);
+    }
+
     // End of test contract
 }
 
