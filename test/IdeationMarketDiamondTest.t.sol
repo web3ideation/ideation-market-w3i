@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
@@ -1929,6 +1929,38 @@ contract IdeationMarketDiamondTest is Test {
         vm.startPrank(secondBuyer);
         vm.expectRevert(IdeationMarket__InvalidPurchaseQuantity.selector);
         market.purchaseListing{value: 4 ether}(id, 3 ether, 3, address(0), 0, 0, 4, address(0));
+        vm.stopPrank();
+    }
+
+    // ERC1155 create: msg.sender is neither holder nor holder's operator ⇒ revert NotAuthorizedOperator
+    function testERC1155CreateUnauthorizedListerReverts() public {
+        // Whitelist the collection
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Holder owns the tokens and approves the marketplace, but NOT the would-be lister.
+        // This ensures we fail on auth (msg.sender not holder nor operator), not on marketplace approval.
+        vm.prank(operator);
+        erc1155.mint(operator, 1, 10);
+        vm.prank(operator);
+        erc1155.setApprovalForAll(address(diamond), true); // marketplace approval intact
+
+        // Seller is NOT an operator for `operator` (the holder). Creating should revert on auth.
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
+        market.createListing(
+            address(erc1155), // token
+            1, // tokenId
+            operator, // erc1155Holder (the actual balance holder)
+            10 ether, // price (no swap)
+            address(0), // desiredTokenAddress (no swap)
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            10, // erc1155Quantity (=> 1155 branch)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
+        );
         vm.stopPrank();
     }
 
