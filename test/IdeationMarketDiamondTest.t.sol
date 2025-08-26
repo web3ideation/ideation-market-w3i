@@ -4890,45 +4890,74 @@ contract IdeationMarketDiamondTest is Test {
 
     /* ========== Clean-listing on ERC1155 balance drift while approval INTACT ========== */
 
-    /// If lister’s 1155 balance drops below listed qty AND approval remains true,
-    /// your cleanListing cancels the listing (it is invalid). Assert deletion.
+    /// Canonical: balance drifts via normal transfer (approval remains true) → cleanListing cancels.
     function testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels() public {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
 
-        // Seller lists qty=8 of id=77; seller currently owns 10.
-        uint256 id = 77;
-        erc1155.mint(seller, id, 10);
+        // Seller lists qty=10 of id=77; approval to marketplace is TRUE.
+        uint256 id1155 = 77;
+        uint256 listedQty = 10;
+        erc1155.mint(seller, id1155, listedQty);
+
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), true);
 
-        // Use a non-zero price to avoid FreeListingsNotSupported
+        // Non-zero price to avoid FreeListingsNotSupported
         vm.prank(seller);
         market.createListing(
-            address(erc1155),
-            id,
-            seller,
-            1, // 1 wei
-            address(0),
-            0,
-            0,
-            8,
-            false,
-            false,
-            new address[](0)
+            address(erc1155), id1155, seller, 10 ether, address(0), 0, 0, listedQty, false, false, new address[](0)
         );
         uint128 listingId = getter.getNextListingId() - 1;
 
-        // Balance drifts down to 5 (< 8) but approval still true.
+        // Drift: seller moves 6 away → remaining 4 (< 10); approval STILL true.
         vm.prank(seller);
-        erc1155.safeTransferFrom(seller, address(0), id, 5, "");
+        erc1155.safeTransferFrom(seller, buyer, id1155, 6, "");
 
-        // Third party cleans → should delete the listing.
+        // Expect cancellation event, then anyone can clean.
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(
+            listingId, address(erc1155), id1155, seller, operator
+        );
+
         vm.prank(operator);
         market.cleanListing(listingId);
 
+        // Listing is gone.
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
         getter.getListingByListingId(listingId);
+    }
+
+    /// balance drifts because units are burned (approval remains true) → cancel.
+    /// If your MockERC1155 exposes a burn(address,uint256,uint256) method, prefer that. Otherwise
+    /// keep the safeTransferFrom(..., address(0), ...) line below (if your mock treats that as burn).
+    function testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels_BurnVariant() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        uint256 tid = 600;
+        uint256 listedQty = 8;
+        erc1155.mint(seller, tid, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tid, seller, 1 wei, address(0), 0, 0, listedQty, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn 5 units so remaining = 5 (< 8).
+        // If you have erc1155.burn(seller, tid, 5); use that instead of the next line.
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, address(0), tid, 5, "");
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
     }
 
     /// Same as above but demonstrate it also cancels after approval is revoked.
@@ -5157,33 +5186,6 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(getter.getProceeds(owner), 0.0025 ether);
     }
 
-    function testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels2() public {
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-        uint256 tid = 600;
-        erc1155.mint(seller, tid, 10);
-
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), tid, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Drift: seller sends 7 away -> left with 3 (< listed 10); approval remains TRUE
-        vm.prank(seller);
-        erc1155.safeTransferFrom(seller, buyer, tid, 7, "");
-
-        // Anyone should be able to clean now
-        vm.prank(operator);
-        market.cleanListing(id);
-
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
     function testCleanListingERC721_OwnerChangedButApprovalIntact_Cancels() public {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
@@ -5262,6 +5264,248 @@ contract IdeationMarketDiamondTest is Test {
         erc721.safeTransferFrom(buyer, address(recv), 1);
 
         assertEq(erc721.ownerOf(1), address(recv));
+    }
+
+    /// 1155 <-> 1155 swap paths
+
+    function testSwap_ERC1155toERC1155_PureSwap_BuyerIsOperatorForDesired() public {
+        // Fresh ERC1155 collections
+        MockERC1155 A = new MockERC1155();
+        MockERC1155 B = new MockERC1155();
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(A));
+        collections.addWhitelistedCollection(address(B));
+        vm.stopPrank();
+
+        // Seller holds A#1 x10; Holder owns B#2 x7 and makes buyer an operator
+        address holder = vm.addr(0xA11CE);
+        A.mint(seller, 1, 10);
+        B.mint(holder, 2, 7);
+
+        // Approvals
+        vm.prank(seller);
+        A.setApprovalForAll(address(diamond), true);
+        vm.prank(holder);
+        B.setApprovalForAll(buyer, true); // buyer can act for holder
+        vm.prank(holder);
+        B.setApprovalForAll(address(diamond), true); // marketplace can move holder's tokens
+
+        // Seller lists 6x A#1, desires 5x B#2 (price=0 -> pure swap)
+        vm.prank(seller);
+        market.createListing(address(A), 1, seller, 0, address(B), 2, 5, 6, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer executes swap on behalf of holder
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(id, 0, 6, address(B), 2, 5, 6, holder);
+
+        // Post conditions
+        assertEq(A.balanceOf(buyer, 1), 6);
+        assertEq(B.balanceOf(seller, 2), 5);
+    }
+
+    function testSwap_ERC1155toERC1155_WithEth() public {
+        MockERC1155 A = new MockERC1155();
+        MockERC1155 B = new MockERC1155();
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(A));
+        collections.addWhitelistedCollection(address(B));
+        vm.stopPrank();
+
+        A.mint(seller, 10, 8);
+        B.mint(buyer, 20, 6);
+
+        vm.prank(seller);
+        A.setApprovalForAll(address(diamond), true);
+        vm.prank(buyer);
+        B.setApprovalForAll(address(diamond), true);
+
+        // Seller wants 4x B#20 + 0.25 ETH for 5x A#10
+        vm.prank(seller);
+        market.createListing(address(A), 10, seller, 0.25 ether, address(B), 20, 4, 5, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 0.25 ether}(id, 0.25 ether, 5, address(B), 20, 4, 5, buyer);
+
+        assertEq(A.balanceOf(buyer, 10), 5);
+        assertEq(B.balanceOf(seller, 20), 4);
+        // 1% fee on 0.25 ETH = 0.0025
+        assertEq(getter.getProceeds(seller), 0.2475 ether);
+        assertEq(getter.getProceeds(owner), 0.0025 ether);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Clean/cancel after burn (uses tiny burnable mocks added below)
+    /// -----------------------------------------------------------------------
+
+    function testCleanListingCancelsAfterERC721Burn() public {
+        BurnableERC721 x = new BurnableERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(x));
+
+        x.mint(seller, 1);
+        vm.prank(seller);
+        x.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(address(x), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn off-market
+        vm.prank(seller);
+        x.burn(1);
+
+        // Anyone can clean
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListingAfterERC721Burn_ByContractOwner() public {
+        BurnableERC721 x = new BurnableERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(x));
+
+        x.mint(seller, 2);
+        vm.prank(seller);
+        x.approve(address(diamond), 2);
+        vm.prank(seller);
+        market.createListing(address(x), 2, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        x.burn(2);
+
+        // Contract owner can cancel any listing
+        vm.prank(owner);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCleanListingCancelsAfterERC1155Burn() public {
+        BurnableERC1155 y = new BurnableERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(y));
+
+        y.mint(seller, 5, 10);
+        vm.prank(seller);
+        y.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(y), 5, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Burn some so balance < listed
+        vm.prank(seller);
+        y.burn(seller, 5, 7); // leaves 3 < 10
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testCancelListingAfterERC1155Burn_ByContractOwner() public {
+        BurnableERC1155 y = new BurnableERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(y));
+
+        y.mint(seller, 9, 6);
+        vm.prank(seller);
+        y.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(y), 9, seller, 6 ether, address(0), 0, 0, 6, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        y.burn(seller, 9, 6); // full burn
+
+        vm.prank(owner);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Old approval exists but owner changed off-market → clean cancels
+    /// -----------------------------------------------------------------------
+
+    function testCleanListingCancelsAfterOwnerChangedOffMarket() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Off-market transfer to some other address; marketplace approval on seller is now meaningless
+        vm.prank(seller);
+        erc721.transferFrom(seller, operator, 1);
+
+        // Anyone can clean invalid listing
+        vm.prank(buyer);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Receiver hooks that swallow reverts
+    /// -----------------------------------------------------------------------
+
+    function testReceiverHooksThatSwallowReverts_ERC721() public {
+        _whitelistCollectionAndApproveERC721();
+        // Mint + approve a fresh token
+        erc721.mint(seller, 99);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 99);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 99, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        SwallowingERC721Receiver rcvr = new SwallowingERC721Receiver();
+        vm.deal(address(rcvr), 1 ether);
+
+        vm.prank(address(rcvr));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(erc721.ownerOf(99), address(rcvr));
+    }
+
+    function testReceiverHooksThatSwallowReverts_ERC1155() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(seller, 55, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(erc1155), 55, seller, 5 ether, address(0), 0, 0, 5, false, true, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        SwallowingERC1155Receiver rcvr = new SwallowingERC1155Receiver();
+        vm.deal(address(rcvr), 10 ether);
+
+        // Buy all 5 to receiver; its hook swallows internal errors but returns selector
+        vm.prank(address(rcvr));
+        market.purchaseListing{value: 5 ether}(id, 5 ether, 5, address(0), 0, 0, 5, address(0));
+
+        assertEq(erc1155.balanceOf(address(rcvr), 55), 5);
     }
 
     // End of test contract
@@ -5793,5 +6037,319 @@ contract SwallowingERC721Receiver {
 
     function _doFail() external pure {
         require(false, "internal");
+    }
+}
+
+interface IERC1155ReceiverLike {
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external returns (bytes4);
+    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external
+        returns (bytes4);
+}
+
+/// ERC1155 receiver that swallows internal errors but still returns the accept selectors
+contract SwallowingERC1155Receiver {
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external returns (bytes4) {
+        try this._noop() {} catch {}
+        return IERC1155ReceiverLike.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external
+        returns (bytes4)
+    {
+        try this._noop() {} catch {}
+        return IERC1155ReceiverLike.onERC1155BatchReceived.selector;
+    }
+
+    function _noop() external {}
+}
+
+/// ===== Minimal burnable ERC721 used only for tests =====
+/// NOTE: This is a very small, test-only ERC721 that the marketplace can interact with.
+/// It implements approvals, transferFrom/safeTransferFrom, supportsInterface, and burn().
+contract BurnableERC721 {
+    // ERC165
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0x80ac58cd; /* ERC721 */
+    }
+
+    mapping(uint256 => address) private _owner;
+    mapping(address => mapping(address => bool)) private _operatorApproval;
+    mapping(uint256 => address) private _tokenApproval;
+
+    event Transfer(address indexed from, address indexed to, uint256 indexed id);
+    event Approval(address indexed owner, address indexed approved, uint256 indexed id);
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
+    function mint(address to, uint256 id) external {
+        require(_owner[id] == address(0), "exists");
+        _owner[id] = to;
+        emit Transfer(address(0), to, id);
+    }
+
+    function ownerOf(uint256 id) public view returns (address) {
+        address o = _owner[id];
+        require(o != address(0), "no owner");
+        return o;
+    }
+
+    function approve(address to, uint256 id) external {
+        address o = ownerOf(id);
+        require(msg.sender == o || isApprovedForAll(o, msg.sender), "not auth");
+        _tokenApproval[id] = to;
+        emit Approval(o, to, id);
+    }
+
+    function getApproved(uint256 id) public view returns (address) {
+        return _tokenApproval[id];
+    }
+
+    function setApprovalForAll(address op, bool ok) external {
+        _operatorApproval[msg.sender][op] = ok;
+        emit ApprovalForAll(msg.sender, op, ok);
+    }
+
+    function isApprovedForAll(address o, address op) public view returns (bool) {
+        return _operatorApproval[o][op];
+    }
+
+    function transferFrom(address from, address to, uint256 id) public {
+        address o = ownerOf(id);
+        require(o == from, "wrong from");
+        require(msg.sender == o || getApproved(id) == msg.sender || isApprovedForAll(o, msg.sender), "not auth");
+        // clear approval
+        _tokenApproval[id] = address(0);
+        if (to == address(0)) {
+            // burn
+            _owner[id] = address(0);
+            emit Transfer(from, address(0), id);
+        } else {
+            _owner[id] = to;
+            emit Transfer(from, to, id);
+        }
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id) external {
+        transferFrom(from, to, id);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+        // Call internal logic directly; don't try to call the external overload.
+        transferFrom(from, to, id);
+    }
+
+    function burn(uint256 id) external {
+        require(ownerOf(id) == msg.sender, "not owner");
+        transferFrom(msg.sender, address(0), id);
+    }
+}
+
+/// ===== Minimal burnable ERC1155 used only for tests =====
+contract BurnableERC1155 {
+    // ERC165
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0xd9b67a26; /* ERC1155 */
+    }
+
+    mapping(address => mapping(uint256 => uint256)) private _bal;
+    mapping(address => mapping(address => bool)) private _op;
+
+    event TransferSingle(address indexed operator, address indexed from, address indexed to, uint256 id, uint256 value);
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
+    function mint(address to, uint256 id, uint256 qty) external {
+        _bal[to][id] += qty;
+        emit TransferSingle(msg.sender, address(0), to, id, qty);
+    }
+
+    function balanceOf(address a, uint256 id) external view returns (uint256) {
+        return _bal[a][id];
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _op[msg.sender][operator] = approved;
+        emit ApprovalForAll(msg.sender, operator, approved);
+    }
+
+    function isApprovedForAll(address a, address operator) external view returns (bool) {
+        return _op[a][operator];
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, uint256 qty, bytes calldata) external {
+        require(from == msg.sender || _op[from][msg.sender], "not auth");
+        require(_bal[from][id] >= qty, "insufficient");
+        _bal[from][id] -= qty;
+        if (to != address(0)) {
+            _bal[to][id] += qty;
+        }
+        emit TransferSingle(msg.sender, from, to, id, qty);
+        // Receiver acceptance omitted for tests
+    }
+
+    function burn(address from, uint256 id, uint256 qty) external {
+        require(from == msg.sender || _op[from][msg.sender], "not auth");
+        require(_bal[from][id] >= qty, "insufficient");
+        _bal[from][id] -= qty;
+        emit TransferSingle(msg.sender, from, address(0), id, qty);
+    }
+}
+
+// This seeds a couple of flows so the contract holds some ETH, then asserts:
+// sum of per-address proceeds == getter.getBalance() == address(diamond).balance
+
+contract IdeationMarketInvariantTest is Test {
+    IdeationMarketDiamond internal diamond;
+    GetterFacet internal getter;
+    IdeationMarketFacet internal market;
+    CollectionWhitelistFacet internal collections;
+
+    address internal owner;
+    address internal seller;
+    address internal buyer;
+
+    MockERC721 internal erc721;
+
+    address[] internal actors;
+
+    uint32 constant INNOVATION_FEE = 1000;
+    uint16 constant MAX_BATCH = 300;
+
+    function setUp() public {
+        owner = vm.addr(0x9001);
+        seller = vm.addr(0x9002);
+        buyer = vm.addr(0x9003);
+
+        vm.startPrank(owner);
+        DiamondInit init = new DiamondInit();
+        DiamondCutFacet cutFacet = new DiamondCutFacet();
+        DiamondLoupeFacet loupeFacet = new DiamondLoupeFacet();
+        OwnershipFacet ownershipFacet = new OwnershipFacet();
+        IdeationMarketFacet marketFacet = new IdeationMarketFacet();
+        CollectionWhitelistFacet collectionFacet = new CollectionWhitelistFacet();
+        BuyerWhitelistFacet buyerFacet = new BuyerWhitelistFacet();
+        GetterFacet getterFacet = new GetterFacet();
+
+        diamond = new IdeationMarketDiamond(owner, address(cutFacet));
+
+        // loupe
+        bytes4[] memory loupeSelectors = new bytes4[](5);
+        loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
+        loupeSelectors[1] = IDiamondLoupeFacet.facetFunctionSelectors.selector;
+        loupeSelectors[2] = IDiamondLoupeFacet.facetAddresses.selector;
+        loupeSelectors[3] = IDiamondLoupeFacet.facetAddress.selector;
+        loupeSelectors[4] = IERC165.supportsInterface.selector;
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
+        cuts[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(loupeFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: loupeSelectors
+        });
+        // ownership
+        bytes4[] memory ownershipSelectors = new bytes4[](3);
+        ownershipSelectors[0] = IERC173.owner.selector;
+        ownershipSelectors[1] = IERC173.transferOwnership.selector;
+        ownershipSelectors[2] = OwnershipFacet.acceptOwnership.selector;
+        cuts[1] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(ownershipFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: ownershipSelectors
+        });
+        // market
+        bytes4[] memory marketSelectors = new bytes4[](7);
+        marketSelectors[0] = IdeationMarketFacet.createListing.selector;
+        marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
+        marketSelectors[2] = IdeationMarketFacet.cancelListing.selector;
+        marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
+        marketSelectors[4] = IdeationMarketFacet.withdrawProceeds.selector;
+        marketSelectors[5] = IdeationMarketFacet.setInnovationFee.selector;
+        marketSelectors[6] = IdeationMarketFacet.cleanListing.selector;
+        cuts[2] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(marketFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: marketSelectors
+        });
+        // collections
+        bytes4[] memory colSelectors = new bytes4[](4);
+        colSelectors[0] = CollectionWhitelistFacet.addWhitelistedCollection.selector;
+        colSelectors[1] = CollectionWhitelistFacet.removeWhitelistedCollection.selector;
+        colSelectors[2] = CollectionWhitelistFacet.batchAddWhitelistedCollections.selector;
+        colSelectors[3] = CollectionWhitelistFacet.batchRemoveWhitelistedCollections.selector;
+        cuts[3] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(collectionFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: colSelectors
+        });
+        // buyers
+        bytes4[] memory buyerSelectors = new bytes4[](2);
+        buyerSelectors[0] = BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector;
+        buyerSelectors[1] = BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector;
+        cuts[4] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(buyerFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: buyerSelectors
+        });
+        // getter
+        bytes4[] memory getterSelectors = new bytes4[](12);
+        getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
+        getterSelectors[1] = GetterFacet.getListingByListingId.selector;
+        getterSelectors[2] = GetterFacet.getProceeds.selector;
+        getterSelectors[3] = GetterFacet.getBalance.selector;
+        getterSelectors[4] = GetterFacet.getInnovationFee.selector;
+        getterSelectors[5] = GetterFacet.getNextListingId.selector;
+        getterSelectors[6] = GetterFacet.isCollectionWhitelisted.selector;
+        getterSelectors[7] = GetterFacet.getWhitelistedCollections.selector;
+        getterSelectors[8] = GetterFacet.getContractOwner.selector;
+        getterSelectors[9] = GetterFacet.isBuyerWhitelisted.selector;
+        getterSelectors[10] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[11] = GetterFacet.getPendingOwner.selector;
+        cuts[5] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(getterFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: getterSelectors
+        });
+
+        IDiamondCutFacet(address(diamond)).diamondCut(
+            cuts, address(init), abi.encodeCall(DiamondInit.init, (INNOVATION_FEE, MAX_BATCH))
+        );
+        vm.stopPrank();
+
+        // cache handles
+        getter = GetterFacet(address(diamond));
+        market = IdeationMarketFacet(address(diamond));
+        collections = CollectionWhitelistFacet(address(diamond));
+
+        // set up one flow so contract holds ETH
+        erc721 = new MockERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+        erc721.mint(seller, 1);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 2 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+
+        // track a few plausible recipients (extend as needed)
+        actors.push(owner);
+        actors.push(seller);
+        actors.push(buyer);
+        actors.push(address(0)); // zero-address royalties, if any
+    }
+
+    function invariant_ProceedsSumEqualsDiamondBalance() public view {
+        uint256 sum;
+        for (uint256 i; i < actors.length; i++) {
+            sum += getter.getProceeds(actors[i]);
+        }
+        assertEq(sum, getter.getBalance());
+        assertEq(getter.getBalance(), address(diamond).balance);
     }
 }
