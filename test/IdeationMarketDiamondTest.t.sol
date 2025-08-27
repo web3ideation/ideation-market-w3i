@@ -23,6 +23,10 @@ import "../src/interfaces/IERC2981.sol";
 import "../src/libraries/LibAppStorage.sol";
 import "../src/libraries/LibDiamond.sol";
 
+// Openzeppelin Mock imports
+import {ERC721} from "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
+import {ERC1155} from "lib/openzeppelin-contracts/contracts/token/ERC1155/ERC1155.sol";
+
 /*
  * @title IdeationMarketDiamondTest
  * @notice Comprehensive unit tests covering the diamond and all marketplace facets.
@@ -5554,6 +5558,56 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(erc721.ownerOf(99), address(rcvr));
     }
 
+    function testERC721BuyerContractWithoutReceiverInterfaceReverts_Strict() public {
+        // Deploy strict token that enforces ERC721Receiver check
+        StrictERC721 strict721 = new StrictERC721();
+
+        // Whitelist the strict token
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(strict721));
+
+        // Mint token #1 to seller and approve marketplace
+        strict721.mint(seller, 1);
+        vm.prank(seller);
+        strict721.approve(address(diamond), 1);
+
+        // Create a fixed-price listing
+        vm.prank(seller);
+        market.createListing(
+            address(strict721),
+            1,
+            address(0), // erc1155Holder (unused for 721)
+            1 ether, // price
+            address(0),
+            0,
+            0, // no swap
+            0, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer is a contract with NO ERC721Receiver
+        NonReceiver non = new NonReceiver();
+        vm.deal(address(non), 2 ether);
+
+        // Purchase must revert due to missing onERC721Received
+        vm.startPrank(address(non));
+        vm.expectRevert(); // any revert is fine
+        market.purchaseListing{value: 1 ether}(
+            id,
+            1 ether, // expectedPrice
+            0, // expectedErc1155Quantity
+            address(0),
+            0,
+            0,
+            0, // erc1155PurchaseQuantity
+            address(0)
+        );
+        vm.stopPrank();
+    }
+
     function testReceiverHooksThatSwallowReverts_ERC1155() public {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
@@ -5573,6 +5627,56 @@ contract IdeationMarketDiamondTest is Test {
         market.purchaseListing{value: 5 ether}(id, 5 ether, 5, address(0), 0, 0, 5, address(0));
 
         assertEq(erc1155.balanceOf(address(rcvr), 55), 5);
+    }
+
+    function testERC1155BuyerContractWithoutReceiverInterfaceReverts_Strict() public {
+        // Deploy strict token that enforces ERC1155Receiver check
+        StrictERC1155 strict1155 = new StrictERC1155();
+
+        // Whitelist the strict token
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(strict1155));
+
+        // Mint id=1 qty=10 to seller and approve marketplace
+        strict1155.mint(seller, 1, 10);
+        vm.prank(seller);
+        strict1155.setApprovalForAll(address(diamond), true);
+
+        // Create a fixed-price 1155 listing (no partials)
+        vm.prank(seller);
+        market.createListing(
+            address(strict1155),
+            1,
+            seller, // erc1155Holder (seller is the holder)
+            10 ether, // total price for qty 10
+            address(0),
+            0,
+            0, // no swap
+            10, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buyer is a contract with NO ERC1155Receiver
+        NonReceiver non = new NonReceiver();
+        vm.deal(address(non), 20 ether);
+
+        // Purchase must revert due to missing onERC1155Received
+        vm.startPrank(address(non));
+        vm.expectRevert(); // any revert is fine
+        market.purchaseListing{value: 10 ether}(
+            id,
+            10 ether, // expectedPrice
+            10, // expectedErc1155Quantity
+            address(0),
+            0,
+            0,
+            10, // erc1155PurchaseQuantity (full buy)
+            address(0)
+        );
+        vm.stopPrank();
     }
 
     // End of test contract
@@ -6418,5 +6522,27 @@ contract IdeationMarketInvariantTest is Test {
         }
         assertEq(sum, getter.getBalance());
         assertEq(getter.getBalance(), address(diamond).balance);
+    }
+}
+
+contract NonReceiver {
+    receive() external payable {}
+}
+
+contract StrictERC721 is ERC721 {
+    constructor() ERC721("Strict721", "S721") {}
+
+    function mint(address to, uint256 id) external {
+        // _safeMint enforces ERC721Receiver on contracts
+        _safeMint(to, id);
+    }
+}
+
+contract StrictERC1155 is ERC1155 {
+    constructor() ERC1155("") {}
+
+    function mint(address to, uint256 id, uint256 amt) external {
+        // _mint + your later safeTransferFrom will enforce ERC1155Receiver on contracts
+        _mint(to, id, amt, "");
     }
 }
