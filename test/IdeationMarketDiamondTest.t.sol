@@ -3082,6 +3082,29 @@ contract IdeationMarketDiamondTest is Test {
         market.updateListing(id, 5 ether, address(0), 0, 0, 5, false, false, new address[](0));
     }
 
+    //
+    function testERC1155UpdateApprovalRevokedReverts() public {
+        // Whitelist & approve; create ERC1155 listing (qty>0 keeps standard)
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Revoke marketplace approval, then attempt update → must revert
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.updateListing(id, 10 ether, address(0), 0, 0, 10, false, false, new address[](0));
+        vm.stopPrank();
+    }
+
     /// Updating quantity greater than seller’s ERC1155 balance must revert.
     function testERC1155UpdateBalanceTooLowReverts() public {
         vm.prank(owner);
