@@ -269,8 +269,10 @@ contract IdeationMarketFacet {
         s.tokenToListingIds[tokenAddress][tokenId].push(newListingId);
 
         if (buyerWhitelistEnabled) {
-            // delegate into BuyerWhitelistFacet on this Diamond
-            IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(newListingId, allowedBuyers);
+            if (allowedBuyers.length > 0) {
+                // delegate into BuyerWhitelistFacet on this Diamond
+                IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(newListingId, allowedBuyers);
+            }
         } else {
             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
         }
@@ -667,8 +669,10 @@ contract IdeationMarketFacet {
         listedItem.partialBuyEnabled = newPartialBuyEnabled;
 
         if (newBuyerWhitelistEnabled) {
-            // delegate into BuyerWhitelistFacet on this Diamond
-            IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
+            if (newAllowedBuyers.length > 0) {
+                // delegate into BuyerWhitelistFacet on this Diamond
+                IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
+            }
         } else {
             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
         }

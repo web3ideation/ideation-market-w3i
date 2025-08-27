@@ -1453,20 +1453,32 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
-    function testCreateWithWhitelistEnabledEmptyArrayReverts() public {
+    function testCreateWithWhitelistEnabledEmptyArrayOK() public {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
-        vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, new address[](0)
         );
+        uint128 id = getter.getNextListingId() - 1;
+        Listing memory ls = getter.getListingByListingId(id);
+        assertEq(ls.buyerWhitelistEnabled, true);
+
+        // Sanity: no addresses are whitelisted yet
+        assertEq(getter.isBuyerWhitelisted(id, buyer), false);
+        assertEq(getter.isBuyerWhitelisted(id, seller), false);
     }
 
-    function testUpdateEnableWhitelistWithEmptyArrayReverts() public {
+    function testUpdateEnableWhitelistWithEmptyArrayOK() public {
         uint128 id = _createListingERC721(false, new address[](0));
         vm.prank(seller);
-        vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
         market.updateListing(id, 1 ether, address(0), 0, 0, 0, true, false, new address[](0));
+
+        Listing memory ls = getter.getListingByListingId(id);
+        assertEq(ls.buyerWhitelistEnabled, true);
+
+        // Sanity: no addresses are whitelisted yet
+        assertEq(getter.isBuyerWhitelisted(id, buyer), false);
+        assertEq(getter.isBuyerWhitelisted(id, seller), false);
     }
 
     function testUpdateDisableWhitelistThenOpenPurchase() public {
