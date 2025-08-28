@@ -2655,6 +2655,54 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
+    function testCancelListing_UnauthorizedThirdParty_ERC721_Reverts() public {
+        // Setup: whitelist + approve + create a live ERC721 listing
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // A random third party (not owner, not token-approved, not operator) cannot cancel
+        address rando = vm.addr(0xCAFE);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__NotAuthorizedToCancel.selector);
+        market.cancelListing(id);
+        vm.stopPrank();
+    }
+
+    function testCancelListing_UnauthorizedThirdParty_ERC1155_Reverts() public {
+        // Setup: whitelist + operator approval + create a live ERC1155 listing
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller, // erc1155Holder
+            10 ether, // price (no swap)
+            address(0),
+            0,
+            0,
+            10, // erc1155Quantity
+            false, // whitelist disabled
+            false, // partialBuy disabled
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // A random third party (not seller, not operator) cannot cancel
+        address rando = vm.addr(0xBEEF);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__NotAuthorizedToCancel.selector);
+        market.cancelListing(id);
+        vm.stopPrank();
+    }
+
     function testSetInnovationFeeEmitsEvent() public {
         uint32 previous = getter.getInnovationFee();
         uint32 next = previous + 123; // any value; you keep fee unbounded by design
