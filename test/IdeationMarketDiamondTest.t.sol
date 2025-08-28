@@ -555,7 +555,7 @@ contract IdeationMarketDiamondTest is Test {
         getter.getListingByListingId(id);
     }
 
-    function testCleanListing() public {
+    function testCleanListing721() public {
         // Create listing
         uint128 id = _createListingERC721(false, new address[](0));
         // With approvals still present, cleanListing should revert with the StillApproved error.
@@ -575,6 +575,23 @@ contract IdeationMarketDiamondTest is Test {
         // GetterFacet to revert with Getter__ListingNotFound(listingId).
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
+    }
+
+    function testCleanListing_WhileStillApproved_ERC721_Reverts() public {
+        // Whitelist + approve + create a valid ERC721 listing
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Anyone can call cleanListing, but since the listing is still valid, it must revert
+        address rando = vm.addr(0xC1EA11);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__StillApproved.selector);
+        market.cleanListing(id);
+        vm.stopPrank();
     }
 
     /// -----------------------------------------------------------------------
@@ -2293,6 +2310,37 @@ contract IdeationMarketDiamondTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
+    }
+
+    function testCleanListing_WhileStillApproved_ERC1155_Reverts() public {
+        // Whitelist + operator approval + create a valid ERC1155 listing
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller, // erc1155Holder
+            10 ether, // fixed price, no swap
+            address(0),
+            0,
+            0,
+            10, // quantity
+            false, // whitelist disabled
+            false, // partialBuy disabled
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Still fully approved & whitelisted → cleanListing should revert with StillApproved
+        address rando = vm.addr(0xC1EA12);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__StillApproved.selector);
+        market.cleanListing(id);
+        vm.stopPrank();
     }
 
     /// Ensures ListingTermsChanged also trips on expectedDesired* mismatches.
