@@ -4340,6 +4340,67 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(erc1155.balanceOf(seller, idB), 3);
     }
 
+    function testSwap_ERC1155toERC1155_DesiredHolderNoMarketApprovalReverts_ThenSucceeds() public {
+        // Whitelist the 1155 collection
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Balances:
+        // - seller has tokenId=1 (listed)
+        // - buyer  has tokenId=2 (desired)
+        erc1155.mint(seller, 111, 10);
+        erc1155.mint(buyer, 222, 10);
+
+        // Seller approves marketplace; buyer (desired holder) does NOT yet.
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Seller lists 10x id=1, pure swap for 10x id=2 (price=0)
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            111,
+            seller, // erc1155Holder
+            0, // price (pure swap)
+            address(erc1155), // desiredTokenAddress
+            222, // desiredTokenId
+            10, // desiredErc1155Quantity
+            10, // erc1155Quantity (listed)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Attempt swap while desired holder (buyer) has NOT approved the marketplace → revert
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.purchaseListing{value: 0}(
+            id,
+            0, // expectedPrice
+            10, // expected listed erc1155Quantity
+            address(erc1155), // expected desired token addr
+            222, // expected desired tokenId
+            10, // expected desired erc1155 qty
+            10, // erc1155PurchaseQuantity
+            buyer // desiredErc1155Holder
+        );
+        vm.stopPrank();
+
+        // Now desired holder approves marketplace and swap succeeds
+        vm.prank(buyer);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 0}(id, 0, 10, address(erc1155), 222, 10, 10, buyer);
+
+        // Post-swap balances
+        assertEq(erc1155.balanceOf(seller, 111), 0);
+        assertEq(erc1155.balanceOf(seller, 222), 10);
+        assertEq(erc1155.balanceOf(buyer, 111), 10);
+        assertEq(erc1155.balanceOf(buyer, 222), 0);
+    }
+
     /* ==================================================
        Terms changed after a partial fill (freshness guard)
        ================================================== */
