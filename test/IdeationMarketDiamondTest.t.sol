@@ -4700,7 +4700,7 @@ contract IdeationMarketDiamondTest is Test {
         vm.prank(seller);
         erc1155.safeTransferFrom(seller, address(0), 1, 10, "");
 
-        // Revoke marketplace approval; cleanListing requires the listing to be invalid AND not approved
+        // revoke approval; listing is already invalid so cleanListing will cancel either way.
         vm.prank(seller);
         erc1155.setApprovalForAll(address(diamond), false);
 
@@ -4885,7 +4885,7 @@ contract IdeationMarketDiamondTest is Test {
             address(0),
             0,
             0,
-            uint16(QL), // erc1155Quantity
+            uint256(QL), // erc1155Quantity
             false,
             false,
             new address[](0)
@@ -4901,7 +4901,7 @@ contract IdeationMarketDiamondTest is Test {
             0,
             address(erc1155),
             id1155,
-            uint16(QS), // desire ERC1155
+            uint256(QS), // desire ERC1155
             0,
             false,
             false,
@@ -4917,7 +4917,7 @@ contract IdeationMarketDiamondTest is Test {
             0, // expectedErc1155Quantity (listed is ERC721)
             address(erc1155),
             id1155,
-            uint16(QS),
+            uint256(QS),
             0, // erc1155PurchaseQuantity (ERC721 path)
             buyer // desiredErc1155Holder
         );
@@ -4954,20 +4954,20 @@ contract IdeationMarketDiamondTest is Test {
         // Buyer pre-lists ERC1155(id=888) qty=QL
         vm.prank(buyer);
         market.createListing(
-            address(erc1155), id1155, buyer, 5 ether, address(0), 0, 0, uint16(QL), false, false, new address[](0)
+            address(erc1155), id1155, buyer, 5 ether, address(0), 0, 0, uint256(QL), false, false, new address[](0)
         );
         uint128 buyerListingId = getter.getNextListingId() - 1;
 
         // Seller lists ERC721 wanting QS of that ERC1155 (pure swap)
         vm.prank(seller);
         market.createListing(
-            address(A), 101, address(0), 0, address(erc1155), id1155, uint16(QS), 0, false, false, new address[](0)
+            address(A), 101, address(0), 0, address(erc1155), id1155, uint256(QS), 0, false, false, new address[](0)
         );
         uint128 swapListingId = getter.getNextListingId() - 1;
 
         // Execute swap
         vm.prank(buyer);
-        market.purchaseListing{value: 0}(swapListingId, 0, 0, address(erc1155), id1155, uint16(QS), 0, buyer);
+        market.purchaseListing{value: 0}(swapListingId, 0, 0, address(erc1155), id1155, uint256(QS), 0, buyer);
 
         // The buyer's ERC1155 listing should have been deleted by the swap cleanup
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, buyerListingId));
@@ -4993,11 +4993,11 @@ contract IdeationMarketDiamondTest is Test {
         // Mint balances.
         uint256 idA = 11;
         uint256 idB = 22;
-        uint16 qtyA = 5;
-        uint16 qtyB = 3;
+        uint256 qtyA = 50000000000;
+        uint256 qtyB = 30000000000;
 
-        erc1155.mint(seller, idA, 10);
-        tokenB.mint(buyer, idB, 10);
+        erc1155.mint(seller, idA, qtyA);
+        tokenB.mint(buyer, idB, qtyB);
 
         // Approvals.
         vm.prank(seller);
@@ -5026,9 +5026,9 @@ contract IdeationMarketDiamondTest is Test {
         );
 
         // Post conditions: A moved seller->buyer, B moved buyer->seller, no ETH moved.
-        assertEq(erc1155.balanceOf(seller, idA), 10 - qtyA);
+        assertEq(erc1155.balanceOf(seller, idA), 0);
         assertEq(erc1155.balanceOf(buyer, idA), qtyA);
-        assertEq(tokenB.balanceOf(buyer, idB), 10 - qtyB);
+        assertEq(tokenB.balanceOf(buyer, idB), 0);
         assertEq(tokenB.balanceOf(seller, idB), qtyB);
         assertEq(address(diamond).balance, 0);
     }
@@ -5044,8 +5044,8 @@ contract IdeationMarketDiamondTest is Test {
 
         uint256 idA = 33;
         uint256 idB = 44;
-        uint16 qtyA = 6;
-        uint16 qtyB = 2;
+        uint256 qtyA = 6;
+        uint256 qtyB = 2;
         uint256 price = 1 ether;
 
         erc1155.mint(seller, idA, 20);
@@ -5089,8 +5089,8 @@ contract IdeationMarketDiamondTest is Test {
 
         uint256 idA = 55;
         uint256 idB = 66;
-        uint16 qtyA = 4;
-        uint16 qtyB = 3;
+        uint256 qtyA = 4;
+        uint256 qtyB = 3;
 
         erc1155.mint(seller, idA, 10);
         tokenB.mint(holder, idB, 10);
@@ -5318,8 +5318,8 @@ contract IdeationMarketDiamondTest is Test {
 
         uint256 idListed = 1001;
         uint256 idDesired = 2002;
-        uint16 qtyListed = 2;
-        uint16 qtyDesired = 1;
+        uint256 qtyListed = 2;
+        uint256 qtyDesired = 1;
         uint256 price = 0.25 ether;
 
         erc1155.mint(seller, idListed, 10);

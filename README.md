@@ -229,3 +229,12 @@ This project leverages:
 - [OpenZeppelin Contracts](https://openzeppelin.com/contracts/)
 - [Foundry](https://github.com/foundry-rs/foundry)
 
+
+
+
+
+known/accepted flaws:
+-no fee limit - the owner can also set fees >100%
+-when a token contract has a royalty receiver set to zero address the royalty proceeds will be accredited to the zero address
+-buyerWhitelist can be edited even when the flag is disabled for the listing
+- more in todo.md "addon projects"
