@@ -4180,6 +4180,61 @@ contract IdeationMarketDiamondTest is Test {
         assertTrue(seen1 && seen3);
     }
 
+    function testERC1155_ReverseIndex_LastDelete_ThenReAdd_NoGhosts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        uint256 tid = 123;
+        // Mint to two different sellers (seller, operator)
+        erc1155.mint(seller, tid, 5);
+        erc1155.mint(operator, tid, 7);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(operator);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // Listing #1 by seller
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tid, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+        );
+        uint128 id1 = getter.getNextListingId() - 1;
+
+        // Listing #2 by operator (this is the "last" entry we will delete)
+        vm.prank(operator);
+        market.createListing(
+            address(erc1155), tid, operator, 7 ether, address(0), 0, 0, 7, false, false, new address[](0)
+        );
+        uint128 id2 = getter.getNextListingId() - 1;
+
+        // Delete the last one (id2)
+        vm.prank(operator);
+        market.cancelListing(id2);
+
+        // Now a third actor (buyer) creates a fresh listing for same (contract,id)
+        erc1155.mint(buyer, tid, 3);
+        vm.prank(buyer);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(buyer);
+        market.createListing(address(erc1155), tid, buyer, 3 ether, address(0), 0, 0, 3, false, false, new address[](0));
+        uint128 id3 = getter.getNextListingId() - 1;
+
+        // Reverse index should return exactly id1 and id3 (no ghost id2)
+        Listing[] memory arr = getter.getListingsByNFT(address(erc1155), tid);
+        assertEq(arr.length, 2);
+
+        bool seen1;
+        bool seen3;
+        for (uint256 i; i < arr.length; i++) {
+            if (arr[i].listingId == id1) seen1 = true;
+            if (arr[i].listingId == id3) seen3 = true;
+            // also ensure we don't see id2
+            assertTrue(arr[i].listingId != id2);
+        }
+        assertTrue(seen1 && seen3);
+    }
+
     /* ======================================
        ERC1155 partial-buy payment edge cases
        ====================================== */
