@@ -3818,18 +3818,32 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(erc721.ownerOf(1), buyer);
     }
 
-    function testCreateListingWithNonNFTContractReverts() public {
+    function testCreateListingWithNonNFTContracQt0tReverts() public {
         NotAnNFT bad = new NotAnNFT();
         vm.prank(owner);
         collections.addWhitelistedCollection(address(bad));
 
         // Note: the whitelist does NOT enforce interfaces—you can whitelist any address.
         // The revert happens inside createListing’s interface check:
-        // with erc1155Quantity == 0 it requires ERC721 via IERC165; a non-NFT reverts with WrongQuantityParameter.
+        // with erc1155Quantity == 0 it requires ERC721 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
 
         vm.prank(seller);
-        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
         market.createListing(address(bad), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+    }
+
+    function testCreateListingWithNonNFTContractQ9Reverts() public {
+        NotAnNFT bad = new NotAnNFT();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(bad));
+
+        // Note: the whitelist does NOT enforce interfaces—you can whitelist any address.
+        // The revert happens inside createListing’s interface check:
+        // with erc1155Quantity == 9 it requires ERC1155 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
+        market.createListing(address(bad), 1, address(0), 1 ether, address(0), 0, 0, 9, false, false, new address[](0));
     }
 
     function testUpdatePriceZeroWithoutSwapReverts() public {

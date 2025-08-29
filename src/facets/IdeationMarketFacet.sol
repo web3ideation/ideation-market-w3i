@@ -181,7 +181,11 @@ contract IdeationMarketFacet {
         if (erc1155Quantity > 0) {
             // check that the quantity matches the token Type
             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
+                if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+                    revert IdeationMarket__NotSupportedTokenStandard();
+                } else {
+                    revert IdeationMarket__WrongQuantityParameter();
+                }
             }
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized or the holder himself
@@ -200,7 +204,11 @@ contract IdeationMarketFacet {
         } else {
             // check that the quantity matches the token Type
             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__WrongQuantityParameter();
+                if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                    revert IdeationMarket__NotSupportedTokenStandard();
+                } else {
+                    revert IdeationMarket__WrongQuantityParameter();
+                }
             }
             IERC721 token = IERC721(tokenAddress);
             address tokenHolder = token.ownerOf(tokenId);
