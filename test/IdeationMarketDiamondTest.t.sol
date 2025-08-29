@@ -1096,6 +1096,69 @@ contract IdeationMarketDiamondTest is Test {
         assertEq(getter.getBalance(), 0);
     }
 
+    function testFeeRoyaltyRounding_TinyPrices() public {
+        // innovationFee is 1% by default in your setup (1000/100_000)
+        MockERC721Royalty r = new MockERC721Royalty();
+        address RR = vm.addr(0xBEEF);
+        r.setRoyalty(RR, 1_000); // 1% of 100_000
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+
+        // --- Case 1: price = 1 wei → fee=0, royalty=0 (floor), seller gets 1 wei
+        r.mint(seller, 1);
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(address(r), 1, address(0), 1, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id1 = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1}(id1, 1, 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(getter.getProceeds(owner), 0); // fee 0
+        assertEq(getter.getProceeds(RR), 0); // royalty 0
+        assertEq(getter.getProceeds(seller), 1);
+
+        // --- Case 2: price = 101 wei → fee=1, royalty=1, seller gets 99
+        r.mint(seller, 2);
+        vm.prank(seller);
+        r.approve(address(diamond), 2);
+
+        vm.prank(seller);
+        market.createListing(address(r), 2, address(0), 101, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id2 = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 101);
+        vm.prank(buyer);
+        market.purchaseListing{value: 101}(id2, 101, 0, address(0), 0, 0, 0, address(0));
+
+        // Totals are cumulative in proceeds; check deltas via >=
+        // For clarity we read exact totals we expect after both purchases:
+        assertEq(getter.getProceeds(owner), 1); // 0 + 1
+        assertEq(getter.getProceeds(RR), 1); // 0 + 1
+        assertEq(getter.getProceeds(seller), 1 + 99); // 1 + 99 = 100
+
+        // --- Case 3: price = 199 wei → fee=1, royalty=1, seller 197
+        r.mint(seller, 3);
+        vm.prank(seller);
+        r.approve(address(diamond), 3);
+
+        vm.prank(seller);
+        market.createListing(address(r), 3, address(0), 199, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id3 = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 199);
+        vm.prank(buyer);
+        market.purchaseListing{value: 199}(id3, 199, 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(getter.getProceeds(owner), 1 + 1); // 2
+        assertEq(getter.getProceeds(RR), 1 + 1); // 2
+        assertEq(getter.getProceeds(seller), 100 + 197); // 297
+    }
+
     function testInvalidUnitPriceOnCreateReverts() public {
         // ERC1155 listing with qty=3, price=10 (not divisible) and partials enabled → revert
         vm.prank(owner);
