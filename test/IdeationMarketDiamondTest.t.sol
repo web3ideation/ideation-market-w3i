@@ -7214,11 +7214,11 @@ contract LiarERC721 {
         revert("liar721: transfer breaks");
     }
 
-    function safeTransferFrom(address from, address to, uint256 id) external {
+    function safeTransferFrom(address from, address to, uint256 id) external view {
         transferFrom(from, to, id);
     }
 
-    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external view {
         transferFrom(from, to, id);
     }
 }
