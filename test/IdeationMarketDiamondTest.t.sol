@@ -5968,6 +5968,282 @@ contract IdeationMarketDiamondTest is Test {
         vm.stopPrank();
     }
 
+    // testing against attack vectors
+
+    // Reentrancy during NFT transfer via buyer receiver — ERC721 (Strict)
+    function testReentrancy_BuyerReceiver_ERC721_Strict() public {
+        // Strict token so receiver hook actually fires
+        StrictERC721 s = new StrictERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        s.mint(seller, 1);
+        vm.prank(seller);
+        s.approve(address(diamond), 1);
+
+        uint256 price = 1 ether;
+        vm.prank(seller);
+        market.createListing(address(s), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        ReenteringReceiver721 recv = new ReenteringReceiver721(address(market), id, price);
+        vm.deal(address(recv), 2 * price); // fund for reentrant attempt
+
+        // Initial purchase by the receiver; its hook tries to reenter and must fail
+        vm.prank(address(recv));
+        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
+
+        // Single sale only
+        assertEq(s.ownerOf(1), address(recv));
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+        assertEq(getter.getProceeds(seller), price * 99 / 100);
+        assertEq(getter.getProceeds(owner), price * 1 / 100);
+    }
+
+    // Reentrancy during NFT transfer via buyer receiver — ERC1155 (Strict)
+    function testReentrancy_BuyerReceiver_ERC1155_Strict() public {
+        StrictERC1155 s = new StrictERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        uint256 tid = 7;
+        uint256 qty = 5;
+        uint256 price = 5 ether;
+
+        s.mint(seller, tid, qty);
+        vm.prank(seller);
+        s.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(s), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        ReenteringReceiver1155 recv = new ReenteringReceiver1155(address(market), id, price, qty);
+        vm.deal(address(recv), 2 * price); // fund for reentrant attempt
+
+        vm.prank(address(recv));
+        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
+
+        assertEq(s.balanceOf(address(recv), tid), qty);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+        assertEq(getter.getProceeds(seller), price * 99 / 100);
+        assertEq(getter.getProceeds(owner), price * 1 / 100);
+    }
+
+    // False ERC165 claim: ERC721 says yes but reverts transfer → purchase reverts, listing intact
+    function testERC721_LiarToken_TransferReverts_RollsBackListing() public {
+        LiarERC721 liar = new LiarERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(liar));
+
+        liar.mint(seller, 1);
+        vm.prank(seller);
+        liar.approve(address(diamond), 1);
+
+        uint256 price = 1 ether;
+        vm.prank(seller);
+        market.createListing(address(liar), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 pSeller = getter.getProceeds(seller);
+        uint256 pOwner = getter.getProceeds(owner);
+        uint256 bal = getter.getBalance();
+
+        vm.deal(buyer, price);
+        vm.startPrank(buyer);
+        vm.expectRevert(); // token breaks transfer
+        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        // No state moved
+        assertEq(liar.ownerOf(1), seller);
+        Listing memory L = getter.getListingByListingId(id);
+        assertEq(L.price, price);
+        assertEq(getter.getProceeds(seller), pSeller);
+        assertEq(getter.getProceeds(owner), pOwner);
+        assertEq(getter.getBalance(), bal);
+    }
+
+    // False ERC165 claim: ERC1155 says yes but reverts transfer → purchase reverts, listing intact
+    function testERC1155_LiarToken_TransferReverts_RollsBackListing() public {
+        LiarERC1155 liar = new LiarERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(liar));
+
+        uint256 tid = 3;
+        uint256 qty = 4;
+        uint256 price = 4 ether;
+
+        liar.mint(seller, tid, qty);
+        vm.prank(seller);
+        liar.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(liar), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 pSeller = getter.getProceeds(seller);
+        uint256 pOwner = getter.getProceeds(owner);
+        uint256 bal = getter.getBalance();
+
+        vm.deal(buyer, price);
+        vm.startPrank(buyer);
+        vm.expectRevert(); // token breaks transfer
+        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
+        vm.stopPrank();
+
+        // No state moved
+        assertEq(liar.balanceOf(seller, tid), qty);
+        Listing memory L = getter.getListingByListingId(id);
+        assertEq(L.price, price);
+        assertEq(L.erc1155Quantity, qty);
+        assertEq(getter.getProceeds(seller), pSeller);
+        assertEq(getter.getProceeds(owner), pOwner);
+        assertEq(getter.getBalance(), bal);
+    }
+
+    // Malicious token attempts admin call during transfer — must NOT bypass onlyOwner
+    function testAdminCallDuringTransfer_DoesNotBypassOnlyOwner_ERC721() public {
+        MaliciousAdminERC721 m = new MaliciousAdminERC721(address(market));
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(m));
+
+        m.mint(seller, 1);
+        vm.prank(seller);
+        m.approve(address(diamond), 1);
+
+        uint32 feeBefore = getter.getInnovationFee();
+        uint256 price = 1 ether;
+
+        vm.prank(seller);
+        market.createListing(address(m), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, price);
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
+
+        // Transfer succeeded; fee unchanged
+        assertEq(getter.getInnovationFee(), feeBefore);
+        assertEq(m.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    // Double-sell: after first ERC721 sale, second purchase attempt must revert
+    function testDoubleSell_Prevented_ERC721_Strict() public {
+        StrictERC721 s = new StrictERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        s.mint(seller, 1);
+        vm.prank(seller);
+        s.approve(address(diamond), 1);
+
+        uint256 price = 1 ether;
+        vm.prank(seller);
+        market.createListing(address(s), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, price);
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
+
+        address buyer2 = vm.addr(0xBEEF);
+        vm.deal(buyer2, price);
+        vm.startPrank(buyer2);
+        vm.expectRevert(); // listing should be consumed/invalid
+        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    // Double-sell: after full ERC1155 fill, second purchase attempt must revert
+    function testDoubleSell_Prevented_ERC1155_FullFill_Strict() public {
+        StrictERC1155 s = new StrictERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        uint256 tid = 9;
+        uint256 qty = 6;
+        uint256 price = 6 ether;
+
+        s.mint(seller, tid, qty);
+        vm.prank(seller);
+        s.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(address(s), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, price);
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
+
+        address buyer2 = vm.addr(0xC0DE);
+        vm.deal(buyer2, price);
+        vm.startPrank(buyer2);
+        vm.expectRevert(); // already consumed
+        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
+        vm.stopPrank();
+    }
+
+    // Whitelist bloat: large whitelist must not affect purchase correctness
+    function testWhitelistScale_PurchaseUnaffectedByLargeList() public {
+        // Use your shared ERC721 fixture/helpers or do it inline
+        _whitelistCollectionAndApproveERC721();
+        erc721.mint(seller, 123);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 123);
+
+        address[] memory empty;
+        vm.prank(seller);
+        market.createListing(address(erc721), 123, address(0), 1 ether, address(0), 0, 0, 0, true, false, empty);
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Fill with a few thousand addresses (in chunks per getter.getBuyerWhitelistMaxBatchSize)
+        uint16 maxBatch = getter.getBuyerWhitelistMaxBatchSize();
+        uint256 N = 2400;
+
+        address[] memory chunk = new address[](maxBatch);
+        uint256 filled;
+        while (filled < N) {
+            uint256 k = 0;
+            while (k < maxBatch && filled < N) {
+                chunk[k] = vm.addr(uint256(keccak256(abi.encodePacked("wh", filled))));
+                k++;
+                filled++;
+            }
+            address[] memory slice = new address[](k);
+            for (uint256 i = 0; i < k; i++) {
+                slice[i] = chunk[i];
+            }
+
+            vm.prank(seller);
+            buyers.addBuyerWhitelistAddresses(id, slice);
+        }
+
+        // Non-whitelisted buyer blocked
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, buyer));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        // Whitelist buyer and succeed
+        address[] memory me = new address[](1);
+        me[0] = buyer;
+        vm.prank(seller);
+        buyers.addBuyerWhitelistAddresses(id, me);
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        assertEq(erc721.ownerOf(123), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     // End of test contract
 }
 
@@ -6833,5 +7109,218 @@ contract StrictERC1155 is ERC1155 {
     function mint(address to, uint256 id, uint256 amt) external {
         // _mint + your later safeTransferFrom will enforce ERC1155Receiver on contracts
         _mint(to, id, amt, "");
+    }
+}
+
+// mocks for testing against attack vectors
+
+// Reenters purchaseListing from the buyer's ERC721 receiver hook
+contract ReenteringReceiver721 {
+    IdeationMarketFacet public market;
+    uint128 public listingId;
+    uint256 public price;
+    bool internal attacked;
+
+    constructor(address _market, uint128 _id, uint256 _price) {
+        market = IdeationMarketFacet(_market);
+        listingId = _id;
+        price = _price;
+    }
+
+    receive() external payable {}
+
+    function onERC721Received(address, address, uint256, bytes calldata) external returns (bytes4) {
+        if (!attacked) {
+            attacked = true;
+            // If this ever succeeds, fail the whole test.
+            try market.purchaseListing{value: price}(listingId, price, 0, address(0), 0, 0, 0, address(0)) {
+                revert("reentrant 721 purchase succeeded");
+            } catch { /* expected to fail */ }
+        }
+        return this.onERC721Received.selector;
+    }
+}
+
+// Reenters purchaseListing from the buyer's ERC1155 receiver hook
+contract ReenteringReceiver1155 {
+    IdeationMarketFacet public market;
+    uint128 public listingId;
+    uint256 public price;
+    uint256 public qty;
+    bool internal attacked;
+
+    constructor(address _market, uint128 _id, uint256 _price, uint256 _qty) {
+        market = IdeationMarketFacet(_market);
+        listingId = _id;
+        price = _price;
+        qty = _qty;
+    }
+
+    receive() external payable {}
+
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external returns (bytes4) {
+        if (!attacked) {
+            attacked = true;
+            // If this ever succeeds, fail the whole test.
+            try market.purchaseListing{value: price}(listingId, price, qty, address(0), 0, 0, qty, address(0)) {
+                revert("reentrant 1155 purchase succeeded");
+            } catch { /* expected to fail */ }
+        }
+        return IERC1155ReceiverLike.onERC1155Received.selector;
+    }
+}
+
+// Claims ERC721 but reverts during transfer (behavioral liar)
+contract LiarERC721 {
+    mapping(uint256 => address) internal _owner;
+    mapping(uint256 => address) internal _tokenApproval;
+    mapping(address => mapping(address => bool)) internal _op;
+
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0x80ac58cd; /* ERC721 */
+    }
+
+    function mint(address to, uint256 id) external {
+        _owner[id] = to;
+    }
+
+    function ownerOf(uint256 id) external view returns (address) {
+        return _owner[id];
+    }
+
+    function balanceOf(address) external pure returns (uint256) {
+        return 1;
+    } // dummy
+
+    function approve(address to, uint256 id) external {
+        require(msg.sender == _owner[id], "not owner");
+        _tokenApproval[id] = to;
+    }
+
+    function getApproved(uint256 id) external view returns (address) {
+        return _tokenApproval[id];
+    }
+
+    function setApprovalForAll(address op, bool ok) external {
+        _op[msg.sender][op] = ok;
+    }
+
+    function isApprovedForAll(address a, address op) external view returns (bool) {
+        return _op[a][op];
+    }
+
+    function transferFrom(address from, address, /*to*/ uint256 id) public view {
+        require(from == _owner[id], "wrong from");
+        revert("liar721: transfer breaks");
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id) external {
+        transferFrom(from, to, id);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+        transferFrom(from, to, id);
+    }
+}
+
+// Claims ERC1155 but reverts during transfer (behavioral liar)
+contract LiarERC1155 {
+    mapping(uint256 => mapping(address => uint256)) internal _bal;
+    mapping(address => mapping(address => bool)) internal _op;
+
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0xd9b67a26; /* ERC1155 */
+    }
+
+    function mint(address to, uint256 id, uint256 qty) external {
+        _bal[id][to] += qty;
+    }
+
+    function balanceOf(address a, uint256 id) external view returns (uint256) {
+        return _bal[id][a];
+    }
+
+    function setApprovalForAll(address op, bool ok) external {
+        _op[msg.sender][op] = ok;
+    }
+
+    function isApprovedForAll(address a, address op) external view returns (bool) {
+        return _op[a][op];
+    }
+
+    function safeTransferFrom(address from, address, /*to*/ uint256 id, uint256 qty, bytes calldata) external view {
+        require(from == msg.sender || _op[from][msg.sender], "not auth");
+        require(_bal[id][from] >= qty, "insufficient");
+        revert("liar1155: transfer breaks");
+    }
+}
+
+// During transfer, attempts to call admin setter on the market
+contract MaliciousAdminERC721 {
+    mapping(uint256 => address) internal _owner;
+    mapping(uint256 => address) internal _tokenApproval;
+    mapping(address => mapping(address => bool)) internal _op;
+    IdeationMarketFacet public market;
+    bool internal attacked;
+
+    constructor(address _market) {
+        market = IdeationMarketFacet(_market);
+    }
+
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0x80ac58cd; /* ERC721 */
+    }
+
+    function mint(address to, uint256 id) external {
+        _owner[id] = to;
+    }
+
+    function ownerOf(uint256 id) external view returns (address) {
+        return _owner[id];
+    }
+
+    function balanceOf(address) external pure returns (uint256) {
+        return 1;
+    } // dummy
+
+    function approve(address to, uint256 id) external {
+        require(msg.sender == _owner[id], "not owner");
+        _tokenApproval[id] = to;
+    }
+
+    function getApproved(uint256 id) external view returns (address) {
+        return _tokenApproval[id];
+    }
+
+    function setApprovalForAll(address op, bool ok) external {
+        _op[msg.sender][op] = ok;
+    }
+
+    function isApprovedForAll(address a, address op) external view returns (bool) {
+        return _op[a][op];
+    }
+
+    function transferFrom(address from, address to, uint256 id) public {
+        require(from == _owner[id], "wrong from");
+        require(msg.sender == from || msg.sender == _tokenApproval[id] || _op[from][msg.sender], "not auth");
+
+        if (!attacked) {
+            attacked = true;
+            // Must revert; if it ever succeeds the test should fail.
+            try market.setInnovationFee(777) {
+                revert("setInnovationFee succeeded from token");
+            } catch { /* expected */ }
+        }
+
+        _tokenApproval[id] = address(0);
+        _owner[id] = to;
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id) external {
+        transferFrom(from, to, id);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+        transferFrom(from, to, id);
     }
 }
