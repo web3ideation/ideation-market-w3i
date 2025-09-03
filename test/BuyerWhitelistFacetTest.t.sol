@@ -44,6 +44,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
     }
 
     function testBuyerWhitelist_AddZeroAddressReverts() public {
+        _whitelistDefaultMocks();
         uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
 
         address[] memory addrs = new address[](1);
@@ -55,6 +56,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
     }
 
     function testBuyerWhitelist_AddExceedsMaxBatchReverts() public {
+        _whitelistDefaultMocks();
         uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
 
         uint16 max = getter.getBuyerWhitelistMaxBatchSize();
@@ -69,6 +71,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
     }
 
     function testBuyerWhitelist_AddRemove_ByERC1155OperatorForAll() public {
+        _whitelistDefaultMocks();
         uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
 
         address[] memory allow = new address[](1);

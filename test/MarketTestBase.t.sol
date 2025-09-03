@@ -203,38 +203,16 @@ abstract contract MarketTestBase is Test {
         erc721.mint(seller, 1);
         erc721.mint(seller, 2);
         erc1155.mint(seller, 1, 10);
-
-        // Whitelist the mock collections for marketplace tests
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
     }
 
-    function _whitelistCollectionAndApproveERC721() internal {
-        // Helper to whitelist ERC721 and approve diamond for token ID 1
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-        // Seller approves the marketplace (diamond) to transfer token 1
-        vm.startPrank(seller);
-        erc721.approve(address(diamond), 1);
-        vm.stopPrank();
+    function _whitelist(address c) internal {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(c);
     }
 
-    function _createListingERC721(bool buyerWhitelistEnabled, address[] memory allowedBuyers)
-        internal
-        returns (uint128 listingId)
-    {
-        _whitelistCollectionAndApproveERC721();
-        vm.startPrank(seller);
-        // Provide zero values for swap params and quantity
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, buyerWhitelistEnabled, false, allowedBuyers
-        );
-        vm.stopPrank();
-        // Next listing id is counter + 1
-        listingId = getter.getNextListingId() - 1;
+    function _whitelistDefaultMocks() internal {
+        _whitelist(address(erc721));
+        _whitelist(address(erc1155));
     }
 }
 
