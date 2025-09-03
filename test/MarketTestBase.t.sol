@@ -63,7 +63,7 @@ abstract contract MarketTestBase is Test {
     uint32 internal constant INNOVATION_FEE = 1000;
     uint16 internal constant MAX_BATCH = 300;
 
-    function setUp() public {
+    function setUp() public virtual {
         // Create distinct deterministic addresses for each actor
         owner = vm.addr(0x1000);
         seller = vm.addr(0x1001);
@@ -209,6 +209,32 @@ abstract contract MarketTestBase is Test {
         collections.addWhitelistedCollection(address(erc721));
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
+    }
+
+    function _whitelistCollectionAndApproveERC721() internal {
+        // Helper to whitelist ERC721 and approve diamond for token ID 1
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+        vm.stopPrank();
+        // Seller approves the marketplace (diamond) to transfer token 1
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 1);
+        vm.stopPrank();
+    }
+
+    function _createListingERC721(bool buyerWhitelistEnabled, address[] memory allowedBuyers)
+        internal
+        returns (uint128 listingId)
+    {
+        _whitelistCollectionAndApproveERC721();
+        vm.startPrank(seller);
+        // Provide zero values for swap params and quantity
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, buyerWhitelistEnabled, false, allowedBuyers
+        );
+        vm.stopPrank();
+        // Next listing id is counter + 1
+        listingId = getter.getNextListingId() - 1;
     }
 }
 
