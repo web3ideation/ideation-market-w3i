@@ -215,4 +215,161 @@ contract LibDiamondEdgesTest is MarketTestBase {
         // prove nothing changed
         assertEq(VersionFacetV1(address(diamond)).version(), 1);
     }
+
+    function testCut_AddDuplicateSelectorReverts() public {
+        // loupe.facetAddresses.selector already added in setUp()
+        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = IDiamondLoupeFacet.facetAddresses.selector;
+
+        cut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: loupeImpl,
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+
+        vm.prank(owner);
+        vm.expectRevert(bytes("LibDiamondCut: Can't add function that already exists"));
+        IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
+    }
+
+    function testCut_ReplaceWithSameFacetReverts() public {
+        // selector currently mapped to loupeImpl
+        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = IDiamondLoupeFacet.facetAddresses.selector;
+
+        cut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: loupeImpl, // same facet -> must revert
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: sels
+        });
+
+        vm.prank(owner);
+        vm.expectRevert(bytes("LibDiamondCut: Can't replace function with same function"));
+        IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
+    }
+
+    function testCut_RemoveFacetAddressNonZeroReverts() public {
+        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = IDiamondLoupeFacet.facetAddresses.selector;
+
+        cut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: loupeImpl, // must be zero -> revert
+            action: IDiamondCutFacet.FacetCutAction.Remove,
+            functionSelectors: sels
+        });
+
+        vm.prank(owner);
+        vm.expectRevert(bytes("LibDiamondCut: Remove facet address must be address(0)"));
+        IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
+    }
+
+    function testCut_AddFacetWithNoCodeReverts() public {
+        // EOA / no code
+        address eoa = vm.addr(0xBEEF);
+        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = VersionFacetV1.version.selector;
+
+        cut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: eoa,
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+
+        vm.prank(owner);
+        vm.expectRevert(bytes("LibDiamondCut: New facet has no code"));
+        IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
+    }
+
+    function testCut_InitAddressHasNoCodeReverts() public {
+        address eoa = vm.addr(0xCAFE);
+        IDiamondCutFacet.FacetCut[] memory empty = new IDiamondCutFacet.FacetCut[](0);
+
+        vm.prank(owner);
+        vm.expectRevert(bytes("LibDiamondCut: _init address has no code"));
+        IDiamondCutFacet(address(diamond)).diamondCut(empty, eoa, hex"");
+    }
+
+    function testCut_RemoveTriggersSwapWithLastFacet() public {
+        // deploy two fresh, code-bearing facets with unique selectors
+        SwapFacetA fa = new SwapFacetA();
+        SwapFacetB fb = new SwapFacetB();
+
+        // add A (selector: a())
+        {
+            IDiamondCutFacet.FacetCut[] memory addA = new IDiamondCutFacet.FacetCut[](1);
+            bytes4[] memory sa = new bytes4[](1);
+            sa[0] = SwapFacetA.a.selector;
+            addA[0] = IDiamondCutFacet.FacetCut({
+                facetAddress: address(fa),
+                action: IDiamondCutFacet.FacetCutAction.Add,
+                functionSelectors: sa
+            });
+            vm.prank(owner);
+            IDiamondCutFacet(address(diamond)).diamondCut(addA, address(0), "");
+            assertEq(loupe.facetAddress(SwapFacetA.a.selector), address(fa));
+        }
+
+        // add B (selector: b())
+        {
+            IDiamondCutFacet.FacetCut[] memory addB = new IDiamondCutFacet.FacetCut[](1);
+            bytes4[] memory sb = new bytes4[](1);
+            sb[0] = SwapFacetB.b.selector;
+            addB[0] = IDiamondCutFacet.FacetCut({
+                facetAddress: address(fb),
+                action: IDiamondCutFacet.FacetCutAction.Add,
+                functionSelectors: sb
+            });
+            vm.prank(owner);
+            IDiamondCutFacet(address(diamond)).diamondCut(addB, address(0), "");
+            assertEq(loupe.facetAddress(SwapFacetB.b.selector), address(fb));
+        }
+
+        // now remove A’s only selector; since A isn’t the last facet,
+        // LibDiamond will swap the last facet (B) into A’s slot and pop the tail.
+        {
+            IDiamondCutFacet.FacetCut[] memory rem = new IDiamondCutFacet.FacetCut[](1);
+            bytes4[] memory sr = new bytes4[](1);
+            sr[0] = SwapFacetA.a.selector;
+            rem[0] = IDiamondCutFacet.FacetCut({
+                facetAddress: address(0),
+                action: IDiamondCutFacet.FacetCutAction.Remove,
+                functionSelectors: sr
+            });
+            vm.prank(owner);
+            IDiamondCutFacet(address(diamond)).diamondCut(rem, address(0), "");
+
+            // selector unmapped and facet A gone from addresses
+            assertEq(loupe.facetAddress(SwapFacetA.a.selector), address(0));
+            address[] memory addrs = loupe.facetAddresses();
+            for (uint256 i = 0; i < addrs.length; i++) {
+                assert(addrs[i] != address(fa));
+            }
+            // B still present (may have moved index due to swap)
+            bool foundB;
+            for (uint256 i = 0; i < addrs.length; i++) {
+                if (addrs[i] == address(fb)) {
+                    foundB = true;
+                    break;
+                }
+            }
+            assertTrue(foundB);
+        }
+    }
+}
+
+// helper contracts
+contract SwapFacetA {
+    function a() external pure returns (uint256) {
+        return 1;
+    }
+}
+
+contract SwapFacetB {
+    function b() external pure returns (uint256) {
+        return 2;
+    }
 }
