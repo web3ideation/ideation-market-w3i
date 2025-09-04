@@ -359,6 +359,54 @@ contract LibDiamondEdgesTest is MarketTestBase {
             assertTrue(foundB);
         }
     }
+
+    function testCut_RemoveSelector_SwapsWithinFacet() public {
+        MultiSelFacet mf = new MultiSelFacet();
+
+        // add both selectors from the SAME facet
+        IDiamondCutFacet.FacetCut[] memory add = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](2);
+        sels[0] = MultiSelFacet.f1.selector; // will remove this one
+        sels[1] = MultiSelFacet.f2.selector; // will be swapped into position 0
+        add[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(mf),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(add, address(0), "");
+
+        // sanity: both map to mf
+        assertEq(loupe.facetAddress(MultiSelFacet.f1.selector), address(mf));
+        assertEq(loupe.facetAddress(MultiSelFacet.f2.selector), address(mf));
+
+        // now remove f1 only -> triggers selector-array swap in LibDiamond.removeFunction
+        IDiamondCutFacet.FacetCut[] memory rem = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory rs = new bytes4[](1);
+        rs[0] = MultiSelFacet.f1.selector;
+        rem[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(0),
+            action: IDiamondCutFacet.FacetCutAction.Remove,
+            functionSelectors: rs
+        });
+
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(rem, address(0), "");
+
+        // f1 unmapped, f2 still present on the same facet
+        assertEq(loupe.facetAddress(MultiSelFacet.f1.selector), address(0));
+        assertEq(loupe.facetAddress(MultiSelFacet.f2.selector), address(mf));
+
+        // optional: loupe shows only one selector left for mf
+        bytes4[] memory remaining = loupe.facetFunctionSelectors(address(mf));
+        assertEq(remaining.length, 1);
+        assertEq(remaining[0], MultiSelFacet.f2.selector);
+    }
+
+    function testLoupe_FacetAddressUnknownSelectorIsZero() public {
+        assertEq(loupe.facetAddress(bytes4(0xDEADBEEF)), address(0));
+    }
 }
 
 // helper contracts
@@ -370,6 +418,16 @@ contract SwapFacetA {
 
 contract SwapFacetB {
     function b() external pure returns (uint256) {
+        return 2;
+    }
+}
+
+contract MultiSelFacet {
+    function f1() external pure returns (uint256) {
+        return 1;
+    }
+
+    function f2() external pure returns (uint256) {
         return 2;
     }
 }
