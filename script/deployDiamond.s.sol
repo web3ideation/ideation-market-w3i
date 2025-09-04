@@ -61,9 +61,10 @@ contract DeployDiamond is Script {
         loupeSelectors[3] = IDiamondLoupeFacet.facetAddress.selector;
         loupeSelectors[4] = IERC165.supportsInterface.selector;
 
-        bytes4[] memory ownershipSelectors = new bytes4[](2);
+        bytes4[] memory ownershipSelectors = new bytes4[](3);
         ownershipSelectors[0] = IERC173.owner.selector;
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
+        ownershipSelectors[2] = OwnershipFacet.acceptOwnership.selector; // finalize handover
 
         bytes4[] memory marketSelectors = new bytes4[](7);
         marketSelectors[0] = IdeationMarketFacet.createListing.selector;
@@ -84,7 +85,7 @@ contract DeployDiamond is Script {
         buyerWhitelistSelectors[0] = BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector;
         buyerWhitelistSelectors[1] = BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector;
 
-        bytes4[] memory getterSelectors = new bytes4[](11);
+        bytes4[] memory getterSelectors = new bytes4[](12);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getProceeds.selector;
@@ -96,6 +97,7 @@ contract DeployDiamond is Script {
         getterSelectors[8] = GetterFacet.getContractOwner.selector;
         getterSelectors[9] = GetterFacet.isBuyerWhitelisted.selector;
         getterSelectors[10] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[11] = GetterFacet.getPendingOwner.selector;
 
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
