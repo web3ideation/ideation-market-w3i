@@ -89,4 +89,55 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         buyers.addBuyerWhitelistAddresses(listingId, allow);
         assertTrue(getter.isBuyerWhitelisted(listingId, allow[0]));
     }
+
+    function testBuyerWhitelist_AddWhileDisabled_SucceedsAndStores() public {
+        _whitelistDefaultMocks();
+
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 1);
+        vm.stopPrank();
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            1 ether,
+            address(0),
+            0,
+            0,
+            0,
+            false, // disabled
+            false,
+            new address[](0)
+        );
+
+        uint128 listingId = getter.getNextListingId() - 1;
+
+        address[] memory addrs = new address[](1);
+        addrs[0] = buyer;
+
+        // Adding to the list is allowed while disabled
+        vm.prank(seller);
+        buyers.addBuyerWhitelistAddresses(listingId, addrs);
+
+        // Stored correctly
+        assertTrue(getter.isBuyerWhitelisted(listingId, buyer));
+
+        // Optional: enable later without re-supplying the list; the prefilled entry should gate purchases.
+        vm.prank(seller);
+        market.updateListing(
+            listingId,
+            1 ether,
+            address(0),
+            0,
+            0, // no swap
+            0, // still ERC721
+            true, // enable whitelist
+            false, // partialBuy
+            new address[](0) // no new entries
+        );
+        // Now enforcement is on; a non-whitelisted address would be blocked.
+        // (You already have tests for purchase gating—no need to duplicate here.)
+    }
 }

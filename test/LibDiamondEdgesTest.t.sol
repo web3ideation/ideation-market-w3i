@@ -404,7 +404,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         assertEq(remaining[0], MultiSelFacet.f2.selector);
     }
 
-    function testLoupe_FacetAddressUnknownSelectorIsZero() public {
+    function testLoupe_FacetAddressUnknownSelectorIsZero() public view {
         assertEq(loupe.facetAddress(bytes4(0xDEADBEEF)), address(0));
     }
 }
