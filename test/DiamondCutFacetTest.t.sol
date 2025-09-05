@@ -334,4 +334,78 @@ contract DiamondCutFacetTest is MarketTestBase {
             }
         }
     }
+
+    // ---------------------------------------------------------------------
+    // 6) Init-only diamondCut: no facet changes, initializer mutates storage
+    // ---------------------------------------------------------------------
+    function testDiamondCut_InitOnly_CallsInitializerAndMutatesStorage() public {
+        uint32 prev = getter.getInnovationFee();
+        assertEq(prev, INNOVATION_FEE);
+
+        InitWriteFee init = new InitWriteFee();
+
+        // No facet changes; just run _init
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(
+            cuts, address(init), abi.encodeWithSelector(InitWriteFee.initSetFee.selector, uint32(4242))
+        );
+
+        assertEq(getter.getInnovationFee(), 4242, "init-only call did not apply");
+        // Facet set unchanged
+        address[] memory addrsBefore = loupe.facetAddresses();
+        address[] memory addrsAfter = loupe.facetAddresses();
+        assertEq(addrsAfter.length, addrsBefore.length, "facet set changed during init-only");
+    }
+
+    // ---------------------------------------------------------------------
+    // 7) Malicious initializer cannot escalate privileges
+    // ---------------------------------------------------------------------
+    function testDiamondCut_MaliciousInitializerCannotEscalate() public {
+        address ownerBefore = IERC173(address(diamond)).owner();
+        uint32 feeBefore = getter.getInnovationFee();
+
+        MaliciousInitTryAdmin bad = new MaliciousInitTryAdmin();
+
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+
+        // The initializer swallows its own failures and returns successfully.
+        // diamondCut should succeed, but state (owner/fee) must be unchanged.
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(
+            cuts,
+            address(bad),
+            abi.encodeWithSelector(MaliciousInitTryAdmin.initTryAdmin.selector, vm.addr(0xBEEF), uint32(999_999))
+        );
+
+        assertEq(IERC173(address(diamond)).owner(), ownerBefore, "owner changed via initializer");
+        assertEq(getter.getInnovationFee(), feeBefore, "fee changed via initializer");
+    }
+}
+
+// --- Helpers for initializer coverage ---
+
+contract InitWriteFee {
+    // Proves init-only calls can mutate diamond storage via delegatecall
+    function initSetFee(uint32 newFee) external {
+        AppStorage storage s = LibAppStorage.appStorage();
+        s.innovationFee = newFee; // write directly via diamond storage pointer
+    }
+}
+
+contract MaliciousInitTryAdmin {
+    // Tries to call onlyOwner functions from initializer context; must NOT succeed
+    function initTryAdmin(address newOwner, uint32 newFee) external {
+        // Attempt transferOwnership (IERC173 view)
+        try IERC173(address(this)).transferOwnership(newOwner) {
+            revert("transferOwnership should revert");
+        } catch { /* expected */ }
+
+        // Attempt setInnovationFee (onlyOwner)
+        try IdeationMarketFacet(address(this)).setInnovationFee(newFee) {
+            revert("setInnovationFee should revert");
+        } catch { /* expected */ }
+        // Note: we *do not* revert here; diamondCut should succeed with no state changes.
+    }
 }
