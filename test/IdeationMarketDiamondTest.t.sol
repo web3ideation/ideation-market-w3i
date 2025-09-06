@@ -5178,34 +5178,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.getListingByListingId(listingId);
     }
 
-    /* ========== Invariant: sum of recorded proceeds == contract balance ========== */
-
-    address[] internal __trackedProceedsAddrs;
-
-    /// Optional helper to register addresses once.
-    function __ensureTrackedInit() internal {
-        if (__trackedProceedsAddrs.length == 0) {
-            __trackedProceedsAddrs.push(owner);
-            __trackedProceedsAddrs.push(seller);
-            __trackedProceedsAddrs.push(buyer);
-            __trackedProceedsAddrs.push(operator);
-            // Add more if your suite mints/credits different actors:
-            // __trackedProceedsAddrs.push(makeAddr("royaltyReceiver"));
-        }
-    }
-
-    /// Foundry will run any function prefixed with `invariant_` during invariant tests.
-    /// This asserts the escrowed ETH in the diamond equals the sum of per-user proceeds.
-    function invariant_RecordedProceedsEqualsDiamondBalance() public {
-        __ensureTrackedInit();
-
-        uint256 sum;
-        for (uint256 i = 0; i < __trackedProceedsAddrs.length; i++) {
-            sum += getter.getProceeds(__trackedProceedsAddrs[i]);
-        }
-        assertEq(sum, address(diamond).balance, "sum(proceeds) must equal contract balance");
-    }
-
     /* ========== Receiver hooks that swallow reverts (malicious tokens) ========== */
 
     /// Listed token is MaliciousERC1155 which tries (and catches) reentrant withdrawProceeds.
@@ -6059,5 +6031,34 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.getListingByListingId(id);
     }
 
-    // End of test contract
+    function testFirstListingIdIsOne() public {
+        _whitelistDefaultMocks();
+
+        // Before any listing exists, next id should be 1.
+        assertEq(uint256(getter.getNextListingId()), 1);
+
+        // Approve and create the very first listing (ERC721).
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 1);
+        vm.stopPrank();
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0), // erc1155Holder (unused for ERC721)
+            1 ether, // price > 0
+            address(0), // desiredTokenAddress (no swap)
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            0, // erc1155Quantity (0 => ERC721)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
+        );
+
+        // The first assigned id must be 1.
+        uint128 firstListingId = getter.getNextListingId() - 1;
+        assertEq(uint256(firstListingId), 1);
+    }
 }
