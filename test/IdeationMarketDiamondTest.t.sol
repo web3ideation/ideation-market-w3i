@@ -6252,4 +6252,120 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.prank(buyer);
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
     }
+
+    function testUpdate_SwapSameNFTReverts() public {
+        // Create plain ERC721 listing (ETH-only)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Same token (same contract & tokenId=1) must revert on update
+        vm.startPrank(seller);
+        uint256 oldPrice = getter.getListingByListingId(id).price;
+        vm.expectRevert(IdeationMarket__NoSwapForSameToken.selector);
+        market.updateListing(
+            id,
+            oldPrice, // keep price
+            address(erc721), // desired = same collection
+            1, // desired tokenId = same token
+            0, // desired ERC1155 qty (not used for 721)
+            0, // reserved / holder param as in your suite
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
+    function testUpdate_AddDesiredToEthListing_Succeeds() public {
+        // Start with ETH-only listing
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.startPrank(seller);
+        uint32 feeNow = getter.getInnovationFee();
+
+        // Expect ListingUpdated to reflect adding a desired NFT (same collection, different tokenId)
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingUpdated(
+            id,
+            address(erc721), // listed collection
+            1, // listed tokenId
+            0, // listed qty (0 for 721)
+            2 ether, // new price
+            feeNow,
+            seller,
+            false,
+            false,
+            address(erc721), // desired collection
+            2, // desired tokenId (DIFFERENT from listed)
+            0 // desired qty (0 for 721)
+        );
+
+        market.updateListing(
+            id,
+            2 ether,
+            address(erc721), // add desired
+            2, // desired tokenId != 1
+            0,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
+    function testUpdate_AddEthToSwapListing_Succeeds() public {
+        // Whitelist and approve listed ERC721
+        _whitelistCollectionAndApproveERC721();
+        // Also whitelist the desired collection (use ERC1155 to avoid “same token” concerns)
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Create swap-only listing (price = 0) wanting ERC1155 id=1 qty=1
+        vm.startPrank(seller);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            0, // price 0 (swap-only)
+            address(erc1155), // desired collection
+            1, // desired tokenId (ERC1155 id)
+            1, // desired ERC1155 quantity
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint32 feeNow = getter.getInnovationFee();
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingUpdated(
+            id,
+            address(erc721),
+            1,
+            0,
+            1 ether, // now add ETH price
+            feeNow,
+            seller,
+            false,
+            false,
+            address(erc1155), // desired remains intact
+            1,
+            1
+        );
+
+        // Update to ETH + desired
+        market.updateListing(
+            id,
+            1 ether, // add price
+            address(erc1155),
+            1,
+            1,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
 }
