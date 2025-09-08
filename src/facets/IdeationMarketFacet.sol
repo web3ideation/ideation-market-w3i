@@ -408,8 +408,9 @@ contract IdeationMarketFacet {
 
         // in case it's a swap listing, send that desired token (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredTokenAddress != address(0)) {
-            address desiredOwner = address(0); // initializing this for erc721 cleanup
-            uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
+            address desiredOwner = address(0); // initializing this for cleanup
+            address obsoleteSeller = address(0); // initializing this for cleanup
+            uint256 remainingERC1155Balance = 0; // initializing this for cleanup
             if (listedItem.desiredErc1155Quantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredToken = IERC1155(listedItem.desiredTokenAddress);
@@ -425,8 +426,6 @@ contract IdeationMarketFacet {
                     revert IdeationMarket__InsufficientSwapTokenBalance(listedItem.desiredErc1155Quantity, swapBalance);
                 }
 
-                remainingBalance = swapBalance - listedItem.desiredErc1155Quantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
-
                 // Check approval
                 requireERC1155Approval(listedItem.desiredTokenAddress, desiredErc1155Holder);
 
@@ -438,6 +437,9 @@ contract IdeationMarketFacet {
                     listedItem.desiredErc1155Quantity,
                     ""
                 );
+
+                obsoleteSeller = desiredErc1155Holder; // for cleanup
+                remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
             } else {
                 IERC721 desiredToken = IERC721(listedItem.desiredTokenAddress);
                 desiredOwner = desiredToken.ownerOf(listedItem.desiredTokenId);
@@ -454,24 +456,25 @@ contract IdeationMarketFacet {
 
                 // Perform the safe swap transfer buyer to seller.
                 desiredToken.safeTransferFrom(desiredOwner, listedItem.seller, listedItem.desiredTokenId);
+
+                obsoleteSeller = desiredOwner; // for cleanup
             }
 
             // in case the desiredToken is listed already, delete that now deprecated listing to cleanup
             uint128[] storage deprecatedListingArray =
                 s.tokenToListingIds[listedItem.desiredTokenAddress][listedItem.desiredTokenId];
 
-            address obsoleteSeller = (listedItem.desiredErc1155Quantity > 0)
-                ? desiredErc1155Holder // ERC-1155 swap
-                : desiredOwner; // ERC-721 swap
-
             for (uint256 i = deprecatedListingArray.length; i != 0;) {
                 unchecked {
                     i--;
                 }
                 uint128 depId = deprecatedListingArray[i];
+                Listing storage dep = s.listings[depId];
 
-                if (s.listings[depId].seller == obsoleteSeller && remainingBalance <= s.listings[depId].erc1155Quantity)
-                {
+                if (
+                    dep.seller == obsoleteSeller
+                        && (listedItem.desiredErc1155Quantity == 0 || dep.erc1155Quantity > remainingERC1155Balance)
+                ) {
                     // remove the obsolete listing
                     delete s.listings[depId];
                     emit ListingCanceled(
