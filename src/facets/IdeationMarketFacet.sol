@@ -471,6 +471,7 @@ contract IdeationMarketFacet {
                 uint128 depId = deprecatedListingArray[i];
                 Listing storage dep = s.listings[depId];
 
+                // if the seller of that listing is the same as the obsoleteSeller (the one who just sold his token to the current buyer) and in case of an ERC1155 listing, if the obsoleteSeller does not hold enough token anymore to cover the desiredErc1155Quantity of that listing, that listing needs to get removed. If it is an erc721 listing, it's enough that the obsoleteSeller is the seller of that listing, to remove that listing.
                 if (
                     dep.seller == obsoleteSeller
                         && (listedItem.desiredErc1155Quantity == 0 || dep.erc1155Quantity > remainingERC1155Balance)

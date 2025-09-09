@@ -8,13 +8,12 @@
 |-|:-|:-:|
 | [GAS-1](#GAS-1) | `a = a + b` is more gas effective than `a += b` for state variables (excluding arrays and mappings) | 4 |
 | [GAS-2](#GAS-2) | Using bools for storage incurs overhead | 5 |
-| [GAS-3](#GAS-3) | Cache array length outside of loop | 2 |
-| [GAS-4](#GAS-4) | For Operations that will not overflow, you could use unchecked | 111 |
-| [GAS-5](#GAS-5) | Use Custom Errors instead of Revert Strings to save Gas | 12 |
-| [GAS-6](#GAS-6) | Avoid contract existence checks by using low level calls | 7 |
-| [GAS-7](#GAS-7) | Functions guaranteed to revert when called by normal users can be marked `payable` | 4 |
-| [GAS-8](#GAS-8) | `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`) | 18 |
-| [GAS-9](#GAS-9) | Use != 0 instead of > 0 for unsigned integer comparison | 29 |
+| [GAS-3](#GAS-3) | For Operations that will not overflow, you could use unchecked | 106 |
+| [GAS-4](#GAS-4) | Use Custom Errors instead of Revert Strings to save Gas | 12 |
+| [GAS-5](#GAS-5) | Avoid contract existence checks by using low level calls | 5 |
+| [GAS-6](#GAS-6) | Functions guaranteed to revert when called by normal users can be marked `payable` | 4 |
+| [GAS-7](#GAS-7) | `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`) | 18 |
+| [GAS-8](#GAS-8) | Use != 0 instead of > 0 for unsigned integer comparison | 28 |
 ### <a name="GAS-1"></a>[GAS-1] `a = a + b` is more gas effective than `a += b` for state variables (excluding arrays and mappings)
 This saves **16 gas per instance.**
 
@@ -22,13 +21,13 @@ This saves **16 gas per instance.**
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-393:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
+376:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
 
-403:         s.proceeds[listedItem.seller] += sellerProceeds;
+386:         s.proceeds[listedItem.seller] += sellerProceeds;
 
-404:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
+387:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
 
-406:             s.proceeds[msg.sender] += excessPayment;
+389:             s.proceeds[msg.sender] += excessPayment;
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -40,9 +39,9 @@ Use uint256(1) and uint256(2) for true/false to avoid a Gwarmaccess (100 gas), a
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-28:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+27:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
 
-54:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+52:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -50,9 +49,9 @@ File: facets/BuyerWhitelistFacet.sol
 ```solidity
 File: libraries/LibAppStorage.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+29:     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
@@ -60,28 +59,14 @@ File: libraries/LibAppStorage.sol
 ```solidity
 File: libraries/LibDiamond.sol
 
-42:         mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
+42:         mapping(bytes4 => bool) supportedInterfaces;
 
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="GAS-3"></a>[GAS-3] Cache array length outside of loop
-If not cached, the solidity compiler will always read the length of the array during each iteration. That is, if it is a storage array, this is an extra sload operation (100 additional extra gas for each iteration except for the first) and if it is a memory array, this is an extra mload operation (3 additional gas for each iteration except for the first).
+### <a name="GAS-3"></a>[GAS-3] For Operations that will not overflow, you could use unchecked
 
-*Instances (2)*:
-```solidity
-File: facets/IdeationMarketFacet.sol
-
-467:             for (uint256 i = deprecatedListingArray.length; i != 0;) {
-
-873:         for (uint256 i = listingArray.length; i != 0;) {
-
-```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
-
-### <a name="GAS-4"></a>[GAS-4] For Operations that will not overflow, you could use unchecked
-
-*Instances (111)*:
+*Instances (106)*:
 ```solidity
 File: IdeationMarketDiamond.sol
 
@@ -101,11 +86,9 @@ File: facets/BuyerWhitelistFacet.sol
 
 6: import "../interfaces/IERC1155.sol";
 
-7: import "../interfaces/IBuyerWhitelistFacet.sol";
+38:                 i++;
 
-40:                 i++;
-
-66:                 i++;
+63:                 i++;
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -195,69 +178,61 @@ File: facets/IdeationMarketFacet.sol
 
 170:         address[] calldata allowedBuyers // whitelisted Buyers
 
-258:         s.listingIdCounter++;
+243:         s.listingIdCounter++;
 
-311:         uint256 erc1155PurchaseQuantity, // the exact ERC1155 quantity the buyer wants when partialBuyEnabled = true; for ERC721 must be 0
+294:         uint256 erc1155PurchaseQuantity, // the exact ERC1155 quantity the buyer wants when partialBuyEnabled = true; for ERC721 must be 0
 
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
+295:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
 
-350:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+333:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+364:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
-384:         uint256 sellerProceeds = purchasePrice - innovationProceeds;
+367:         uint256 sellerProceeds = purchasePrice - innovationProceeds;
 
-392:                 sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
+375:                 sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
 
-393:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
+376:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
 
-399:         uint256 excessPayment = msg.value - purchasePrice;
+382:         uint256 excessPayment = msg.value - purchasePrice;
 
-403:         s.proceeds[listedItem.seller] += sellerProceeds;
+386:         s.proceeds[listedItem.seller] += sellerProceeds;
 
-404:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
+387:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
 
-406:             s.proceeds[msg.sender] += excessPayment;
+389:             s.proceeds[msg.sender] += excessPayment;
 
-411:             address desiredOwner = address(0); // initializing this for cleanup
+394:             address desiredOwner; // initializing this for erc721 cleanup
 
-412:             address obsoleteSeller = address(0); // initializing this for cleanup
+395:             uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
 
-413:             uint256 remainingERC1155Balance = 0; // initializing this for cleanup
+411:                 remainingBalance = swapBalance - listedItem.desiredErc1155Quantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
 
-441:                 obsoleteSeller = desiredErc1155Holder; // for cleanup
+447:                 ? desiredErc1155Holder // ERC-1155 swap
 
-442:                 remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
+448:                 : desiredOwner; // ERC-721 swap
 
-460:                 obsoleteSeller = desiredOwner; // for cleanup
+465:                     deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
 
-469:                     i--;
+469:                         i++;
 
-484:                     deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
+482:             s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
 
-497:             s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
+483:             s.listings[listingId].price -= purchasePrice;
 
-498:             s.listings[listingId].price -= purchasePrice;
+547:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
 
-555:                 } catch { /* ignore */ }
+548:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
 
-564:                 } catch { /* ignore */ }
+551:         address[] calldata newAllowedBuyers // whitelisted Buyers
 
-577:                 } catch { /* ignore */ }
+623:         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
 
-595:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+624:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
-596:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
+763:                 listingArray[i] = listingArray[listingArray.length - 1];
 
-599:         address[] calldata newAllowedBuyers // whitelisted Buyers
-
-679:         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
-
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
-
-875:                 i--;
-
-878:                 listingArray[i] = listingArray[listingArray.length - 1];
+767:                     i++;
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -323,19 +298,19 @@ File: libraries/LibAppStorage.sol
 
 23:     uint16 buyerWhitelistMaxBatchSize; // should be 300
 
-26:     mapping(uint128 listingId => Listing listing) listings; // Listings by listingId
+26:     mapping(uint128 => Listing) listings; // Listings by listinngId
 
-27:     mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds; // reverse index from token to ListingIds
+27:     mapping(address => mapping(uint256 => uint128[])) tokenToListingIds; // reverse index from token to ListingIds
 
-28:     mapping(address seller => uint256 amount) proceeds; // Proceeds by seller address
+28:     mapping(address => uint256) proceeds; // Proceeds by seller address
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+29:     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
 
 30:     address[] whitelistedCollectionsArray; // for lookups
 
-31:     mapping(address collection => uint256 index) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+31:     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
@@ -389,12 +364,12 @@ File: upgradeInitializers/DiamondInit.sol
 
 20: import {IERC2981} from "../interfaces/IERC2981.sol";
 
-34:         s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)
+39:         s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)
 
 ```
 [Link to code](--forceupgradeInitializers/DiamondInit.sol)
 
-### <a name="GAS-5"></a>[GAS-5] Use Custom Errors instead of Revert Strings to save Gas
+### <a name="GAS-4"></a>[GAS-4] Use Custom Errors instead of Revert Strings to save Gas
 Custom errors are available from solidity version 0.8.4. Custom errors save [**~50 gas**](https://gist.github.com/IllIllI000/ad1bd0d29a0101b25e57c293b4b0c746) each time they're hit by [avoiding having to allocate and store the revert string](https://blog.soliditylang.org/2021/04/21/custom-errors/#errors-in-depth). Not defining the strings also save deployment gas
 
 Additionally, custom errors can be used inside and outside of contracts (including interfaces and libraries).
@@ -436,24 +411,20 @@ File: libraries/LibDiamond.sol
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="GAS-6"></a>[GAS-6] Avoid contract existence checks by using low level calls
+### <a name="GAS-5"></a>[GAS-5] Avoid contract existence checks by using low level calls
 Prior to 0.8.10 the compiler inserted extra code, including `EXTCODESIZE` (**100 gas**), to check for contract existence for external function calls. In more recent solidity versions, the compiler will not insert these checks if the external call has a return value. Similar behavior can be achieved in earlier versions by using low-level calls, since low level calls never check for contract existence
 
-*Instances (7)*:
+*Instances (5)*:
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-196:             uint256 balance = token.balanceOf(erc1155Holder, tokenId);
+187:             if (token.balanceOf(erc1155Holder, tokenId) == 0) {
 
-367:             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
+350:             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
 
-417:                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
+399:                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
 
-442:                 remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
-
-628:             uint256 balance = token.balanceOf(seller, tokenId);
-
-748:                     try token.balanceOf(listedItem.seller, listedItem.tokenId) returns (uint256 balance) {
+402:                     desiredToken.balanceOf(msg.sender, listedItem.desiredTokenId) == 0
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -466,7 +437,7 @@ File: libraries/LibDiamond.sol
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="GAS-7"></a>[GAS-7] Functions guaranteed to revert when called by normal users can be marked `payable`
+### <a name="GAS-6"></a>[GAS-6] Functions guaranteed to revert when called by normal users can be marked `payable`
 If a function modifier such as `onlyOwner` is used, the function will revert if a normal user tries to pay the function. Marking the function as `payable` will lower the gas cost for legitimate callers because the compiler will not include checks for whether a payment was provided.
 
 *Instances (4)*:
@@ -484,7 +455,7 @@ File: facets/CollectionWhitelistFacet.sol
 ```
 [Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
-### <a name="GAS-8"></a>[GAS-8] `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`)
+### <a name="GAS-7"></a>[GAS-7] `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`)
 Pre-increments and pre-decrements are cheaper.
 
 For a `uint256 i` variable, the following is true with the Optimizer enabled at 10k:
@@ -527,9 +498,9 @@ Consider using pre-increments and pre-decrements where they are relevant (meanin
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-40:                 i++;
+38:                 i++;
 
-66:                 i++;
+63:                 i++;
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -569,11 +540,11 @@ File: facets/GetterFacet.sol
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-258:         s.listingIdCounter++;
+243:         s.listingIdCounter++;
 
-469:                     i--;
+469:                         i++;
 
-875:                 i--;
+767:                     i++;
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -596,13 +567,13 @@ File: libraries/LibDiamond.sol
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="GAS-9"></a>[GAS-9] Use != 0 instead of > 0 for unsigned integer comparison
+### <a name="GAS-8"></a>[GAS-8] Use != 0 instead of > 0 for unsigned integer comparison
 
-*Instances (29)*:
+*Instances (28)*:
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-85:         if (erc1155Quantity > 0) {
+82:         if (erc1155Quantity > 0) {
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -614,47 +585,45 @@ File: facets/IdeationMarketFacet.sol
 
 167:         uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
 
-181:         if (erc1155Quantity > 0) {
+180:         if (erc1155Quantity > 0) {
 
-242:         if (erc1155Quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
+217:         if (erc1155Quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
 
-252:         if (erc1155Quantity > 0) {
+230:         if (erc1155Quantity > 0) {
 
-280:             if (allowedBuyers.length > 0) {
+268:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+332:         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
 
-349:         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
+340:         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
 
-357:         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
+349:         if (listedItem.erc1155Quantity > 0) {
 
-366:         if (listedItem.erc1155Quantity > 0) {
+373:             if (royaltyAmount > 0) {
 
-390:             if (royaltyAmount > 0) {
+388:         if (excessPayment > 0) {
 
-405:         if (excessPayment > 0) {
+396:             if (listedItem.desiredErc1155Quantity > 0) {
 
-414:             if (listedItem.desiredErc1155Quantity > 0) {
+446:             address obsoleteSeller = (listedItem.desiredErc1155Quantity > 0)
 
-503:         if (erc1155PurchaseQuantity > 0) {
+488:         if (erc1155PurchaseQuantity > 0) {
 
-595:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+547:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
 
-596:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
+548:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
 
-611:         if (newErc1155Quantity > 0) {
+563:         if (newErc1155Quantity > 0) {
 
-616:             if (erc1155Quantity > 0) {
+606:         if (newErc1155Quantity > 0) {
 
-622:         if (newErc1155Quantity > 0) {
+612:             if (erc1155Quantity > 0) {
 
-684:             if (newAllowedBuyers.length > 0) {
+631:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+684:             if (listedItem.erc1155Quantity > 0) {
 
-744:                 if (listedItem.erc1155Quantity > 0) {
-
-856:         } else if (desiredErc1155Quantity > 0) {
+743:         } else if (desiredErc1155Quantity > 0) {
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -685,15 +654,17 @@ File: libraries/LibDiamond.sol
 | [NC-2](#NC-2) | Control structures do not follow the Solidity Style Guide | 30 |
 | [NC-3](#NC-3) | Critical Changes Should Use Two-step Procedure | 1 |
 | [NC-4](#NC-4) | Default Visibility for constants | 2 |
-| [NC-5](#NC-5) | Functions should not be longer than 50 lines | 102 |
-| [NC-6](#NC-6) | Lines are too long | 4 |
-| [NC-7](#NC-7) | Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor | 9 |
-| [NC-8](#NC-8) | Take advantage of Custom Error's return value property | 57 |
-| [NC-9](#NC-9) | Use scientific notation for readability reasons for large multiples of ten | 1 |
-| [NC-10](#NC-10) | Avoid the use of sensitive terms | 119 |
-| [NC-11](#NC-11) | Strings should use double quotes rather than single quotes | 1 |
-| [NC-12](#NC-12) | Use Underscores for Number Literals (add an underscore every 3 digits) | 2 |
-| [NC-13](#NC-13) | Variables need not be initialized to zero | 15 |
+| [NC-5](#NC-5) | Functions should not be longer than 50 lines | 101 |
+| [NC-6](#NC-6) | Lines are too long | 3 |
+| [NC-7](#NC-7) | Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor | 8 |
+| [NC-8](#NC-8) | Consider using named mappings | 11 |
+| [NC-9](#NC-9) | Take advantage of Custom Error's return value property | 53 |
+| [NC-10](#NC-10) | Use scientific notation for readability reasons for large multiples of ten | 1 |
+| [NC-11](#NC-11) | Avoid the use of sensitive terms | 116 |
+| [NC-12](#NC-12) | Strings should use double quotes rather than single quotes | 2 |
+| [NC-13](#NC-13) | Use Underscores for Number Literals (add an underscore every 3 digits) | 2 |
+| [NC-14](#NC-14) | Event is missing `indexed` fields | 4 |
+| [NC-15](#NC-15) | Variables need not be initialized to zero | 14 |
 ### <a name="NC-1"></a>[NC-1] `constant`s should be defined rather than using magic numbers
 Even [assembly](https://github.com/code-423n4/2022-05-opensea-seaport/blob/9d7ce4d08bf3c3010304a0476a785c70c0e90ae7/contracts/lib/TokenTransferrer.sol#L35-L39) can benefit from using readable constants instead of hex/numeric literals
 
@@ -701,7 +672,7 @@ Even [assembly](https://github.com/code-423n4/2022-05-opensea-seaport/blob/9d7ce
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+364:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -721,15 +692,15 @@ File: IdeationMarketDiamond.sol
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+31:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+56:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+71:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+77:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-93:             if (
+90:             if (
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -755,37 +726,37 @@ File: facets/IdeationMarketFacet.sol
 
 141:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
 
-215:             if (
+193:             if (
 
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+268:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
+295:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
 
-325:         if (
+308:         if (
 
-335:         if (
+318:         if (
 
-391:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
+374:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
 
-418:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
+400:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
 
-419:                 if (
+401:                 if (
 
-447:                 if (
+428:                 if (
 
-475:                 if (
+453:                 if (
 
-636:             if (
+572:             if (
 
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+631:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-824:         if (
+711:         if (
 
-853:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+740:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
 
-854:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+741:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
 
-855:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
+742:             if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -793,9 +764,9 @@ File: facets/IdeationMarketFacet.sol
 ```solidity
 File: libraries/LibAppStorage.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+29:     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
@@ -841,7 +812,7 @@ File: libraries/LibDiamond.sol
 ### <a name="NC-5"></a>[NC-5] Functions should not be longer than 50 lines
 Overly complex code can make understanding functionality more difficult, try to further modularize your code to ensure readability 
 
-*Instances (102)*:
+*Instances (101)*:
 ```solidity
 File: IdeationMarketDiamond.sol
 
@@ -853,11 +824,11 @@ File: IdeationMarketDiamond.sol
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-22:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
+21:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
 
-48:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
+46:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
 
-73:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
+70:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -935,21 +906,21 @@ File: facets/GetterFacet.sol
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-528:     function cancelListing(uint128 listingId) public listingExists(listingId) {
+513:     function cancelListing(uint128 listingId) public listingExists(listingId) {
 
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+624:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
-708:     function withdrawProceeds() external nonReentrant {
+650:     function withdrawProceeds() external nonReentrant {
 
-724:     function setInnovationFee(uint32 newFee) external {
+666:     function setInnovationFee(uint32 newFee) external {
 
-733:     function cleanListing(uint128 listingId) external listingExists(listingId) {
+675:     function cleanListing(uint128 listingId) external listingExists(listingId) {
 
-822:     function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
+709:     function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
 
-834:     function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
+721:     function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
 
-867:     function deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
+754:     function deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1089,8 +1060,6 @@ File: libraries/LibDiamond.sol
 
 24:         uint96 functionSelectorPosition; // position in facetFunctionSelectors.functionSelectors array
 
-37:         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
-
 48:     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
 
 58:     function setContractOwner(address _newOwner) internal {
@@ -1169,13 +1138,13 @@ File: upgradeInitializers/DiamondInit.sol
 ### <a name="NC-6"></a>[NC-6] Lines are too long
 Usually lines in source code are limited to [80](https://softwareengineering.stackexchange.com/questions/148677/why-is-80-characters-the-standard-limit-for-code-width) characters. Today's screens are much larger so it's reasonable to stretch this in some cases. Since the files will most likely reside in GitHub, and GitHub starts using a scroll bar in all cases when the length is over [164](https://github.com/aizatto/character-length) characters, the lines below should be split when they reach that length
 
-*Instances (4)*:
+*Instances (3)*:
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
+295:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
 
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+624:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1183,9 +1152,7 @@ File: facets/IdeationMarketFacet.sol
 ```solidity
 File: libraries/LibAppStorage.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
-
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
@@ -1193,11 +1160,11 @@ File: libraries/LibAppStorage.sol
 ### <a name="NC-7"></a>[NC-7] Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor
 If a function is supposed to be access-controlled, a `modifier` should be used instead of a `require/if` statement for more readability.
 
-*Instances (9)*:
+*Instances (8)*:
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-87:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
+84:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -1205,17 +1172,15 @@ File: facets/BuyerWhitelistFacet.sol
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-192:             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
+183:             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
 
-319:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
+302:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
 
-361:         if (msg.sender == listedItem.seller) {
+344:         if (msg.sender == listedItem.seller) {
 
-534:         if (msg.sender == diamondOwner) {
+532:         if (!isAuthorized && msg.sender != diamondOwner) {
 
-552:                     if (approvedAddress == msg.sender) {
-
-625:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
+566:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1236,10 +1201,54 @@ File: libraries/LibDiamond.sol
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-8"></a>[NC-8] Take advantage of Custom Error's return value property
+### <a name="NC-8"></a>[NC-8] Consider using named mappings
+Consider moving to solidity version 0.8.18 or later, and using [named mappings](https://ethereum.stackexchange.com/questions/51629/how-to-name-the-arguments-in-mapping/145555#145555) to make it easier to understand the purpose of each mapping
+
+*Instances (11)*:
+```solidity
+File: facets/BuyerWhitelistFacet.sol
+
+27:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+
+52:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
+
+```
+[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
+
+```solidity
+File: libraries/LibAppStorage.sol
+
+26:     mapping(uint128 => Listing) listings; // Listings by listinngId
+
+27:     mapping(address => mapping(uint256 => uint128[])) tokenToListingIds; // reverse index from token to ListingIds
+
+28:     mapping(address => uint256) proceeds; // Proceeds by seller address
+
+29:     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+
+31:     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+
+```
+[Link to code](--forcelibraries/LibAppStorage.sol)
+
+```solidity
+File: libraries/LibDiamond.sol
+
+35:         mapping(bytes4 => FacetAddressAndPosition) selectorToFacetAndPosition;
+
+37:         mapping(address => FacetFunctionSelectors) facetFunctionSelectors;
+
+42:         mapping(bytes4 => bool) supportedInterfaces;
+
+```
+[Link to code](--forcelibraries/LibDiamond.sol)
+
+### <a name="NC-9"></a>[NC-9] Take advantage of Custom Error's return value property
 An important feature of Custom Error is that values such as address, tokenID, msg.value can be written inside the () sign, this kind of approach provides a serious advantage in debugging and examining the revert details of dapps such as tenderly.
 
-*Instances (57)*:
+*Instances (53)*:
 ```solidity
 File: IdeationMarketDiamond.sol
 
@@ -1253,19 +1262,19 @@ File: IdeationMarketDiamond.sol
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+31:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+56:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+71:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-76:             revert BuyerWhitelist__ExceedsMaxBatchSize();
+73:             revert BuyerWhitelist__ExceedsMaxBatchSize();
 
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+77:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-88:                 revert BuyerWhitelist__NotAuthorizedOperator();
+85:                 revert BuyerWhitelist__NotAuthorizedOperator();
 
-96:             ) revert BuyerWhitelist__NotAuthorizedOperator();
+93:             ) revert BuyerWhitelist__NotAuthorizedOperator();
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -1291,87 +1300,79 @@ File: facets/IdeationMarketFacet.sol
 
 141:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
 
-185:                     revert IdeationMarket__NotSupportedTokenStandard();
+184:                 revert IdeationMarket__NotAuthorizedOperator();
 
-187:                     revert IdeationMarket__WrongQuantityParameter();
+188:                 revert IdeationMarket__WrongErc1155HolderParameter();
 
-193:                 revert IdeationMarket__NotAuthorizedOperator();
+197:                 revert IdeationMarket__NotAuthorizedOperator();
 
-198:                 revert IdeationMarket__WrongErc1155HolderParameter();
+204:                 revert IdeationMarket__PartialBuyNotPossible();
 
-208:                     revert IdeationMarket__NotSupportedTokenStandard();
+212:                 revert IdeationMarket__InvalidUnitPrice();
 
-210:                     revert IdeationMarket__WrongQuantityParameter();
+218:             revert IdeationMarket__AlreadyListed();
 
-219:                 revert IdeationMarket__NotAuthorizedOperator();
+232:                 revert IdeationMarket__WrongQuantityParameter();
 
-226:             revert IdeationMarket__PartialBuyNotPossible();
+237:                 revert IdeationMarket__WrongQuantityParameter();
 
-234:                 revert IdeationMarket__InvalidUnitPrice();
+268:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-237:                 revert IdeationMarket__PartialBuyNotPossible();
+314:             revert IdeationMarket__ListingTermsChanged();
 
-243:             revert IdeationMarket__AlreadyListed();
+323:             revert IdeationMarket__InvalidPurchaseQuantity();
 
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+326:             revert IdeationMarket__PartialBuyNotPossible();
 
-331:             revert IdeationMarket__ListingTermsChanged();
+341:             revert IdeationMarket__WrongErc1155HolderParameter();
 
-340:             revert IdeationMarket__InvalidPurchaseQuantity();
+345:             revert IdeationMarket__SameBuyerAsSeller();
 
-343:             revert IdeationMarket__PartialBuyNotPossible();
+374:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
 
-358:             revert IdeationMarket__WrongErc1155HolderParameter();
+400:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
 
-362:             revert IdeationMarket__SameBuyerAsSeller();
+405:                     revert IdeationMarket__NotAuthorizedOperator();
 
-391:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
+432:                     revert IdeationMarket__NotAuthorizedOperator();
 
-418:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
+533:             revert IdeationMarket__NotAuthorizedToCancel();
 
-423:                     revert IdeationMarket__NotAuthorizedOperator();
+567:                 revert IdeationMarket__NotAuthorizedOperator();
 
-451:                     revert IdeationMarket__NotAuthorizedOperator();
+576:                 revert IdeationMarket__NotAuthorizedOperator();
 
-587:         revert IdeationMarket__NotAuthorizedToCancel();
+589:             revert IdeationMarket__PartialBuyNotPossible();
+
+596:                 revert IdeationMarket__InvalidUnitPrice();
+
+608:                 revert IdeationMarket__WrongQuantityParameter();
 
 613:                 revert IdeationMarket__WrongQuantityParameter();
 
-617:                 revert IdeationMarket__WrongQuantityParameter();
+631:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-626:                 revert IdeationMarket__NotAuthorizedOperator();
+655:             revert IdeationMarket__NoProceeds();
 
-640:                 revert IdeationMarket__NotAuthorizedOperator();
+661:             revert IdeationMarket__TransferFailed();
 
-654:             revert IdeationMarket__PartialBuyNotPossible();
+701:             revert IdeationMarket__StillApproved();
 
-662:                 revert IdeationMarket__InvalidUnitPrice();
+717:             revert IdeationMarket__NotApprovedForMarketplace();
 
-665:                 revert IdeationMarket__PartialBuyNotPossible();
+723:             revert IdeationMarket__NotApprovedForMarketplace();
 
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+736:             revert IdeationMarket__NoSwapForSameToken();
 
-713:             revert IdeationMarket__NoProceeds();
+740:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
 
-719:             revert IdeationMarket__TransferFailed();
+741:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
 
-815:         revert IdeationMarket__StillApproved();
+742:             if (price <= 0) revert IdeationMarket__FreeListingsNotSupported();
 
-830:             revert IdeationMarket__NotApprovedForMarketplace();
+745:                 revert IdeationMarket__NotSupportedTokenStandard();
 
-836:             revert IdeationMarket__NotApprovedForMarketplace();
-
-849:             revert IdeationMarket__NoSwapForSameToken();
-
-853:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-854:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-855:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
-
-858:                 revert IdeationMarket__NotSupportedTokenStandard();
-
-862:                 revert IdeationMarket__NotSupportedTokenStandard();
+749:                 revert IdeationMarket__NotSupportedTokenStandard();
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1384,88 +1385,82 @@ File: facets/OwnershipFacet.sol
 ```
 [Link to code](--forcefacets/OwnershipFacet.sol)
 
-### <a name="NC-9"></a>[NC-9] Use scientific notation for readability reasons for large multiples of ten
+### <a name="NC-10"></a>[NC-10] Use scientific notation for readability reasons for large multiples of ten
 The more a number has zeros, the harder it becomes to see with the eyes if it's the intended value. To ease auditing and bug bounty hunting, consider using the scientific notation
 
 *Instances (1)*:
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+364:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
 
-### <a name="NC-10"></a>[NC-10] Avoid the use of sensitive terms
+### <a name="NC-11"></a>[NC-11] Avoid the use of sensitive terms
 Use [alternative variants](https://www.zdnet.com/article/mysql-drops-master-slave-and-blacklist-whitelist-terminology/), e.g. allowlist/denylist instead of whitelist/blacklist
 
-*Instances (119)*:
+*Instances (116)*:
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-7: import "../interfaces/IBuyerWhitelistFacet.sol";
+8: error BuyerWhitelist__ListingDoesNotExist();
 
-9: error BuyerWhitelist__ListingDoesNotExist();
+9: error BuyerWhitelist__NotAuthorizedOperator();
 
-10: error BuyerWhitelist__NotAuthorizedOperator();
+10: error BuyerWhitelist__ExceedsMaxBatchSize();
 
-11: error BuyerWhitelist__ExceedsMaxBatchSize();
+11: error BuyerWhitelist__ZeroAddress();
 
-12: error BuyerWhitelist__ZeroAddress();
+12: error BuyerWhitelist__EmptyCalldata();
 
-13: error BuyerWhitelist__EmptyCalldata();
+14: contract BuyerWhitelistFacet {
 
-15: contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
+15:     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
 
-16:     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
+16:     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
 
-17:     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
+21:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external {
 
-22:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
+25:         validateWhitelistBatch(s, listingId, len);
 
-26:         validateWhitelistBatch(s, listingId, len);
+27:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
 
-28:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+31:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-29:             s.whitelistedBuyersByListingId[listingId];
+33:             if (!listingWhitelist[allowedBuyer]) {
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+34:                 listingWhitelist[allowedBuyer] = true;
 
-35:             if (!listingWhitelist[allowedBuyer]) {
+35:                 emit BuyerWhitelisted(listingId, allowedBuyer);
 
-36:                 listingWhitelist[allowedBuyer] = true;
+46:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external {
 
-37:                 emit BuyerWhitelisted(listingId, allowedBuyer);
+50:         validateWhitelistBatch(s, listingId, len);
 
-48:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
+52:         mapping(address => bool) storage listingWhitelist = s.whitelistedBuyersByListingId[listingId];
 
-52:         validateWhitelistBatch(s, listingId, len);
+56:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-54:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+58:             if (listingWhitelist[disallowedBuyer]) {
 
-55:             s.whitelistedBuyersByListingId[listingId];
+59:                 listingWhitelist[disallowedBuyer] = false;
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+60:                 emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
 
-61:             if (listingWhitelist[disallowedBuyer]) {
+70:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
 
-62:                 listingWhitelist[disallowedBuyer] = false;
+71:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-63:                 emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
+72:         if (batchSize > s.buyerWhitelistMaxBatchSize) {
 
-73:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
+73:             revert BuyerWhitelist__ExceedsMaxBatchSize();
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+77:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-75:         if (batchSize > s.buyerWhitelistMaxBatchSize) {
+85:                 revert BuyerWhitelist__NotAuthorizedOperator();
 
-76:             revert BuyerWhitelist__ExceedsMaxBatchSize();
-
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
-
-88:                 revert BuyerWhitelist__NotAuthorizedOperator();
-
-96:             ) revert BuyerWhitelist__NotAuthorizedOperator();
+93:             ) revert BuyerWhitelist__NotAuthorizedOperator();
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -1601,41 +1596,41 @@ File: facets/IdeationMarketFacet.sol
 
 176:             revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
 
-270:             buyerWhitelistEnabled: buyerWhitelistEnabled,
+255:             buyerWhitelistEnabled: buyerWhitelistEnabled,
 
-279:         if (buyerWhitelistEnabled) {
+264:         if (buyerWhitelistEnabled) {
 
-282:                 IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(newListingId, allowedBuyers);
+266:             IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(newListingId, allowedBuyers);
 
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+268:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-296:             buyerWhitelistEnabled,
+279:             buyerWhitelistEnabled,
 
-318:         if (listedItem.buyerWhitelistEnabled) {
+301:         if (listedItem.buyerWhitelistEnabled) {
 
-319:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
+302:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
 
-320:                 revert IdeationMarket__BuyerNotWhitelisted(listingId, msg.sender);
+303:                 revert IdeationMarket__BuyerNotWhitelisted(listingId, msg.sender);
 
-597:         bool newBuyerWhitelistEnabled,
+549:         bool newBuyerWhitelistEnabled,
 
-599:         address[] calldata newAllowedBuyers // whitelisted Buyers
+551:         address[] calldata newAllowedBuyers // whitelisted Buyers
 
-646:         if (!s.whitelistedCollections[tokenAddress]) {
+581:         if (!s.whitelistedCollections[tokenAddress]) {
 
-648:             emit CollectionWhitelistRevokedCancelTriggered(listingId, tokenAddress);
+583:             emit CollectionWhitelistRevokedCancelTriggered(listingId, tokenAddress);
 
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+624:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
 
-683:         if (newBuyerWhitelistEnabled) {
+627:         if (newBuyerWhitelistEnabled) {
 
-686:                 IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
+629:             IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
 
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+631:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
-700:             newBuyerWhitelistEnabled,
+642:             newBuyerWhitelistEnabled,
 
-742:             if (s.whitelistedCollections[listedItem.tokenAddress]) {
+682:         if (s.whitelistedCollections[listedItem.tokenAddress]) {
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1659,13 +1654,13 @@ File: libraries/LibAppStorage.sol
 
 23:     uint16 buyerWhitelistMaxBatchSize; // should be 300
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+29:     mapping(address => bool) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
 
 30:     address[] whitelistedCollectionsArray; // for lookups
 
-31:     mapping(address collection => uint256 index) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+31:     mapping(address => uint256) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+32:     mapping(uint128 => mapping(address => bool)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
 
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
@@ -1675,15 +1670,23 @@ File: upgradeInitializers/DiamondInit.sol
 
 23:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
 
-35:         s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
+40:         s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
 
 ```
 [Link to code](--forceupgradeInitializers/DiamondInit.sol)
 
-### <a name="NC-11"></a>[NC-11] Strings should use double quotes rather than single quotes
+### <a name="NC-12"></a>[NC-12] Strings should use double quotes rather than single quotes
 See the Solidity Style Guide: https://docs.soliditylang.org/en/v0.8.20/style-guide.html#other-recommendations
 
-*Instances (1)*:
+*Instances (2)*:
+```solidity
+File: facets/IdeationMarketFacet.sol
+
+411:                 remainingBalance = swapBalance - listedItem.desiredErc1155Quantity + 1; // using this +1 trick for the '<=' comparison in the cleanup
+
+```
+[Link to code](--forcefacets/IdeationMarketFacet.sol)
+
 ```solidity
 File: libraries/LibDiamond.sol
 
@@ -1692,13 +1695,13 @@ File: libraries/LibDiamond.sol
 ```
 [Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-12"></a>[NC-12] Use Underscores for Number Literals (add an underscore every 3 digits)
+### <a name="NC-13"></a>[NC-13] Use Underscores for Number Literals (add an underscore every 3 digits)
 
 *Instances (2)*:
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+364:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1711,16 +1714,46 @@ File: libraries/LibAppStorage.sol
 ```
 [Link to code](--forcelibraries/LibAppStorage.sol)
 
-### <a name="NC-13"></a>[NC-13] Variables need not be initialized to zero
+### <a name="NC-14"></a>[NC-14] Event is missing `indexed` fields
+Index event fields make the field more quickly accessible to off-chain tools that parse events. However, note that each index field costs extra gas during emission, so it's not necessarily best to index the maximum allowed per event (three fields). Each event should use three indexed fields if there are three or more fields, and gas usage is not particularly of concern for the events in question. If there are fewer than three fields, all of the fields should be indexed.
+
+*Instances (4)*:
+```solidity
+File: interfaces/IERC1155.sol
+
+30:     event ApprovalForAll(address indexed account, address indexed operator, bool approved);
+
+39:     event URI(string value, uint256 indexed id);
+
+```
+[Link to code](--forceinterfaces/IERC1155.sol)
+
+```solidity
+File: interfaces/IERC4907.sol
+
+21:     /// @param expires  UNIX timestamp, The new user could use the NFT before expires
+
+```
+[Link to code](--forceinterfaces/IERC4907.sol)
+
+```solidity
+File: interfaces/IERC721.sol
+
+25:     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
+
+```
+[Link to code](--forceinterfaces/IERC721.sol)
+
+### <a name="NC-15"></a>[NC-15] Variables need not be initialized to zero
 The default value for variables is zero, so initializing them to zero is superfluous.
 
-*Instances (15)*:
+*Instances (14)*:
 ```solidity
 File: facets/BuyerWhitelistFacet.sol
 
-31:         for (uint256 i = 0; i < len;) {
+29:         for (uint256 i = 0; i < len;) {
 
-57:         for (uint256 i = 0; i < len;) {
+54:         for (uint256 i = 0; i < len;) {
 
 ```
 [Link to code](--forcefacets/BuyerWhitelistFacet.sol)
@@ -1760,13 +1793,11 @@ File: facets/GetterFacet.sol
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-180:         address seller = address(0);
+395:             uint256 remainingBalance = 0; // initializing this for erc1155 cleanup
 
-411:             address desiredOwner = address(0); // initializing this for cleanup
+452:             for (uint256 i = 0; i < len;) {
 
-412:             address obsoleteSeller = address(0); // initializing this for cleanup
-
-413:             uint256 remainingERC1155Balance = 0; // initializing this for cleanup
+761:         for (uint256 i = 0; i < len;) {
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1799,7 +1830,7 @@ The divisions below take an input parameter which does not have any zero-value c
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-350:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+333:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1811,7 +1842,7 @@ There is no limit specified on the amount of gas used, so the recipient can use 
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-717:         (bool success,) = payable(msg.sender).call{value: proceeds}("");
+659:         (bool success,) = payable(msg.sender).call{value: proceeds}("");
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
@@ -1881,7 +1912,7 @@ File: libraries/LibDiamond.sol
 | |Issue|Instances|
 |-|:-|:-:|
 | [M-1](#M-1) | Centralization Risk for trusted owners | 4 |
-| [M-2](#M-2) | Direct `supportsInterface()` calls may cause caller to revert | 7 |
+| [M-2](#M-2) | Direct `supportsInterface()` calls may cause caller to revert | 5 |
 ### <a name="M-1"></a>[M-1] Centralization Risk for trusted owners
 
 #### Impact:
@@ -1905,24 +1936,19 @@ File: facets/CollectionWhitelistFacet.sol
 ### <a name="M-2"></a>[M-2] Direct `supportsInterface()` calls may cause caller to revert
 Calling `supportsInterface()` on a contract that doesn't implement the ERC-165 standard will result in the call reverting. Even if the caller does support the function, the contract may be malicious and consume all of the transaction's available gas. Call it via a low-level [staticcall()](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f959d7e4e6ee0b022b41e5b644c79369869d8411/contracts/utils/introspection/ERC165Checker.sol#L119), with a fixed amount of gas, and check the return code, or use OpenZeppelin's [`ERC165Checker.supportsInterface()`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f959d7e4e6ee0b022b41e5b644c79369869d8411/contracts/utils/introspection/ERC165Checker.sol#L36-L39).
 
-*Instances (7)*:
+*Instances (5)*:
 ```solidity
 File: facets/IdeationMarketFacet.sol
 
-183:             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+231:             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
 
-184:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+236:             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
 
-206:             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+370:         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
 
-207:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+744:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
 
-387:         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
-
-857:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-
-861:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+748:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
 
 ```
 [Link to code](--forcefacets/IdeationMarketFacet.sol)
-
