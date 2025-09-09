@@ -214,6 +214,70 @@ abstract contract MarketTestBase is Test {
         _whitelist(address(erc721));
         _whitelist(address(erc1155));
     }
+
+    function _whitelistCollectionAndApproveERC721() internal {
+        // Helper to whitelist ERC721 and approve diamond for token ID 1
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+        vm.stopPrank();
+        // Seller approves the marketplace (diamond) to transfer token 1
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 1);
+        vm.stopPrank();
+    }
+
+    function _whitelistCollectionAndApproveERC1155() internal {
+        // Whitelist ERC1155 collection
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        // Seller grants operator approval to the marketplace (diamond)
+        vm.startPrank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.stopPrank();
+    }
+
+    function _createListingERC721(bool buyerWhitelistEnabled, address[] memory allowedBuyers)
+        internal
+        returns (uint128 listingId)
+    {
+        _whitelistCollectionAndApproveERC721();
+        vm.startPrank(seller);
+        // Provide zero values for swap params and quantity
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, buyerWhitelistEnabled, false, allowedBuyers
+        );
+        vm.stopPrank();
+        // Next listing id is counter + 1
+        listingId = getter.getNextListingId() - 1;
+    }
+
+    function _createListingERC1155(uint256 quantity, bool buyerWhitelistEnabled, address[] memory allowedBuyers)
+        internal
+        returns (uint128 listingId)
+    {
+        require(quantity > 0, "quantity must be > 0");
+        _whitelistCollectionAndApproveERC1155(); // must mint to `seller` and setApprovalForAll(market, true)
+
+        vm.startPrank(seller);
+        market.createListing(
+            address(erc1155), // tokenAddress
+            1, // tokenId (align with your ERC721 helper; change if needed)
+            seller, // erc1155Holder (must be the holder or authorized operator)
+            1 ether, // price
+            address(0), // desiredTokenAddress (no swap)
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity (no swap)
+            quantity, // erc1155Quantity (>0 for ERC1155)
+            buyerWhitelistEnabled, // buyer whitelist flag
+            false, // partialBuyEnabled (fixed here; paramize if you plan partial-buy tests)
+            allowedBuyers // initial whitelist (must be empty if whitelist disabled)
+        );
+        vm.stopPrank();
+
+        listingId = getter.getNextListingId() - 1;
+    }
 }
 
 // -------------------------------------------------------------------------

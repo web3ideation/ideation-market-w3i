@@ -8,9 +8,11 @@ import "../interfaces/IBuyerWhitelistFacet.sol";
 
 error BuyerWhitelist__ListingDoesNotExist();
 error BuyerWhitelist__NotAuthorizedOperator();
-error BuyerWhitelist__ExceedsMaxBatchSize();
+error BuyerWhitelist__ExceedsMaxBatchSize(uint256 batchSize);
 error BuyerWhitelist__ZeroAddress();
 error BuyerWhitelist__EmptyCalldata();
+error BuyerWhitelist__SellerIsNotERC1155Owner(address seller);
+error BuyerWhitelist__SellerIsNotERC721Owner(address seller, address owner);
 
 contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
@@ -73,7 +75,7 @@ contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
         if (batchSize > s.buyerWhitelistMaxBatchSize) {
-            revert BuyerWhitelist__ExceedsMaxBatchSize();
+            revert BuyerWhitelist__ExceedsMaxBatchSize(batchSize);
         }
 
         address seller = s.listings[listingId].seller;
@@ -84,15 +86,23 @@ contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
         uint256 tokenId = s.listings[listingId].tokenId;
         if (erc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
+            // Seller must still be able to fulfill the listed quantity
+            if (token.balanceOf(seller, tokenId) < erc1155Quantity) {
+                revert BuyerWhitelist__SellerIsNotERC1155Owner(seller);
+            }
+            // msg.sender must be the seller or an authorized operator
             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
                 revert BuyerWhitelist__NotAuthorizedOperator();
             }
         } else {
             IERC721 token = IERC721(tokenAddress);
             address tokenHolder = token.ownerOf(tokenId);
+            // the seller must still own the token
+            if (tokenHolder != seller) revert BuyerWhitelist__SellerIsNotERC721Owner(seller, tokenHolder);
+            // msg.sender must be the seller or an authorized operator
             if (
-                msg.sender != tokenHolder && msg.sender != token.getApproved(tokenId)
-                    && !token.isApprovedForAll(tokenHolder, msg.sender)
+                msg.sender != seller && msg.sender != token.getApproved(tokenId)
+                    && !token.isApprovedForAll(seller, msg.sender)
             ) revert BuyerWhitelist__NotAuthorizedOperator();
         }
     }

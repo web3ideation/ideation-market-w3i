@@ -15,9 +15,6 @@ import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
 import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
-import {IERC721} from "../interfaces/IERC721.sol";
-import {IERC1155} from "../interfaces/IERC1155.sol";
-import {IERC2981} from "../interfaces/IERC2981.sol";
 
 contract DiamondInit {
     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
@@ -31,7 +28,7 @@ contract DiamondInit {
 
         // Initialize marketplace state variables. / Constructor for IdeationMarketFacet.
         AppStorage storage s = LibAppStorage.appStorage();
-        s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)
+        s.innovationFee = innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
         s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
     }
 }

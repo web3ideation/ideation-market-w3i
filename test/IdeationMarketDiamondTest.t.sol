@@ -165,32 +165,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Buyer Whitelist Tests
     // -------------------------------------------------------------------------
 
-    function _whitelistCollectionAndApproveERC721() internal {
-        // Helper to whitelist ERC721 and approve diamond for token ID 1
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-        // Seller approves the marketplace (diamond) to transfer token 1
-        vm.startPrank(seller);
-        erc721.approve(address(diamond), 1);
-        vm.stopPrank();
-    }
-
-    function _createListingERC721(bool buyerWhitelistEnabled, address[] memory allowedBuyers)
-        internal
-        returns (uint128 listingId)
-    {
-        _whitelistCollectionAndApproveERC721();
-        vm.startPrank(seller);
-        // Provide zero values for swap params and quantity
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, buyerWhitelistEnabled, false, allowedBuyers
-        );
-        vm.stopPrank();
-        // Next listing id is counter + 1
-        listingId = getter.getNextListingId() - 1;
-    }
-
     function testBuyerWhitelistAddRemove() public {
         // Create a listing with whitelist enabled and an initial allowed buyer.
         // Passing an empty array when buyerWhitelistEnabled is true would revert during listing creation.
@@ -213,7 +187,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             largeList[i] = vm.addr(0x2000 + i);
         }
         vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__ExceedsMaxBatchSize.selector);
+        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, largeList.length));
         buyers.addBuyerWhitelistAddresses(listingId, largeList);
         vm.stopPrank();
         // Listing not exist should revert. Use a small list so that batchSize check passes and the
@@ -653,7 +627,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         }
 
         vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__ExceedsMaxBatchSize.selector);
+        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, tooMany.length));
         market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, tooMany);
         vm.stopPrank();
     }
@@ -1797,7 +1771,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         }
 
         vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__ExceedsMaxBatchSize.selector);
+        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, tooMany.length));
         market.updateListing(id, 1 ether, address(0), 0, 0, 0, true, false, tooMany);
         vm.stopPrank();
     }
