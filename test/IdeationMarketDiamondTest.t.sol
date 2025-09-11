@@ -3791,8 +3791,9 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
         market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-        assertEq(erc721.ownerOf(1), buyer);
+        assertFalse(erc721.ownerOf(1) == buyer);
     }
 
     function testCreateListingWithNonNFTContracQt0tReverts() public {

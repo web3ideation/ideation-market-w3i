@@ -314,6 +314,11 @@ contract IdeationMarketFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
+        // Block purchase if the collection was de-whitelisted after listing
+        if (!s.whitelistedCollections[listedItem.tokenAddress]) {
+            revert IdeationMarket__CollectionNotWhitelisted(listedItem.tokenAddress);
+        }
+
         // BuyerWhitelist Check
         if (listedItem.buyerWhitelistEnabled) {
             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
