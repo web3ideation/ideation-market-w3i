@@ -301,6 +301,7 @@ contract IdeationMarketFacet {
         );
     }
 
+    // note: when the listed Token has been revoked from the collection whitelist after listing, the listing can not be purchased. The listing can get cleaned through the cleanListing function which the offchain bot will take care of.
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,

@@ -21,7 +21,7 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 
 contract DeployDiamond is Script {
     // Constructor arguments
-    address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // !!!W Use appropriate address for testing
+    address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // TODO Use appropriate address for testing
     uint32 innovationFee = 1000; // Example fee, e.g., 1000 means 1%
     uint16 buyerWhitelistMaxBatchSize = 300;
 
