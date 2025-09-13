@@ -412,6 +412,39 @@ contract DiamondCutFacetTest is MarketTestBase {
             cuts, address(bad), abi.encodeWithSelector(LayoutGuardInitBad.initCheckLayout.selector, marker)
         );
     }
+
+    function testDiamondCut_RemoveFacet_MakesSelectorUncallable() public {
+        // 1) Add V1 and prove callable
+        VersionFacetV1 v1 = new VersionFacetV1();
+        _addVersionFacet(address(v1));
+        assertEq(IVersion(address(diamond)).version(), 1);
+        assertEq(loupe.facetAddress(IVersion.version.selector), address(v1));
+
+        // 2) Remove the selector properly
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory selectors = new bytes4[](1);
+        selectors[0] = IVersion.version.selector;
+
+        cuts[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(0), // REQUIRED for Remove
+            action: IDiamondCutFacet.FacetCutAction.Remove,
+            functionSelectors: selectors
+        });
+
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+
+        // 3) Loupe now returns zero for this selector
+        assertEq(loupe.facetAddress(IVersion.version.selector), address(0));
+
+        // 4) Calling removed function reverts via diamond fallback
+        vm.expectRevert(); // robust against message changes
+        IVersion(address(diamond)).version();
+
+        // 5) Since V1 had only this selector, its address should be pruned
+        address[] memory facets = loupe.facetAddresses();
+        assertFalse(_contains(facets, address(v1)));
+    }
 }
 
 // --- Helpers for initializer coverage ---
