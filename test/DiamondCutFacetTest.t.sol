@@ -342,6 +342,8 @@ contract DiamondCutFacetTest is MarketTestBase {
         uint32 prev = getter.getInnovationFee();
         assertEq(prev, INNOVATION_FEE);
 
+        address[] memory addrsBefore = loupe.facetAddresses();
+
         InitWriteFee init = new InitWriteFee();
 
         // No facet changes; just run _init
@@ -354,9 +356,11 @@ contract DiamondCutFacetTest is MarketTestBase {
 
         assertEq(getter.getInnovationFee(), 4242, "init-only call did not apply");
         // Facet set unchanged
-        address[] memory addrsBefore = loupe.facetAddresses();
         address[] memory addrsAfter = loupe.facetAddresses();
         assertEq(addrsAfter.length, addrsBefore.length, "facet set changed during init-only");
+        for (uint256 i = 0; i < addrsBefore.length; i++) {
+            assertEq(addrsAfter[i], addrsBefore[i], "facet order/contents changed during init-only");
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -381,6 +385,32 @@ contract DiamondCutFacetTest is MarketTestBase {
 
         assertEq(IERC173(address(diamond)).owner(), ownerBefore, "owner changed via initializer");
         assertEq(getter.getInnovationFee(), feeBefore, "fee changed via initializer");
+    }
+
+    function testDiamondCut_InitGuard_AllowsCorrectLayout() public {
+        LayoutGuardInitGood good = new LayoutGuardInitGood();
+
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(
+            cuts, address(good), abi.encodeWithSelector(LayoutGuardInitGood.initCheckLayout.selector, uint32(42_42))
+        );
+        assertEq(getter.getInnovationFee(), INNOVATION_FEE);
+    }
+
+    function testDiamondCut_InitGuard_BlocksBadLayout() public {
+        LayoutGuardInitBad bad = new LayoutGuardInitBad();
+
+        // choose a marker that MUST differ from the current fee
+        uint32 prev = getter.getInnovationFee();
+        uint32 marker = prev ^ 0xBEEF; // guaranteed != prev
+
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+        vm.prank(owner);
+        vm.expectRevert(LayoutGuardInitBad.LayoutMismatch.selector);
+        IDiamondCutFacet(address(diamond)).diamondCut(
+            cuts, address(bad), abi.encodeWithSelector(LayoutGuardInitBad.initCheckLayout.selector, marker)
+        );
     }
 }
 
@@ -407,5 +437,62 @@ contract MaliciousInitTryAdmin {
             revert("setInnovationFee should revert");
         } catch { /* expected */ }
         // Note: we *do not* revert here; diamondCut should succeed with no state changes.
+    }
+}
+
+// --- Helpers for upgrade state tests ---
+
+// Writes a marker using the *correct* AppStorage, then verifies it via the Diamond's getter.
+// Reverts the cut if the round-trip doesn't match (shouldn't happen in the "good" case).
+contract LayoutGuardInitGood {
+    error LayoutMismatch();
+
+    function initCheckLayout(uint32 marker) external {
+        AppStorage storage s = LibAppStorage.appStorage();
+
+        // Save & write marker with "new" layout (same as production layout).
+        uint32 prev = s.innovationFee;
+        s.innovationFee = marker;
+
+        // Read via Diamond public view (routes through existing facet code).
+        uint32 got = GetterFacet(address(this)).getInnovationFee();
+        if (got != marker) revert LayoutMismatch();
+
+        // Restore original value to avoid side effects.
+        s.innovationFee = prev;
+    }
+}
+
+// ***Intentionally wrong*** storage layout that inserts a gap *before* innovationFee.
+// Any write using this struct will hit the wrong slot and the read-back will fail.
+library LibAppStorage_Bad {
+    bytes32 constant APP_STORAGE_POSITION = keccak256("diamond.standard.app.storage");
+
+    struct BadAppStorage {
+        uint256 __gap0; // intentional misalignment
+        uint32 innovationFee; // wrong slot vs production
+    }
+
+    function appStorage() internal pure returns (BadAppStorage storage s) {
+        bytes32 p = APP_STORAGE_POSITION;
+        assembly {
+            s.slot := p
+        }
+    }
+}
+
+contract LayoutGuardInitBad {
+    error LayoutMismatch();
+
+    function initCheckLayout(uint32 marker) external {
+        LibAppStorage_Bad.BadAppStorage storage s = LibAppStorage_Bad.appStorage();
+
+        uint32 prev = s.innovationFee; // reads *wrong* slot
+        s.innovationFee = marker; // writes *wrong* slot
+
+        uint32 got = GetterFacet(address(this)).getInnovationFee(); // reads the real slot via Diamond
+        if (got != marker) revert LayoutMismatch();
+
+        s.innovationFee = prev; // attempt restore (also wrong slot, fine for the test)
     }
 }
