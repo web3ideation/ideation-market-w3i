@@ -438,12 +438,75 @@ contract DiamondCutFacetTest is MarketTestBase {
         assertEq(loupe.facetAddress(IVersion.version.selector), address(0));
 
         // 4) Calling removed function reverts via diamond fallback
-        vm.expectRevert(); // robust against message changes
+        vm.expectRevert();
         IVersion(address(diamond)).version();
+
+        // 4b) Raw call also fails
+        (bool ok,) = address(diamond).call(abi.encodeWithSelector(IVersion.version.selector));
+        assertFalse(ok, "raw call to removed selector unexpectedly succeeded");
 
         // 5) Since V1 had only this selector, its address should be pruned
         address[] memory facets = loupe.facetAddresses();
         assertFalse(_contains(facets, address(v1)));
+
+        // 6) Ensure selector not present in any facetFunctionSelectors()
+        for (uint256 i = 0; i < facets.length; i++) {
+            bytes4[] memory sels = loupe.facetFunctionSelectors(facets[i]);
+            for (uint256 j = 0; j < sels.length; j++) {
+                assertTrue(sels[j] != IVersion.version.selector, "removed selector still listed");
+            }
+        }
+    }
+
+    function testDiamondCut_RemoveOneOfMany_DoesNotPruneFacet() public {
+        DualFacet dual = new DualFacet();
+
+        // Add both selectors
+        IDiamondCutFacet.FacetCut[] memory add = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory sels = new bytes4[](2);
+        sels[0] = DualFacet.a.selector;
+        sels[1] = DualFacet.b.selector;
+        add[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(dual),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(add, address(0), "");
+
+        // Prove both callable
+        (bool okA, bytes memory ra) = address(diamond).call(abi.encodeWithSelector(DualFacet.a.selector));
+        (bool okB, bytes memory rb) = address(diamond).call(abi.encodeWithSelector(DualFacet.b.selector));
+        assertTrue(okA && okB);
+        assertEq(abi.decode(ra, (uint256)), 11);
+        assertEq(abi.decode(rb, (uint256)), 22);
+
+        // Remove only 'a'
+        IDiamondCutFacet.FacetCut[] memory rem = new IDiamondCutFacet.FacetCut[](1);
+        bytes4[] memory one = new bytes4[](1);
+        one[0] = DualFacet.a.selector;
+        rem[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(0),
+            action: IDiamondCutFacet.FacetCutAction.Remove,
+            functionSelectors: one
+        });
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(rem, address(0), "");
+
+        // 'a' gone, 'b' remains and facet not pruned
+        assertEq(loupe.facetAddress(DualFacet.a.selector), address(0));
+        (okA,) = address(diamond).call(abi.encodeWithSelector(DualFacet.a.selector));
+        assertFalse(okA, "removed selector still callable");
+
+        address facB = loupe.facetAddress(DualFacet.b.selector);
+        assertEq(facB, address(dual), "remaining selector moved unexpectedly");
+
+        bool stillListed;
+        address[] memory fas = loupe.facetAddresses();
+        for (uint256 i = 0; i < fas.length; i++) {
+            if (fas[i] == address(dual)) stillListed = true;
+        }
+        assertTrue(stillListed, "facet wrongly pruned after partial removal");
     }
 }
 
@@ -527,5 +590,16 @@ contract LayoutGuardInitBad {
         if (got != marker) revert LayoutMismatch();
 
         s.innovationFee = prev; // attempt restore (also wrong slot, fine for the test)
+    }
+}
+
+// --- Helper facet with multiple selectors for partial remove test ---
+contract DualFacet {
+    function a() external pure returns (uint256) {
+        return 11;
+    }
+
+    function b() external pure returns (uint256) {
+        return 22;
     }
 }
