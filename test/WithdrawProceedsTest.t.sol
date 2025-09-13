@@ -86,7 +86,7 @@ contract WithdrawTargetsTest is MarketTestBase {
 
         // First: program to reject, withdrawal must revert and credit stays
         r.setAccept(false);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__TransferFailed.selector);
         vm.prank(address(r));
         market.withdrawProceeds();
         assertEq(getter.getProceeds(address(r)), credited, "credit changed on failed payout");
@@ -105,12 +105,14 @@ contract WithdrawTargetsTest is MarketTestBase {
         NonPayableReceiver r = new NonPayableReceiver();
         uint256 price = 0.7 ether;
         uint256 credited = _seedProceedsFor(address(r), price);
+        uint256 diamondBefore = address(diamond).balance;
 
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__TransferFailed.selector);
         vm.prank(address(r));
         market.withdrawProceeds();
 
         assertEq(getter.getProceeds(address(r)), credited, "credit must remain after failed withdrawal");
+        assertEq(address(diamond).balance, diamondBefore, "diamond balance changed on failed withdrawal");
     }
 
     /// 4) Gas-hungry receiver should still succeed because `.call` forwards gas
@@ -120,11 +122,13 @@ contract WithdrawTargetsTest is MarketTestBase {
         uint256 credited = _seedProceedsFor(address(r), price);
 
         uint256 balBefore = address(r).balance;
+        uint256 diamondBefore = address(diamond).balance;
 
         vm.prank(address(r));
         market.withdrawProceeds();
 
         assertEq(getter.getProceeds(address(r)), 0, "credit not zeroed");
         assertEq(address(r).balance, balBefore + credited, "receiver balance mismatch");
+        assertEq(address(diamond).balance, diamondBefore - credited, "diamond balance mismatch");
     }
 }
