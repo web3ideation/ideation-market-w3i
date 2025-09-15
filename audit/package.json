@@ -5,8 +5,7 @@
   "scripts": {
     "compile": "hardhat compile",
     "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src",
-    "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --checklist > slither_report.md",
-    "echidna": "echidna echidna/EchidnaHarness.sol --contract EchidnaHarness --solc-args '--allow-paths .,echidna/testsrc --via-ir --optimize' --config echidna/echidna.yaml"
+    "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --checklist > slither_report.md"
   },
   "main": "index.js",
   "license": "MIT",

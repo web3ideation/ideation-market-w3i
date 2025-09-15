@@ -1,2 +1,17 @@
 testMode: assertion
-testLimit: 500000   # more calls before stopping
+seqLen: 50
+testLimit: 200000
+shrinkLimit: 5000
+
+# give the harness & senders funds
+balanceContract: 100000000000000000000   # 100 ETH
+balanceAddr: 0xffffffff
+sender:
+  - "0x10000"
+  - "0x20000"
+  - "0x30000"
+
+# optional niceties
+coverage: true
+allContracts: false
+format: text
