@@ -21,11 +21,14 @@ import "../../src/interfaces/IERC1155.sol";
 
 /* --- Minimal receiver interfaces (not present in your repo) --- */
 interface IERC721Receiver {
-    function onERC721Received(address,address,uint256,bytes calldata) external returns (bytes4);
+    function onERC721Received(address, address, uint256, bytes calldata) external returns (bytes4);
 }
+
 interface IERC1155Receiver is IERC165 {
-    function onERC1155Received(address,address,uint256,uint256,bytes calldata) external returns (bytes4);
-    function onERC1155BatchReceived(address,address,uint256[] calldata,uint256[] calldata,bytes calldata) external returns (bytes4);
+    function onERC1155Received(address, address, uint256, uint256, bytes calldata) external returns (bytes4);
+    function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
+        external
+        returns (bytes4);
 }
 
 /* --- Very small ERC721 mock for Echidna --- */
@@ -45,14 +48,23 @@ contract MockERC721 is IERC165, IERC721 {
         _balances[to] += 1; // NEW
     }
 
-    function balanceOf(address owner) external view returns (uint256) { // NEW
+    function balanceOf(address owner) external view returns (uint256) {
+        // NEW
         require(owner != address(0), "zero");
         return _balances[owner];
     }
 
-    function ownerOf(uint256 tokenId) public view returns (address) { return _owner[tokenId]; }
-    function getApproved(uint256 tokenId) public view returns (address) { return _tokenApprovals[tokenId]; }
-    function isApprovedForAll(address owner, address operator) public view returns (bool) { return _operatorApprovals[owner][operator]; }
+    function ownerOf(uint256 tokenId) public view returns (address) {
+        return _owner[tokenId];
+    }
+
+    function getApproved(uint256 tokenId) public view returns (address) {
+        return _tokenApprovals[tokenId];
+    }
+
+    function isApprovedForAll(address owner, address operator) public view returns (bool) {
+        return _operatorApprovals[owner][operator];
+    }
 
     function approve(address to, uint256 tokenId) external {
         address owner = _owner[tokenId];
@@ -60,7 +72,9 @@ contract MockERC721 is IERC165, IERC721 {
         _tokenApprovals[tokenId] = to;
     }
 
-    function setApprovalForAll(address operator, bool approved) external { _operatorApprovals[msg.sender][operator] = approved; }
+    function setApprovalForAll(address operator, bool approved) external {
+        _operatorApprovals[msg.sender][operator] = approved;
+    }
 
     function transferFrom(address from, address to, uint256 tokenId) public {
         address owner = _owner[tokenId];
@@ -72,7 +86,7 @@ contract MockERC721 is IERC165, IERC721 {
         _tokenApprovals[tokenId] = address(0);
         _owner[tokenId] = to;
         _balances[from] -= 1; // NEW
-        _balances[to]   += 1; // NEW
+        _balances[to] += 1; // NEW
     }
 
     function safeTransferFrom(address from, address to, uint256 tokenId) external {
@@ -88,7 +102,6 @@ contract MockERC721 is IERC165, IERC721 {
     }
 }
 
-
 /* --- Very small ERC1155 mock for Echidna --- */
 contract MockERC1155 is IERC165, IERC1155 {
     mapping(address => mapping(uint256 => uint256)) internal _bal;
@@ -103,9 +116,17 @@ contract MockERC1155 is IERC165, IERC1155 {
         _bal[to][id] += amount;
     }
 
-    function balanceOf(address a, uint256 id) external view returns (uint256) { return _bal[a][id]; }
-    function isApprovedForAll(address a, address op) external view returns (bool) { return _op[a][op]; }
-    function setApprovalForAll(address op, bool approved) external { _op[msg.sender][op] = approved; }
+    function balanceOf(address a, uint256 id) external view returns (uint256) {
+        return _bal[a][id];
+    }
+
+    function isApprovedForAll(address a, address op) external view returns (bool) {
+        return _op[a][op];
+    }
+
+    function setApprovalForAll(address op, bool approved) external {
+        _op[msg.sender][op] = approved;
+    }
 
     function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata) external {
         require(from == msg.sender || _op[from][msg.sender], "noauth");
@@ -118,7 +139,11 @@ contract MockERC1155 is IERC165, IERC1155 {
         }
     }
 
-    function balanceOfBatch(address[] calldata owners, uint256[] calldata ids) external view returns (uint256[] memory out) {
+    function balanceOfBatch(address[] calldata owners, uint256[] calldata ids)
+        external
+        view
+        returns (uint256[] memory out)
+    {
         uint256 n = owners.length;
         require(n == ids.length, "len");
         out = new uint256[](n);
@@ -127,7 +152,13 @@ contract MockERC1155 is IERC165, IERC1155 {
         }
     }
 
-    function safeBatchTransferFrom(address from, address to, uint256[] calldata ids, uint256[] calldata amounts, bytes calldata) external {
+    function safeBatchTransferFrom(
+        address from,
+        address to,
+        uint256[] calldata ids,
+        uint256[] calldata amounts,
+        bytes calldata
+    ) external {
         require(from == msg.sender || _op[from][msg.sender], "noauth");
         uint256 n = ids.length;
         require(n == amounts.length, "len");
@@ -145,47 +176,44 @@ contract MockERC1155 is IERC165, IERC1155 {
     }
 }
 
-
-
 /* --- Role agents so Diamond sees distinct msg.sender --- */
 contract SellerAgent {
-    function approve721(address token, address to, uint256 id) external { IERC721(token).approve(to, id); }
-    function setApproval1155(address token, address op, bool ok) external { IERC1155(token).setApprovalForAll(op, ok); }
+    function approve721(address token, address to, uint256 id) external {
+        IERC721(token).approve(to, id);
+    }
 
-    function list721(
-        address d,
-        address token,
-        uint256 tokenId,
-        uint256 price
-    ) external {
+    function setApproval1155(address token, address op, bool ok) external {
+        IERC1155(token).setApprovalForAll(op, ok);
+    }
+
+    function list721(address d, address token, uint256 tokenId, uint256 price) external {
         IdeationMarketFacet(d).createListing(
             token,
             tokenId,
             address(0), /* erc1155Holder */
             price,
-            address(0), 0, 0, /* non-swap */
-            0,               /* erc1155Quantity=0 => ERC721 */
-            false,           /* whitelist */
-            false,           /* partialBuy */
+            address(0),
+            0,
+            0, /* non-swap */
+            0, /* erc1155Quantity=0 => ERC721 */
+            false, /* whitelist */
+            false, /* partialBuy */
             new address[](0)
         );
     }
 
-    function list1155(
-        address d,
-        address token,
-        uint256 tokenId,
-        uint256 qty,
-        uint256 price,
-        bool partialBuy
-    ) external {
+    function list1155(address d, address token, uint256 tokenId, uint256 qty, uint256 price, bool partialBuy)
+        external
+    {
         IdeationMarketFacet(d).createListing(
             token,
             tokenId,
             address(this),
             price,
-            address(0), 0, 0, /* non-swap */
-            qty,              /* ERC1155 qty > 0 */
+            address(0),
+            0,
+            0, /* non-swap */
+            qty, /* ERC1155 qty > 0 */
             false,
             partialBuy,
             new address[](0)
@@ -194,35 +222,25 @@ contract SellerAgent {
 }
 
 contract BuyerAgent is IERC721Receiver, IERC1155Receiver {
-    function buy721(
-        address d,
-        uint128 listingId,
-        uint256 expectedPrice
-    ) external payable {
+    function buy721(address d, uint128 listingId, uint256 expectedPrice) external payable {
         IdeationMarketFacet(d).purchaseListing{value: msg.value}(
             listingId,
             expectedPrice,
-            0,                  /* expectedErc1155Quantity */
-            address(0), 0, 0,   /* expectedDesired... */
-            0,                  /* erc1155PurchaseQuantity */
-            address(0)          /* desiredErc1155Holder */
+            0, /* expectedErc1155Quantity */
+            address(0),
+            0,
+            0, /* expectedDesired... */
+            0, /* erc1155PurchaseQuantity */
+            address(0) /* desiredErc1155Holder */
         );
     }
 
-    function buy1155(
-        address d,
-        uint128 listingId,
-        uint256 expectedPrice,
-        uint256 expectedQty,
-        uint256 purchaseQty
-    ) external payable {
+    function buy1155(address d, uint128 listingId, uint256 expectedPrice, uint256 expectedQty, uint256 purchaseQty)
+        external
+        payable
+    {
         IdeationMarketFacet(d).purchaseListing{value: msg.value}(
-            listingId,
-            expectedPrice,
-            expectedQty,
-            address(0), 0, 0,
-            purchaseQty,
-            address(0)
+            listingId, expectedPrice, expectedQty, address(0), 0, 0, purchaseQty, address(0)
         );
     }
 
@@ -230,35 +248,42 @@ contract BuyerAgent is IERC721Receiver, IERC1155Receiver {
     function supportsInterface(bytes4 i) external pure returns (bool) {
         return i == type(IERC165).interfaceId;
     }
+
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return 0x150b7a02;
     }
+
     function onERC1155Received(address, address, uint256, uint256, bytes calldata) external pure returns (bytes4) {
         return 0xf23a6e61;
     }
+
     function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
-        external pure returns (bytes4)
-    { return 0xbc197c81; }
+        external
+        pure
+        returns (bytes4)
+    {
+        return 0xbc197c81;
+    }
 }
 
 /* ========================== HARNESS ========================== */
 contract EchidnaIdeationMarket {
     /* Diamond + facets */
     IdeationMarketDiamond public diamond;
-    DiamondCutFacet       public cutFacet;
-    DiamondLoupeFacet     public loupeFacet;
-    OwnershipFacet        public ownerFacet;
-    GetterFacet           public getterFacet;
+    DiamondCutFacet public cutFacet;
+    DiamondLoupeFacet public loupeFacet;
+    OwnershipFacet public ownerFacet;
+    GetterFacet public getterFacet;
     CollectionWhitelistFacet public collFacet;
-    IdeationMarketFacet   public marketFacet;
-    BuyerWhitelistFacet   public bwFacet;
-    DiamondInit           public init;
+    IdeationMarketFacet public marketFacet;
+    BuyerWhitelistFacet public bwFacet;
+    DiamondInit public init;
 
     /* Mocks & Agents */
-    MockERC721  public nft721;
+    MockERC721 public nft721;
     MockERC1155 public nft1155;
     SellerAgent public seller;
-    BuyerAgent  public buyer;
+    BuyerAgent public buyer;
 
     /* state for simple flows */
     uint128 public lastListingId;
@@ -269,7 +294,7 @@ contract EchidnaIdeationMarket {
     constructor() payable {
         /* 1) deploy cut facet and diamond */
         cutFacet = new DiamondCutFacet();
-        diamond  = new IdeationMarketDiamond(address(this), address(cutFacet));
+        diamond = new IdeationMarketDiamond(address(this), address(cutFacet));
 
         /* 2) deploy remaining facets */
         loupeFacet = new DiamondLoupeFacet();
@@ -305,19 +330,19 @@ contract EchidnaIdeationMarket {
         /* getters */
         {
             bytes4[] memory sel = new bytes4[](12);
-            sel[0]  = GetterFacet.getListingsByNFT.selector;
-            sel[1]  = GetterFacet.getListingByListingId.selector;
-            sel[2]  = GetterFacet.getProceeds.selector;
-            sel[3]  = GetterFacet.getBalance.selector;
-            sel[4]  = GetterFacet.getInnovationFee.selector;
-            sel[5]  = GetterFacet.getNextListingId.selector;
-            sel[6]  = GetterFacet.isCollectionWhitelisted.selector;
-            sel[7]  = GetterFacet.getWhitelistedCollections.selector;
-            sel[8]  = GetterFacet.getContractOwner.selector;
-            sel[9]  = GetterFacet.isBuyerWhitelisted.selector;
+            sel[0] = GetterFacet.getListingsByNFT.selector;
+            sel[1] = GetterFacet.getListingByListingId.selector;
+            sel[2] = GetterFacet.getProceeds.selector;
+            sel[3] = GetterFacet.getBalance.selector;
+            sel[4] = GetterFacet.getInnovationFee.selector;
+            sel[5] = GetterFacet.getNextListingId.selector;
+            sel[6] = GetterFacet.isCollectionWhitelisted.selector;
+            sel[7] = GetterFacet.getWhitelistedCollections.selector;
+            sel[8] = GetterFacet.getContractOwner.selector;
+            sel[9] = GetterFacet.isBuyerWhitelisted.selector;
             sel[10] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
             sel[11] = GetterFacet.getPendingOwner.selector;
-            cut[2]  = IDiamondCutFacet.FacetCut(address(getterFacet), IDiamondCutFacet.FacetCutAction.Add, sel);
+            cut[2] = IDiamondCutFacet.FacetCut(address(getterFacet), IDiamondCutFacet.FacetCutAction.Add, sel);
         }
 
         /* whitelist + market */
@@ -416,10 +441,11 @@ contract EchidnaIdeationMarket {
 
         // After purchase: seller credited, marketplace owner credited, buyer owns NFT
         uint256 sellerProceeds = GetterFacet(address(diamond)).getProceeds(address(seller));
-        uint256 ownerProceeds  = GetterFacet(address(diamond)).getProceeds(GetterFacet(address(diamond)).getContractOwner());
+        uint256 ownerProceeds =
+            GetterFacet(address(diamond)).getProceeds(GetterFacet(address(diamond)).getContractOwner());
 
         assert(sellerProceeds >= expectedSellerProceeds); // >= to allow multiple buys over time in fuzz sequences
-        assert(ownerProceeds  >= expectedFee);
+        assert(ownerProceeds >= expectedFee);
 
         // We cannot fetch the delisted Listing, but we can assert NFT ownership
         // The tokenId is unknown here, so we derive it by assumption on last flow: safe enough for fuzz sanity
@@ -444,7 +470,7 @@ contract EchidnaIdeationMarket {
 
         lastListingId = GetterFacet(address(diamond)).getNextListingId() - 1;
         last1155Price = price;
-        last1155Qty   = qty;
+        last1155Qty = qty;
 
         Listing memory L = GetterFacet(address(diamond)).getListingByListingId(lastListingId);
         assert(L.erc1155Quantity == qty);
@@ -475,11 +501,12 @@ contract EchidnaIdeationMarket {
         assert(L.price == last1155Price - purchasePrice);
 
         uint256 sellerProceeds = GetterFacet(address(diamond)).getProceeds(address(seller));
-        uint256 ownerProceeds  = GetterFacet(address(diamond)).getProceeds(GetterFacet(address(diamond)).getContractOwner());
+        uint256 ownerProceeds =
+            GetterFacet(address(diamond)).getProceeds(GetterFacet(address(diamond)).getContractOwner());
         assert(sellerProceeds >= expectedSellerProceeds);
-        assert(ownerProceeds  >= expectedFee);
+        assert(ownerProceeds >= expectedFee);
 
-        last1155Qty   = L.erc1155Quantity;
+        last1155Qty = L.erc1155Quantity;
         last1155Price = L.price;
     }
 
