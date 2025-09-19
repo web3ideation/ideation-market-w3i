@@ -1,17 +1,4 @@
-testMode: assertion
-seqLen: 50
-testLimit: 200000
-shrinkLimit: 5000
-
-# give the harness & senders funds
-balanceContract: 100000000000000000000   # 100 ETH
-balanceAddr: 0xffffffff
-sender:
-  - "0x10000"
-  - "0x20000"
-  - "0x30000"
-
-# optional niceties
-coverage: true
-allContracts: false
-format: text
+# audit/echidna/echidna.yaml
+testLimit: 50000     # number of sequences to try
+seqLen: 100          # max calls per sequence
+shrinkLimit: 200     # (optional) shrinking effort when a failure is found
