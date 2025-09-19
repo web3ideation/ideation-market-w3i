@@ -1,4 +1,3 @@
-# audit/echidna/echidna.yaml
-testLimit: 50000     # number of sequences to try
-seqLen: 100          # max calls per sequence
-shrinkLimit: 200     # (optional) shrinking effort when a failure is found
+testLimit: 200000
+seqLen: 30
+shrinkLimit: 500
