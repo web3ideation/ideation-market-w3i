@@ -166,7 +166,7 @@ contract MockERC721Royalty is MockERC721, IERC2981 {
         royaltyBps = uint96(bps % 10001);
     }
 
-    function supportsInterface(bytes4 interfaceId) external view override(MockERC721, IERC165) returns (bool) {
+    function supportsInterface(bytes4 interfaceId) external pure override(MockERC721, IERC165) returns (bool) {
         return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC721).interfaceId
             || interfaceId == type(IERC2981).interfaceId;
     }
@@ -180,7 +180,7 @@ contract MockERC1155 is IERC165, IERC1155 {
     mapping(uint256 => mapping(address => uint256)) internal _bal;
     mapping(address => mapping(address => bool)) internal _operatorApproval;
 
-    function supportsInterface(bytes4 interfaceId) external view override returns (bool) {
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC1155).interfaceId;
     }
 
@@ -427,13 +427,14 @@ contract Agent is IERC721Receiver, IERC1155Receiver {
 
     function onERC1155BatchReceived(address, address, uint256[] calldata, uint256[] calldata, bytes calldata)
         external
+        pure
         override
         returns (bytes4)
     {
         return IERC1155Receiver.onERC1155BatchReceived.selector;
     }
 
-    function supportsInterface(bytes4 interfaceId) external view override returns (bool) {
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
         return interfaceId == type(IERC1155Receiver).interfaceId;
     }
 
