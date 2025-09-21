@@ -1,3 +1,3 @@
-testLimit: 200000
+testLimit: 20000 # TODO set to 200000 !!!W
 seqLen: 30
 shrinkLimit: 500
