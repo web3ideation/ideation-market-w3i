@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "forge-std/Script.sol";
+import "forge-std/console.sol";
 
 import {IdeationMarketDiamond} from "../src/IdeationMarketDiamond.sol";
 import {DiamondInit} from "../src/upgradeInitializers/DiamondInit.sol";
@@ -21,12 +22,13 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 
 contract DeployDiamond is Script {
     // Constructor arguments
-    address owner = 0x64890a1ddD3Cea0A14D62E14fE76C4a1b34A4328; // TODO Use appropriate address for testing
     uint32 innovationFee = 1000; // Example fee, e.g., 1000 means 1%
     uint16 buyerWhitelistMaxBatchSize = 300;
 
     function run() external {
         vm.startBroadcast();
+
+        address deployer = tx.origin;
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();
@@ -47,9 +49,8 @@ contract DeployDiamond is Script {
         console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
 
         // Deploy the diamond with the initial facet cut for DiamondCutFacet
-        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(owner, address(diamondCutFacet));
+        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(deployer, address(diamondCutFacet));
         console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
-        console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
@@ -145,6 +146,7 @@ contract DeployDiamond is Script {
         require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 7, "Diamond cut failed");
 
         console.log("Diamond cuts complete");
+        console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
 
         vm.stopBroadcast();
     }
