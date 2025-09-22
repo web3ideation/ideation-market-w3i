@@ -38,6 +38,16 @@ error IdeationMarket__PartialBuyNotPossible();
 error IdeationMarket__InvalidPurchaseQuantity();
 error IdeationMarket__InvalidUnitPrice();
 
+/// @title IdeationMarketFacet
+/// @notice Core marketplace logic: create/update/cancel/purchase listings, optional buyer whitelists, swaps, partial buys, and fee/royalty accounting.
+/// @dev Shared state via `LibAppStorage.AppStorage`. Key invariants & behaviors:
+/// - Fee denominator is 100_000 (e.g., 1_000 = 1%). Each listing snapshots the fee into `Listing.feeRate`.
+/// - Collection whitelist gates listing updates and purchases; de-whitelisting blocks buys and is cleaned via `cleanListing`.
+/// - ERC-1155 vs ERC-721: `erc1155Quantity == 0` ⇒ ERC-721, `> 0` ⇒ ERC-1155. Partial buys only for ERC-1155 and require `price % quantity == 0`.
+/// - Swaps: the buyer transfers a specified NFT to the seller during purchase; same-token swaps are disallowed.
+/// - Royalties (ERC-2981) are deducted from the seller’s proceeds and credited to the royalty receiver in `proceeds`.
+/// - Excess ETH sent in a purchase is credited to the buyer’s `proceeds` (withdrawn via `withdrawProceeds`), not auto-refunded inline.
+/// - Reentrancy guard: single boolean `reentrancyLock` flip-flop in storage.
 contract IdeationMarketFacet {
     /**
      * @notice Emitted when an item is listed on the marketplace.
@@ -108,7 +118,6 @@ contract IdeationMarketFacet {
 
     event InnovationFeeUpdated(uint32 previousFee, uint32 newFee);
 
-    // Event emitted when a listing is canceled due to revoked approval.
     event ListingCanceledDueToInvalidListing(
         uint128 indexed listingId,
         address indexed tokenAddress,
@@ -131,11 +140,15 @@ contract IdeationMarketFacet {
     // Modifiers //
     ///////////////
 
+    /// @notice Ensures the listing exists (seller ≠ address(0)).
+    /// @dev Reverts with `IdeationMarket__NotListed` if the listing does not exist.
     modifier listingExists(uint128 listingId) {
         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
         _;
     }
 
+    /// @notice Simple non-reentrancy guard.
+    /// @dev Reverts with `IdeationMarket__Reentrant` when re-entered in guarded functions.
     modifier nonReentrant() {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
@@ -148,14 +161,20 @@ contract IdeationMarketFacet {
     // Main Functions //
     ////////////////////
 
-    /*
-     * @notice Method for listing your NFT on the marketplace
-     * @param tokenAddress: Address of the NFT to be listed
-     * @param tokenId: TokenId of that NFT
-     * @param price: The price the owner wants the NFT to sell for
-     * @dev: Using approve() the user keeps on owning the NFT while it is listed
-     */
-
+    /// @notice Lists an NFT for sale (optional swap target, optional buyer whitelist, optional ERC-1155 partial buys).
+    /// @param tokenAddress NFT contract address (ERC-721 or ERC-1155).
+    /// @param tokenId Token id to list.
+    /// @param erc1155Holder Required if `erc1155Quantity > 0`: the address whose ERC-1155 balance is being listed (can be caller or an owner who authorized caller).
+    /// @param price Total listing price in wei. For ERC-1155 tokens with partial buys enabled, this price must be evenly divisible by `erc1155Quantity` to ensure consistent per-unit pricing.
+    /// @param desiredTokenId Token id of the desired NFT if `desiredTokenAddress != 0`.
+    /// @param desiredErc1155Quantity Desired quantity if the desired NFT is ERC-1155, else 0.
+    /// @param erc1155Quantity Quantity for ERC-1155 listing; must be 0 for ERC-721 listing.
+    /// @param buyerWhitelistEnabled If true, only pre-whitelisted buyers may purchase.
+    /// @param partialBuyEnabled If true and ERC-1155, buyers may purchase a subset of units; requires `price % erc1155Quantity == 0` and swap must be disabled.
+    /// @param allowedBuyers Optional initial whitelist addresses (only allowed if `buyerWhitelistEnabled == true`).
+    /// @dev Reverts if: collection not whitelisted; wrong token standard vs quantity; caller not owner/authorized; insufficient ERC-1155 balance;
+    /// partial-buy invalid (quantity ≤ 1 or price not divisible); ERC-721 already listed; invalid swap parameters; marketplace not approved.
+    /// Snapshots `s.innovationFee` into the listing’s `feeRate`.
     function createListing(
         address tokenAddress,
         uint256 tokenId,
@@ -226,13 +245,12 @@ contract IdeationMarketFacet {
             revert IdeationMarket__PartialBuyNotPossible();
         }
 
-        // if partial buys allowed, require even per-unit price
-        // forbid partialbuys if its a swap listing
         if (partialBuyEnabled) {
             // price must be divisible by quantity
             if (price % erc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
             }
+            // forbid partialbuys if its a swap listing
             if (desiredTokenAddress != address(0)) {
                 revert IdeationMarket__PartialBuyNotPossible();
             }
@@ -243,7 +261,6 @@ contract IdeationMarketFacet {
             revert IdeationMarket__AlreadyListed();
         }
 
-        // Swap-specific check
         validateSwapParameters(
             tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredErc1155Quantity
         );
@@ -301,7 +318,22 @@ contract IdeationMarketFacet {
         );
     }
 
-    // note: when the listed Token has been revoked from the collection whitelist after listing, the listing can not be purchased. The listing can get cleaned through the cleanListing function which the offchain bot will take care of.
+    /// @notice Purchases a listing (optionally as a partial ERC-1155 buy and/or fulfilling a swap).
+    /// @param listingId The target listing id.
+    /// @param expectedPrice Caller’s view of `listing.price` to guard against mid-tx updates.
+    /// @param expectedErc1155Quantity Caller’s view of `listing.erc1155Quantity` to guard against mid-tx updates.
+    /// @param expectedDesiredTokenAddress Caller’s view of `listing.desiredTokenAddress` to guard against mid-tx updates.
+    /// @param expectedDesiredTokenId Caller’s view of `listing.desiredTokenId` to guard against mid-tx updates.
+    /// @param expectedDesiredErc1155Quantity Caller’s view of `listing.desiredErc1155Quantity` to guard against mid-tx updates.
+    /// @param erc1155PurchaseQuantity For ERC-1155: exact units to purchase (0 for ERC-721).
+    /// @param desiredErc1155Holder If fulfilling an ERC-1155 swap, the holder whose balance/approval is checked for the desired token.
+    /// @dev Reverts if: collection de-whitelisted; buyer not whitelisted (when enabled); terms mismatch (front-run protection);
+    /// invalid purchase quantity; partial buy disallowed; `msg.value` < computed price; seller equals buyer; seller no longer owns/approved;
+    /// royalty exceeds proceeds; swap balance/approval insufficient.
+    /// Accounting: fee = `price * feeRate / 100_000`, royalty (ERC-2981) deducted from seller proceeds, excess ETH credited to buyer’s `proceeds`.
+    /// For swap listings, buyer’s desired NFT is transferred to the seller before receiving the listed NFT.
+    /// Deprecated listings by the swap seller for that token are cleaned (swap-and-pop) if they can no longer be fulfilled.
+    /// If a whitelisted token is removed from the collection whitelist after being listed, the listing becomes unpurchasable and must be cleaned up using the cleanListing function. This cleanup process is handled by an offchain bot.
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,
@@ -309,8 +341,8 @@ contract IdeationMarketFacet {
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
         uint256 expectedDesiredErc1155Quantity,
-        uint256 erc1155PurchaseQuantity, // the exact ERC1155 quantity the buyer wants when partialBuyEnabled = true; for ERC721 must be 0
-        address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
+        uint256 erc1155PurchaseQuantity,
+        address desiredErc1155Holder
     ) external payable nonReentrant listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
@@ -327,7 +359,7 @@ contract IdeationMarketFacet {
             }
         }
 
-        // Check if Terms have changed in the meantime (frontrunning Attack)
+        // Check if Terms have changed in the meantime to guard against mid-tx updates
         if (
             listedItem.price != expectedPrice || listedItem.desiredTokenAddress != expectedDesiredTokenAddress
                 || listedItem.desiredTokenId != expectedDesiredTokenId
@@ -383,13 +415,13 @@ contract IdeationMarketFacet {
             requireERC721Approval(listedItem.tokenAddress, listedItem.tokenId);
         }
 
-        // Calculate the innovation fee based on the listing feeRate (e.g., 2000 for 2% with a denominator of 100000)
+        // Calculate the innovation fee based on the listing feeRate (e.g., 1_000 for 1% with a denominator of 100_000)
         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
 
         // Seller receives sale price minus the innovation fee
         uint256 sellerProceeds = purchasePrice - innovationProceeds;
 
-        // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell
+        // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell and added to the proceeds of the Royalty Receiver
         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
             (address royaltyReceiver, uint256 royaltyAmount) =
                 IERC2981(listedItem.tokenAddress).royaltyInfo(listedItem.tokenId, purchasePrice);
@@ -405,7 +437,6 @@ contract IdeationMarketFacet {
         uint256 excessPayment = msg.value - purchasePrice;
 
         // Update proceeds for the seller, marketplace owner and potentially buyer
-
         s.proceeds[listedItem.seller] += sellerProceeds;
         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
         if (excessPayment > 0) {
@@ -476,8 +507,10 @@ contract IdeationMarketFacet {
                 }
                 uint128 depId = deprecatedListingArray[i];
                 Listing storage dep = s.listings[depId];
-
-                // if the seller of that listing is the same as the obsoleteSeller (the one who just sold his token to the current buyer) and in case of an ERC1155 listing, if the obsoleteSeller does not hold enough token anymore to cover the desiredErc1155Quantity of that listing, that listing needs to get removed. If it is an erc721 listing, it's enough that the obsoleteSeller is the seller of that listing, to remove that listing.
+                // If the seller of that listing is the same as the obsoleteSeller (the one who just sold his token to the current buyer)
+                // and in case of an ERC1155 listing, if the obsoleteSeller does not hold enough token anymore to cover the
+                // desiredErc1155Quantity of that listing, that listing needs to get removed. If it is an erc721 listing,
+                // it's enough that the obsoleteSeller is the seller of that listing, to remove that listing.
                 if (
                     dep.seller == obsoleteSeller
                         && (listedItem.desiredErc1155Quantity == 0 || dep.erc1155Quantity > remainingERC1155Balance)
@@ -530,7 +563,10 @@ contract IdeationMarketFacet {
         );
     }
 
-    // natspec info: the seller or authorized operator is able to cancel the listing of their NFT, but also the Governance holder of the marketplace is able to cancel any listing, for example in case there are issues with a listing
+    /// @notice Cancels an existing listing.
+    /// @dev Diamond owner may cancel any listing. Otherwise, only the seller or an authorized operator
+    /// (ERC-721: token approval or approvalForAll; ERC-1155: approvalForAll) may cancel.
+    /// Uses `try/catch` on external token calls to avoid bubbling token contract reverts.
     function cancelListing(uint128 listingId) public listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
@@ -593,16 +629,32 @@ contract IdeationMarketFacet {
         revert IdeationMarket__NotAuthorizedToCancel();
     }
 
+    /// @notice Updates listing terms (price, desired swap target, quantities, flags).
+    /// @param listingId The listing id to update.
+    /// @param newPrice New total price (for ERC-1155: total for `newErc1155Quantity`).
+    /// @param newDesiredTokenAddress New desired NFT address for swap (0 for non-swap).
+    /// @param newDesiredTokenId New desired token id for swap.
+    /// @param newDesiredErc1155Quantity New desired ERC-1155 quantity for swap (0 for ERC-721 swap or non-swap).
+    /// @param newErc1155Quantity New ERC-1155 quantity; must be 0 for ERC-721 listings.
+    /// @param newBuyerWhitelistEnabled Whether whitelist gating is enabled.
+    /// @param newPartialBuyEnabled Whether partial buys (ERC-1155 only) are enabled.
+    /// @param newAllowedBuyers Optional addresses to add when enabling whitelist.
+    /// @dev Reverts if token standard/quantity mismatch; caller not owner/authorized; insufficient ERC-1155 balance;
+    /// marketplace not approved; collection de-whitelisted (auto-cancels and emits); invalid partial-buy setup
+    /// (quantity ≤ 1 or price not divisible or swap enabled); invalid swap parameters.
+    /// Updates `feeRate` to the current `innovationFee` snapshot.
+    /// Auto-cancels the listing if the collection whitelist status has been revoked since the original listing was created.
+    /// Emits `CollectionWhitelistRevokedCancelTriggered` when this occurs and exits early.
     function updateListing(
         uint128 listingId,
         uint256 newPrice,
         address newDesiredTokenAddress,
         uint256 newDesiredTokenId,
-        uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-        uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
+        uint256 newDesiredErc1155Quantity,
+        uint256 newErc1155Quantity,
         bool newBuyerWhitelistEnabled,
         bool newPartialBuyEnabled,
-        address[] calldata newAllowedBuyers // whitelisted Buyers
+        address[] calldata newAllowedBuyers
     ) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
@@ -624,7 +676,7 @@ contract IdeationMarketFacet {
             }
         }
 
-        // check if the user is an authorized operator and Use interface check to ensure the MarketPlace is still Approved for transfer and holds enough token
+        // check if the user is an authorized operator and use interface check to ensure the MarketPlace is still Approved for transfer and seller holds enough token
         if (newErc1155Quantity > 0) {
             IERC1155 token = IERC1155(tokenAddress);
             // check if the user is authorized
@@ -648,7 +700,8 @@ contract IdeationMarketFacet {
             requireERC721Approval(tokenAddress, tokenId);
         }
 
-        // check if the Collection is still Whitelisted - even tho it would not have been able to get listed in the first place, if the collection has been revoked in the meantime, updating would cancel the listing
+        //Validates collection whitelist status. If the collection was de-whitelisted after the original listing,
+        // the listing is automatically canceled and `CollectionWhitelistRevokedCancelTriggered` is emitted.
         if (!s.whitelistedCollections[tokenAddress]) {
             cancelListing(listingId);
             emit CollectionWhitelistRevokedCancelTriggered(listingId, tokenAddress);
@@ -661,18 +714,17 @@ contract IdeationMarketFacet {
         }
 
         // if partial buys allowed, require even per-unit price
-        // forbid partialbuys if its a swap listing
         if (newPartialBuyEnabled) {
             // price must be divisible by quantity
             if (newPrice % newErc1155Quantity != 0) {
                 revert IdeationMarket__InvalidUnitPrice();
             }
+            // forbid partialbuys if its a swap listing
             if (newDesiredTokenAddress != address(0)) {
                 revert IdeationMarket__PartialBuyNotPossible();
             }
         }
 
-        // Swap-specific check
         validateSwapParameters(
             tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredErc1155Quantity
         );
@@ -682,8 +734,8 @@ contract IdeationMarketFacet {
         listedItem.desiredTokenId = newDesiredTokenId;
         listedItem.desiredErc1155Quantity = newDesiredErc1155Quantity;
         listedItem.erc1155Quantity = newErc1155Quantity;
-        listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
-        listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+        listedItem.feeRate = s.innovationFee;
+        listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled;
         listedItem.partialBuyEnabled = newPartialBuyEnabled;
 
         if (newBuyerWhitelistEnabled) {
@@ -711,6 +763,9 @@ contract IdeationMarketFacet {
         );
     }
 
+    /// @notice Withdraws the caller’s accumulated ETH proceeds.
+    /// @dev Reverts `IdeationMarket__NoProceeds` if zero. Sets balance to zero before transferring.
+    /// Emits `ProceedsWithdrawn`. Reverts `IdeationMarket__TransferFailed` on failed call.
     function withdrawProceeds() external nonReentrant {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 proceeds = s.proceeds[msg.sender];
@@ -727,6 +782,9 @@ contract IdeationMarketFacet {
         emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
+    /// @notice Updates the marketplace fee rate  (e.g., 1_000 for 1% with a denominator of 100_000).
+    /// @dev Owner-only. Existing listings are unaffected (they keep their stored `feeRate`).
+    /// Emits `InnovationFeeUpdated`.
     function setInnovationFee(uint32 newFee) external {
         LibDiamond.enforceIsContractOwner();
         AppStorage storage s = LibAppStorage.appStorage();
@@ -735,14 +793,20 @@ contract IdeationMarketFacet {
         emit InnovationFeeUpdated(previousFee, newFee);
     }
 
-    // checks for token ownership, contract approval and for collection whitelist
+    /// @notice Validates and removes an invalid listing (ownership/approval/whitelist checks).
+    /// @dev Intended for off-chain maintenance bots but callable by anyone. For ERC-721/1155:
+    /// verifies owner/balance and marketplace approval (using `try/catch` to handle token contract reverts).
+    /// Uses `do-while(false)` pattern as a structured alternative to goto - allows early exit via `break`
+    /// statements without nested if-else blocks when any validation fails.
+    /// If invalid, deletes the listing and emits `ListingCanceledDueToInvalidListing`; otherwise reverts `IdeationMarket__StillApproved`.
     function cleanListing(uint128 listingId) external listingExists(listingId) {
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
         bool invalid = false;
 
-        // using a loop just for breaking out of condition testing in case of invalid listing
+        // Using do-while(false) loop as a control flow structure - allows clean early exit via 'break'
+        // instead of deeply nested if-else conditions when validation checks fail
         do {
             // check if the Collection is still Whitelisted
             if (s.whitelistedCollections[listedItem.tokenAddress]) {
@@ -825,6 +889,9 @@ contract IdeationMarketFacet {
     // Helper Functions //
     //////////////////////
 
+    /// @notice Requires this diamond to be approved to transfer the ERC-721 token.
+    /// @dev Accepts either token-level approval (`getApproved`) or operator approval (`isApprovedForAll`).
+    /// Reverts `IdeationMarket__NotApprovedForMarketplace` if neither is set.
     function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
         IERC721 token = IERC721(tokenAddress);
         if (
@@ -837,12 +904,20 @@ contract IdeationMarketFacet {
         }
     }
 
+    /// @notice Requires this diamond to be approved as operator for an ERC-1155 holder.
+    /// @dev Checks `isApprovedForAll(tokenOwner, address(this))`
+    /// Reverts on failure.
     function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
         if (!IERC1155(tokenAddress).isApprovedForAll(tokenOwner, address(this))) {
             revert IdeationMarket__NotApprovedForMarketplace();
         }
     }
 
+    /// @notice Validates swap configuration for a listing.
+    /// @dev Disallows swapping for the same token (same contract + id).
+    /// Non-swap: `desiredTokenAddress == 0`, `desiredTokenId == 0`, `desiredErc1155Quantity == 0`, and `price > 0`.
+    /// Swap ERC-1155: `desiredErc1155Quantity > 0` and desired contract must support ERC-1155.
+    /// Swap ERC-721: `desiredErc1155Quantity == 0` and desired contract must support ERC-721.
     function validateSwapParameters(
         address tokenAddress,
         uint256 tokenId,
@@ -870,6 +945,8 @@ contract IdeationMarketFacet {
         }
     }
 
+    /// @notice Deletes a listing and removes its id from the reverse index for (tokenAddress, tokenId).
+    /// @dev Uses swap-and-pop on `tokenToListingIds[tokenAddress][tokenId]` to keep the array compact.
     function deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
         internal
     {
@@ -887,5 +964,10 @@ contract IdeationMarketFacet {
         }
     }
 
-    // find the getter functions in the GetterFacet.sol
+    /////////////////////
+    // View Functions  //
+    /////////////////////
+
+    // Note: Getter functions are implemented in GetterFacet.sol
+    // to maintain separation of concerns in the diamond pattern
 }

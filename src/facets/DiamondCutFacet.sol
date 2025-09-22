@@ -5,11 +5,16 @@ pragma solidity ^0.8.28;
  * \
  * Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
  * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
+ *
+ * --- NatSpec addition by wolf3i
  * /*****************************************************************************
  */
 import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 
+/// @title DiamondCutFacet (EIP-2535 cut executor)
+/// @notice Allows the diamond owner to add/replace/remove selectors and run an initializer.
+/// @dev Authorization via `LibDiamond.enforceIsContractOwner()`; initializer (if any) runs by delegatecall
 contract DiamondCutFacet is IDiamondCutFacet {
     /// @notice Add/replace/remove any number of functions and optionally execute an initialization
     /// @param _diamondCut The facet and function selectors to add, replace, or remove

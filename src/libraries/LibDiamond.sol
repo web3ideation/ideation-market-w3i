@@ -10,51 +10,58 @@ pragma solidity ^0.8.28;
  */
 import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
 
-// Remember to add the loupe functions from DiamondLoupeFacet to the diamond.
-// The loupe functions are required by the EIP2535 Diamonds standard
-
 error InitializationFunctionReverted(address _initializationContractAddress, bytes _calldata);
 
+/// @title LibDiamond (EIP-2535 core storage & cut helpers)
+/// @notice Provides the shared diamond storage layout and internal helpers to add/replace/remove selectors.
+/// @dev All functions here must be called via facets executing in the diamond context (delegatecall).
 library LibDiamond {
     // 32 bytes keccak hash of a string to use as a diamond storage location.
     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
 
+    /// @notice Selector→facet address mapping payload.
+    /// @dev `functionSelectorPosition` indexes into the facet’s selectors array.
     struct FacetAddressAndPosition {
         address facetAddress;
-        uint96 functionSelectorPosition; // position in facetFunctionSelectors.functionSelectors array
+        uint96 functionSelectorPosition;
     }
 
+    /// @notice Per-facet selector set and its position in `facetAddresses`.
     struct FacetFunctionSelectors {
         bytes4[] functionSelectors;
-        uint256 facetAddressPosition; // position of facetAddress in facetAddresses array
+        uint256 facetAddressPosition;
     }
 
+    /// @notice Full diamond storage layout.
+    /// @dev All facets share this storage via delegatecall.
     struct DiamondStorage {
-        // maps function selector to the facet address and
-        // the position of the selector in the facetFunctionSelectors.selectors array
+        /// selector → (facet, pos in that facet’s selector array)
         mapping(bytes4 selector => FacetAddressAndPosition facetInfo) selectorToFacetAndPosition;
-        // maps facet addresses to function selectors
+        /// facet address → its selectors + its index in `facetAddresses`
         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
-        // facet addresses
+        /// list of facet addresses
         address[] facetAddresses;
-        // Used to query if a contract implements an interface.
-        // Used to implement ERC-165.
+        /// ERC-165 support flags (incl. DiamondCut, Loupe, ERC-173, etc.)
         mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
-        // owner of the contract
+        /// ownership (two-step transfer supported via `pendingContractOwner`)
         address contractOwner;
         address pendingContractOwner;
     }
 
+    /// @notice Returns a pointer to diamond storage at the canonical slot.
+    /// @dev Inline assembly assigns the slot to the returned storage reference.
     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
-        // assigns struct storage slot to the storage position
         assembly {
             ds.slot := position
         }
     }
 
+    /// @notice Emitted when ownership changes.
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
+    /// @notice Sets a new contract owner and emits `OwnershipTransferred`.
+    /// @dev No authorization check here; callers should gate with `enforceIsContractOwner`.
     function setContractOwner(address _newOwner) internal {
         DiamondStorage storage ds = diamondStorage();
         address previousOwner = ds.contractOwner;
@@ -62,17 +69,25 @@ library LibDiamond {
         emit OwnershipTransferred(previousOwner, _newOwner);
     }
 
+    /// @notice Returns the current contract owner.
     function contractOwner() internal view returns (address contractOwner_) {
         contractOwner_ = diamondStorage().contractOwner;
     }
 
+    /// @notice Reverts unless `msg.sender` is the diamond owner.
     function enforceIsContractOwner() internal view {
         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
     }
 
+    /// @notice Emitted after a diamond cut is applied.
+    /// @param _diamondCut The set of facet actions performed.
+    /// @param _init Initializer target (executed via delegatecall) or address(0).
+    /// @param _calldata Encoded initializer call data (can be empty).
     event DiamondCut(IDiamondCutFacet.FacetCut[] _diamondCut, address _init, bytes _calldata);
 
-    // Internal function version of diamondCut
+    /// @notice Applies a diamond cut and optionally runs an initializer.
+    /// @dev Iterates over cuts; for Add/Replace/Remove dispatches to helpers. Emits `DiamondCut` and
+    /// then calls `initializeDiamondCut(_init, _calldata)`.
     function diamondCut(IDiamondCutFacet.FacetCut[] memory _diamondCut, address _init, bytes memory _calldata)
         internal
     {
@@ -96,6 +111,8 @@ library LibDiamond {
         initializeDiamondCut(_init, _calldata);
     }
 
+    /// @notice Adds selectors to a facet (adding the facet if first selector).
+    /// @dev Reverts if any selector already exists or facet is zero address.
     function addFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
         DiamondStorage storage ds = diamondStorage();
@@ -120,6 +137,8 @@ library LibDiamond {
         }
     }
 
+    /// @notice Replaces existing selectors with implementations from a facet.
+    /// @dev Reverts if facet is zero or attempting to replace with same facet.
     function replaceFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
         DiamondStorage storage ds = diamondStorage();
@@ -145,6 +164,8 @@ library LibDiamond {
         }
     }
 
+    /// @notice Removes selectors (facet address param must be zero by convention).
+    /// @dev Reverts if `_facetAddress != address(0)`; no-op if selector didn’t exist.
     function removeFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
         DiamondStorage storage ds = diamondStorage();
@@ -163,12 +184,16 @@ library LibDiamond {
         }
     }
 
+    /// @notice Registers a new facet address in storage.
+    /// @dev Verifies bytecode presence via `extcodesize`.
     function addFacet(DiamondStorage storage ds, address _facetAddress) internal {
         enforceHasContractCode(_facetAddress, "LibDiamondCut: New facet has no code");
         ds.facetFunctionSelectors[_facetAddress].facetAddressPosition = ds.facetAddresses.length;
         ds.facetAddresses.push(_facetAddress);
     }
 
+    /// @notice Adds a single selector mapping to a facet.
+    /// @dev Appends selector to the facet’s selector array and records its index.
     function addFunction(DiamondStorage storage ds, bytes4 _selector, uint96 _selectorPosition, address _facetAddress)
         internal
     {
@@ -177,6 +202,8 @@ library LibDiamond {
         ds.selectorToFacetAndPosition[_selector].facetAddress = _facetAddress;
     }
 
+    /// @notice Removes a selector mapping; compacts arrays and prunes empty facets.
+    /// @dev Cannot remove immutable (in-diamond) functions; bubbles last item swap-and-pop.
     function removeFunction(DiamondStorage storage ds, address _facetAddress, bytes4 _selector) internal {
         require(_facetAddress != address(0), "LibDiamondCut: Can't remove function that doesn't exist");
         // an immutable function is a function defined directly in a diamond
@@ -209,6 +236,8 @@ library LibDiamond {
         }
     }
 
+    /// @notice Executes an optional initializer after a cut.
+    /// @dev Requires `_init` to contain code and delegates `_calldata`. Bubbles revert data if any.
     function initializeDiamondCut(address _init, bytes memory _calldata) internal {
         if (_init == address(0)) {
             return;
@@ -217,8 +246,6 @@ library LibDiamond {
         (bool success, bytes memory error) = _init.delegatecall(_calldata);
         if (!success) {
             if (error.length > 0) {
-                // bubble up error
-                /// @solidity memory-safe-assembly
                 assembly {
                     let returndata_size := mload(error)
                     revert(add(32, error), returndata_size)
@@ -229,6 +256,8 @@ library LibDiamond {
         }
     }
 
+    /// @notice Ensures `_contract` has bytecode.
+    /// @dev Uses `extcodesize` to guard against EOAs or undeployed addresses.
     function enforceHasContractCode(address _contract, string memory _errorMessage) internal view {
         uint256 contractSize;
         assembly {

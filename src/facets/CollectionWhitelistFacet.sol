@@ -8,6 +8,10 @@ error CollectionWhitelist__AlreadyWhitelisted();
 error CollectionWhitelist__NotWhitelisted();
 error CollectionWhitelist__ZeroAddress();
 
+/// @title CollectionWhitelistFacet
+/// @notice Owner-gated management of globally whitelisted NFT collection addresses (for Curation).
+/// @dev A de-whitelisted collection cannot be purchased/updated (other facets enforce), but listings are not
+/// automatically deleted here; cleanup occurs via `updateListing`/`cleanListing`.
 contract CollectionWhitelistFacet {
     /// @notice Emitted when a collection is added.
     event CollectionAddedToWhitelist(address indexed tokenAddress);
@@ -15,7 +19,7 @@ contract CollectionWhitelistFacet {
     /// @notice Emitted when a collection is removed.
     event CollectionRemovedFromWhitelist(address indexed tokenAddress);
 
-    // Only diamond owner can update the whitelist.
+    /// @notice Only diamond owner can update the whitelist.
     modifier onlyOwner() {
         LibDiamond.enforceIsContractOwner();
         _;
@@ -23,6 +27,7 @@ contract CollectionWhitelistFacet {
 
     /// @notice Adds a single NFT contract address to the whitelist.
     /// @param tokenAddress The NFT contract address to whitelist.
+    /// @dev Reverts if already whitelisted or if `tokenAddress` is zero.
     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
@@ -35,9 +40,10 @@ contract CollectionWhitelistFacet {
         emit CollectionAddedToWhitelist(tokenAddress);
     }
 
-    // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Removes a single NFT contract address from the whitelist.
     /// @param tokenAddress The NFT contract address to remove.
+    /// @dev Reverts if not whitelisted. Uses swap-and-pop to keep the array compact.
+    /// When removing collections from the whitelist consider canceling active listings of such collections.
     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
@@ -63,6 +69,7 @@ contract CollectionWhitelistFacet {
 
     /// @notice Batch adds multiple NFT contract addresses to the whitelist.
     /// @param tokenAddresses Array of NFT contract addresses to whitelist.
+    /// @dev Ignores addresses already whitelisted. Reverts on zero address entries.
     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         address[] storage arr = s.whitelistedCollectionsArray;
@@ -87,9 +94,10 @@ contract CollectionWhitelistFacet {
         }
     }
 
-    // when removing collections from the whitelist consider canceling active listings of such
     /// @notice Batch removes multiple NFT contract addresses from the whitelist.
     /// @param tokenAddresses Array of NFT contract addresses to remove.
+    /// @dev Ignores addresses not whitelisted. Uses swap-and-pop per removal.
+    /// When removing collections from the whitelist consider canceling active listings of such collections.
     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
         AppStorage storage s = LibAppStorage.appStorage();
         address[] storage arr = s.whitelistedCollectionsArray;

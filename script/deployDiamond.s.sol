@@ -20,11 +20,26 @@ import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
 import {IERC165} from "../src/interfaces/IERC165.sol";
 import {IERC173} from "../src/interfaces/IERC173.sol";
 
+/// @title DeployDiamond (Foundry script)
+/// @notice Deploys the IdeationMarket Diamond and all facets, then initializes state via `DiamondInit.init`.
+/// @dev Run with Foundry (e.g., `forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url <URL> --broadcast`).
+/// Uses `vm.startBroadcast()`; the current tx signer becomes the initial diamond owner.
+/// The script performs a diamondCut to add 6 facet groups (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter)
+/// on top of the initially deployed DiamondCut facet, then asserts there are exactly 7 facet addresses.
+/// @custom:security The script references `tx.origin` **only** in this off-chain deployment context to set the owner.
+/// Do not reuse this pattern inside on-chain contracts.
 contract DeployDiamond is Script {
-    // Constructor arguments
-    uint32 innovationFee = 1000; // Example fee, e.g., 1000 means 1%
+    /// @notice Innovation/marketplace fee rate used during initialization.
+    /// @dev Denominator is 100_000 (e.g., 1_000 = 1%). Passed to `DiamondInit.init`.
+    uint32 innovationFee = 1000;
+
+    /// @notice Maximum addresses per buyer-whitelist batch.
+    /// @dev Enforced by `BuyerWhitelistFacet`; passed to `DiamondInit.init`.
     uint16 buyerWhitelistMaxBatchSize = 300;
 
+    /// @notice Deploys facets, the diamond, performs the diamond cut, and initializes storage.
+    /// @dev Reverts if post-cut facet count isn’t 7 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Cut).
+    /// Emits Foundry `console.log` outputs with deployed addresses for traceability.
     function run() external {
         vm.startBroadcast();
 
@@ -137,7 +152,7 @@ contract DeployDiamond is Script {
             functionSelectors: getterSelectors
         });
 
-        // Upgrade and initialize the diamond to include these facets
+        // Cut and initialize storage variables
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
             cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );

@@ -14,6 +14,10 @@ error BuyerWhitelist__EmptyCalldata();
 error BuyerWhitelist__SellerIsNotERC1155Owner(address seller);
 error BuyerWhitelist__SellerIsNotERC721Owner(address seller, address owner);
 
+/// @title BuyerWhitelistFacet
+/// @notice Per-listing buyer whitelist management (add/remove addresses).
+/// @dev Caller must be the seller or an authorized operator for the listed token.
+/// Touches `AppStorage.whitelistedBuyersByListingId`. Duplicates are ignored; zero addresses revert.
 contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
@@ -21,6 +25,8 @@ contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     /// @notice Batch adds buyer addresses to a listing's whitelist.
     /// @param listingId The ID number of the Listing.
     /// @param allowedBuyers An array of buyer addresses to add.
+    /// @dev Reverts if: empty array; batch exceeds `buyerWhitelistMaxBatchSize`;
+    /// listing does not exist; caller not authorized; seller no longer owns/holds sufficient token; any zero address.
     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 len = allowedBuyers.length;
@@ -47,6 +53,7 @@ contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
     /// @notice Batch removes buyer addresses from a listing's whitelist.
     /// @param listingId The ID number of the Listing.
     /// @param disallowedBuyers An array of buyer addresses to remove.
+    /// @dev Reverts on same prechecks as add. Non-whitelisted addresses are ignored.
     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
         AppStorage storage s = LibAppStorage.appStorage();
         uint256 len = disallowedBuyers.length;
@@ -70,8 +77,9 @@ contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
         }
     }
 
-    /// @dev Reverts if batchSize is zero/exceeds cap,
-    ///      if listing.seller==0, or msg.sender isn’t authorized.
+    /// @notice Common prechecks for whitelist mutations.
+    /// @dev Reverts if `batchSize == 0`, exceeds cap, listing missing, seller not owner/holder,
+    /// or caller not seller/approved operator. For ERC1155, verifies sufficient balance.
     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
         if (batchSize > s.buyerWhitelistMaxBatchSize) {

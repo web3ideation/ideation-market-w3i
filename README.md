@@ -18,6 +18,11 @@ notes:
  listedItem.seller == address(0) means that the listing is inactive
  quantity == 0 means its an erc721
  quantity > 0 means its an erc1155
+ royalties don't get sent to the defined receiver but credited to their proceeds -> thus they have to actively withdraw them
+ before creating the listing the user needs to approve the marketplace (approveForAll) to handle their Token (the ideationMarket fronten already does that)
+ explain how to update the whitelist (since that can be done with updatelisting but also directly with the addBuyerWhitelistAddresses)
+ highlight that only curated utility token contracts are whitelisted.
+ explain the diamondstructure and where devs can find which functions (for example getters you would expect in the ideationmarketfacet are in the getterFacet)
 
 
 # IdeationMarketDiamond

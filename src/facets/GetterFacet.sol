@@ -7,11 +7,15 @@ import "../libraries/LibDiamond.sol";
 error Getter__ListingNotFound(uint128 listingId);
 error Getter__NoActiveListings(address tokenAddress, uint256 tokenId);
 
+/// @title GetterFacet
+/// @notice Read-only queries for listings, proceeds, owner/config, and whitelist state.
+/// @dev All functions are `view` and read from `LibAppStorage` / `LibDiamond` storage.
 contract GetterFacet {
     /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
     /// @param tokenAddress The address of the NFT contract.
-    /// @param tokenId    The tokenId within that contract.
-    /// @return listings  An array of Listing structs that are still active.
+    /// @param tokenId The tokenId within that contract.
+    /// @return listings An array of Listing structs that are still active.
+    /// @dev Reverts `Getter__NoActiveListings` if none found. Only listings with `seller != address(0)` are returned.
     function getListingsByNFT(address tokenAddress, uint256 tokenId)
         external
         view
@@ -58,6 +62,7 @@ contract GetterFacet {
     /// @notice Returns the Listing struct for a given listingId.
     /// @param listingId The ID of the listing to retrieve.
     /// @return listing The Listing struct.
+    /// @dev Reverts `Getter__ListingNotFound` if the listing was removed or never existed.
     function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
         AppStorage storage s = LibAppStorage.appStorage();
         listing = s.listings[listingId];
@@ -67,62 +72,52 @@ contract GetterFacet {
         return listing;
     }
 
-    /**
-     * @notice Returns the proceeds available for a seller.
-     * @param seller The seller's address.
-     * @return The total proceeds for the seller.
-     */
+    /// @notice Returns the proceeds available for a seller.
+    /// @param seller The seller's address.
+    /// @return The total proceeds for the seller (wei).
     function getProceeds(address seller) external view returns (uint256) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.proceeds[seller];
     }
 
-    /**
-     * @notice Returns the contract's Ether balance.
-     * @return The balance of the contract in wei.
-     */
+    /// @notice Returns the contract's Ether balance.
+    /// @return The balance of the contract in wei.
     function getBalance() external view returns (uint256) {
         return address(this).balance;
     }
 
-    // add natspec
+    /// @notice Returns the current marketplace fee rate.
+    /// @return innovationFee The fee rate with denominator 100_000 (e.g., 1_000 = 1%).
     function getInnovationFee() external view returns (uint32 innovationFee) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.innovationFee;
     }
 
-    /**
-     * @notice Returns the upcoming listing ID, the current counter + 1.
-     * @return The next listing ID.
-     */
+    /// @notice Returns the upcoming listing ID, i.e., the current counter + 1.
+    /// @return The next listing ID.
     function getNextListingId() external view returns (uint128) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.listingIdCounter + 1;
     }
 
-    /**
-     * @notice Checks if a given NFT collection is whitelisted.
-     * @param collection The address of the NFT collection.
-     * @return True if the collection is whitelisted, false otherwise.
-     */
+    /// @notice Checks if a given NFT collection is whitelisted.
+    /// @param collection The address of the NFT collection.
+    /// @return True if the collection is whitelisted, false otherwise.
     function isCollectionWhitelisted(address collection) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.whitelistedCollections[collection];
     }
 
-    /**
-     * @notice Returns the array of whitelisted NFT collection addresses.
-     * @return An array of addresses that are whitelisted.
-     */
+    /// @notice Returns the array of whitelisted NFT collection addresses.
+    /// @return An array of addresses that are whitelisted.
+    /// @dev Returns an in-memory copy of the tracked array (gas scales with size).
     function getWhitelistedCollections() external view returns (address[] memory) {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.whitelistedCollectionsArray;
     }
 
-    /**
-     * @notice Returns the contract owner address.
-     * @return The address of the contract owner.
-     */
+    /// @notice Returns the contract owner address.
+    /// @return The address of the contract owner.
     function getContractOwner() external view returns (address) {
         return LibDiamond.contractOwner();
     }
@@ -131,6 +126,7 @@ contract GetterFacet {
     /// @param listingId ID number of the Listing.
     /// @param buyer The buyer address to check.
     /// @return True if the buyer is whitelisted, false otherwise.
+    /// @dev Reverts `Getter__ListingNotFound` if the listing no longer exists.
     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.listings[listingId].seller == address(0)) {
@@ -140,12 +136,13 @@ contract GetterFacet {
     }
 
     /// @notice Returns the maximum number of buyers you can whitelist in one batch.
-    /// @return maxBatchSize The `buyerWhitelistMaxBatchSize` (e.g. 300).
+    /// @return maxBatchSize The `buyerWhitelistMaxBatchSize` (e.g., 300).
     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
         return LibAppStorage.appStorage().buyerWhitelistMaxBatchSize;
     }
 
-    /// @notice Returns the address nominated to become owner
+    /// @notice Returns the address nominated to become owner (if any).
+    /// @return The pending owner address or address(0) if none.
     function getPendingOwner() external view returns (address) {
         return LibDiamond.diamondStorage().pendingContractOwner;
     }

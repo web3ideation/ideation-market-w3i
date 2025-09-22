@@ -4,6 +4,8 @@ pragma solidity ^0.8.28;
  * \
  * Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
  * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
+ *
+ * --- NatSpec addition by wolf3i
  * /*****************************************************************************
  */
 
@@ -11,9 +13,13 @@ import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
 
+/// @title DiamondLoupeFacet (EIP-2535 introspection)
+/// @notice Read-only queries for facets, selectors, and ERC-165 support, per the Diamonds standard.
+/// @dev Reads `LibDiamond.DiamondStorage` (view-only). Returns copies of arrays.
 contract DiamondLoupeFacet is IDiamondLoupeFacet, IERC165 {
     /// @notice Gets all facets and their selectors.
     /// @return facets_ Facet
+    /// @dev The returned array is allocated in memory and populated from storage.
     function facets() external view override returns (Facet[] memory facets_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         uint256 numFacets = ds.facetAddresses.length;
@@ -31,6 +37,7 @@ contract DiamondLoupeFacet is IDiamondLoupeFacet, IERC165 {
     /// @notice Gets all the function selectors provided by a facet.
     /// @param _facet The facet address.
     /// @return facetFunctionSelectors_
+    /// @dev Returns an in-memory copy of the facet’s selector array.
     function facetFunctionSelectors(address _facet)
         external
         view
@@ -43,6 +50,7 @@ contract DiamondLoupeFacet is IDiamondLoupeFacet, IERC165 {
 
     /// @notice Get all the facet addresses used by a diamond.
     /// @return facetAddresses_
+    /// @dev Returns an in-memory copy of the facet address list.
     function facetAddresses() external view override returns (address[] memory facetAddresses_) {
         LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
         facetAddresses_ = ds.facetAddresses;
