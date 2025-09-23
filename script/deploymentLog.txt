@@ -1,0 +1,242 @@
+wolfgang@Professional:~/w3i/ideation-market-w3i$ forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url $SEPOLIA_RPC_URL --broadcast --etherscan-api-key $ETHERSCAN_API_KEY --verify --account defaultKey
+[⠒] Compiling...
+[⠊] Compiling 1 files with Solc 0.8.28
+[⠢] Solc 0.8.28 finished in 3.87s
+Compiler run successful!
+Enter keystore password:
+Script ran successfully.
+
+== Logs ==
+  Deployed diamondInit contract at address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
+  Deployed diamondLoupeFacet contract at address: 0x84B5151b8258B025284F163650d220b930204A8F
+  Deployed ownershipFacet contract at address: 0x032a247637cD41c675cC82A7149B907a559841aa
+  Deployed ideationMarketFacet contract at address: 0xbDD69f91a78883bf7dD725ed1564278C01642e61
+  Deployed collectionWhitelistFacet contract at address: 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1
+  Deployed buyerWhitelistFacet contract at address: 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1
+  Deployed getterFacet contract at address: 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8
+  Deployed diamondCutFacet contract at address: 0x516817c98DA9A426c51731c7eD71d2Dd4d618783
+  Deployed Diamond contract at address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+  Diamond cuts complete
+  Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 11155111
+
+Estimated gas price: 0.001000926 gwei
+
+Estimated total gas used for script: 13194202
+
+Estimated amount required: 0.000013206419831052 ETH
+
+==========================
+
+##### sepolia
+✅  [Success]Hash: 0x1e9bf7ee47930af37f9b4176fbf4453f15ffd55a645236798849eed8ceb04017
+Contract Address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
+Block: 9263094
+Paid: 0.00000017842468964 ETH (178348 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x53d7271df1e7fd7bdf89180e861d62336446661027fcd67a0249d699bafd68db
+Contract Address: 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1
+Block: 9263094
+Paid: 0.00000054577258134 ETH (545538 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xcc50c5377f1c2f8c83d64a9dc661a437ec653e3ca22cbe07b3a65c8eb8ea51c4
+Contract Address: 0x516817c98DA9A426c51731c7eD71d2Dd4d618783
+Block: 9263094
+Paid: 0.00000136096596383 ETH (1360381 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x905a09d0efba3f39d378c2190af7cde702b30517f7ff26ba918552e807f31b0d
+Contract Address: 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8
+Block: 9263094
+Paid: 0.00000079811003981 ETH (797767 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x31c2a62f54b5e1c4be075de41b5d6273e971b5259cb55da880e3de556a986df5
+Contract Address: 0x84B5151b8258B025284F163650d220b930204A8F
+Block: 9263094
+Paid: 0.00000057096841089 ETH (570723 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0xeb0d1c0d2793145590f10c38875e12da9785d831c9269e242326279139dbd406
+Contract Address: 0xbDD69f91a78883bf7dD725ed1564278C01642e61
+Block: 9263094
+Paid: 0.00000378776103719 ETH (3786133 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x30f64b03c7a00d76aec7427a9db051c2098d6c5b0290e6293399dfc98b990003
+Contract Address: 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1
+Block: 9263094
+Paid: 0.00000067057222212 ETH (670284 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x85dd6a45bf0dafa92328080d56bfa668e0d5e4b87c7f5ac1855638c073ffbc08
+Contract Address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+Block: 9263094
+Paid: 0.00000032597911077 ETH (325839 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x671be844f1dfd004dd9f974091fc2f9a3ea9186de1ee94d5845eed3245b2189f
+Contract Address: 0x032a247637cD41c675cC82A7149B907a559841aa
+Block: 9263094
+Paid: 0.00000026443065631 ETH (264317 gas * 0.00100043 gwei)
+
+
+##### sepolia
+✅  [Success]Hash: 0x46a3f97200ba2e09c8173fab69b3f6111725368a8d4c1cb3afa83aab25cefece
+Block: 9263094
+Paid: 0.00000155609783447 ETH (1555429 gas * 0.00100043 gwei)
+
+✅ Sequence #1 on sepolia | Total Paid: 0.00001005908254637 ETH (10054759 gas * avg 0.00100043 gwei)
+                                                                                                                                                             
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+##
+Start verification for (9) contracts
+Start verifying contract `0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709` deployed on sepolia
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+
+Submitting verification for [src/upgradeInitializers/DiamondInit.sol:DiamondInit] 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `x3csr9fuurnca48brquyfws3itwgmanyzjwpeqsapag7humvme`
+        URL: https://sepolia.etherscan.io/address/0x100e67eb0dcdadeab6a1258a0b7126bca4fea709
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x84B5151b8258B025284F163650d220b930204A8F` deployed on sepolia
+
+Submitting verification for [src/facets/DiamondLoupeFacet.sol:DiamondLoupeFacet] 0x84B5151b8258B025284F163650d220b930204A8F.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `xzwge2baayfy7j4fdr7jnbyua6nlkpgawyef3igueffuuqtn42`
+        URL: https://sepolia.etherscan.io/address/0x84b5151b8258b025284f163650d220b930204a8f
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x032a247637cD41c675cC82A7149B907a559841aa` deployed on sepolia
+
+Submitting verification for [src/facets/OwnershipFacet.sol:OwnershipFacet] 0x032a247637cD41c675cC82A7149B907a559841aa.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `gwnurw2bgydrpmh6wzfpduacgivdzbdshiyjl1hhdt39hdqjcp`
+        URL: https://sepolia.etherscan.io/address/0x032a247637cd41c675cc82a7149b907a559841aa
+Contract verification status:
+Response: `NOTOK`
+Details: `Max calls per sec rate limit reached (2/sec). Please switch to API V2, for more info https://docs.etherscan.io/etherscan-v2/v2-quickstart`
+Error during verification: Checking verification result failed: Contract failed to verify.
+Start verifying contract `0xbDD69f91a78883bf7dD725ed1564278C01642e61` deployed on sepolia
+
+Submitting verification for [src/facets/IdeationMarketFacet.sol:IdeationMarketFacet] 0xbDD69f91a78883bf7dD725ed1564278C01642e61.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `vthfpmmbn92pbvumi6nyjusybls2vtsc2afkjtubxadygqryeu`
+        URL: https://sepolia.etherscan.io/address/0xbdd69f91a78883bf7dd725ed1564278c01642e61
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x36aA6b50b09795c267f66E9580366B6BEa91bcE1` deployed on sepolia
+
+Submitting verification for [src/facets/CollectionWhitelistFacet.sol:CollectionWhitelistFacet] 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `vjv4vt1je3wl6kgrmsfa3fcdbafkilvjmcw96yfnj1nshc5sgg`
+        URL: https://sepolia.etherscan.io/address/0x36aa6b50b09795c267f66e9580366b6bea91bce1
+Contract verification status:
+Response: `NOTOK`
+Details: `Max calls per sec rate limit reached (2/sec). Please switch to API V2, for more info https://docs.etherscan.io/etherscan-v2/v2-quickstart`
+Error during verification: Checking verification result failed: Contract failed to verify.
+Start verifying contract `0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1` deployed on sepolia
+
+Submitting verification for [src/facets/BuyerWhitelistFacet.sol:BuyerWhitelistFacet] 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `uqh4rgytumcgst8aywq8jpltr3skvp5p42hv3jkgcdwjc4avjx`
+        URL: https://sepolia.etherscan.io/address/0x6916b9c69a6ddf63b2638bc1a6a9910fcdb2ecb1
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8` deployed on sepolia
+
+Submitting verification for [src/facets/GetterFacet.sol:GetterFacet] 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `ebu9w5eqeppdx6gpdqbd8fjix7ttqntxbq9wuu5drc5vspfq4n`
+        URL: https://sepolia.etherscan.io/address/0x0e09ad33ddcc746308630f05bf7b71ce03bcfed8
+Contract verification status:
+Response: `NOTOK`
+Details: `Max calls per sec rate limit reached (2/sec). Please switch to API V2, for more info https://docs.etherscan.io/etherscan-v2/v2-quickstart`
+Error during verification: Checking verification result failed: Contract failed to verify.
+Start verifying contract `0x516817c98DA9A426c51731c7eD71d2Dd4d618783` deployed on sepolia
+
+Submitting verification for [src/facets/DiamondCutFacet.sol:DiamondCutFacet] 0x516817c98DA9A426c51731c7eD71d2Dd4d618783.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `rbj6pzrkdqbczgmhczwluijplwanr8rwp3whcw1aeagf2fcnaa`
+        URL: https://sepolia.etherscan.io/address/0x516817c98da9a426c51731c7ed71d2dd4d618783
+Contract verification status:
+Response: `NOTOK`
+Details: `Pending in queue`
+Contract verification status:
+Response: `OK`
+Details: `Pass - Verified`
+Contract successfully verified
+Start verifying contract `0x8cE90712463c87a6d62941D67C3507D090Ea9d79` deployed on sepolia
+
+Submitting verification for [src/IdeationMarketDiamond.sol:IdeationMarketDiamond] 0x8cE90712463c87a6d62941D67C3507D090Ea9d79.
+Submitted contract for verification:
+        Response: `OK`
+        GUID: `lhuhuiswktq3tvzhnxk568ym8js5m7jmehm9179ergayjcglfk`
+        URL: https://sepolia.etherscan.io/address/0x8ce90712463c87a6d62941d67c3507d090ea9d79
+Contract verification status:
+Response: `NOTOK`
+Details: `Max calls per sec rate limit reached (2/sec). Please switch to API V2, for more info https://docs.etherscan.io/etherscan-v2/v2-quickstart`
+Error during verification: Checking verification result failed: Contract failed to verify.
+
+Transactions saved to: /home/wolfgang/w3i/ideation-market-w3i/broadcast/DeployDiamond.s.sol/11155111/run-latest.json
+
+Sensitive values saved to: /home/wolfgang/w3i/ideation-market-w3i/cache/DeployDiamond.s.sol/11155111/run-latest.json
+
+Error: 
+Not all (5 / 9) contracts were verified!

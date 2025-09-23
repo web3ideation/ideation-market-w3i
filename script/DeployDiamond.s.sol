@@ -43,7 +43,7 @@ contract DeployDiamond is Script {
     function run() external {
         vm.startBroadcast();
 
-        address deployer = tx.origin;
+        address deployer = vm.envAddress("DEV_PUBLIC_KEY");
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();

@@ -25,6 +25,21 @@ notes:
  explain the diamondstructure and where devs can find which functions (for example getters you would expect in the ideationmarketfacet are in the getterFacet)
 
 
+deployment log:
+  Deployed diamondInit contract at address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
+  Deployed diamondLoupeFacet contract at address: 0x84B5151b8258B025284F163650d220b930204A8F
+  Deployed ownershipFacet contract at address: 0x032a247637cD41c675cC82A7149B907a559841aa
+  Deployed ideationMarketFacet contract at address: 0xbDD69f91a78883bf7dD725ed1564278C01642e61
+  Deployed collectionWhitelistFacet contract at address: 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1
+  Deployed buyerWhitelistFacet contract at address: 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1
+  Deployed getterFacet contract at address: 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8
+  Deployed diamondCutFacet contract at address: 0x516817c98DA9A426c51731c7eD71d2Dd4d618783
+  Deployed Diamond contract at address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+  Diamond cuts complete
+  Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+
+
+
 # IdeationMarketDiamond
 
 A decentralized NFT marketplace built on the EIP-2535 Diamonds standard, allowing users to list, buy, sell, and swap NFTs efficiently while ensuring modularity, upgradability, and security. The repository leverages OpenZeppelin’s standards and introduces custom facets for enhanced functionality.
