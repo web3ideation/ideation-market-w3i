@@ -261,6 +261,7 @@ contract IdeationMarketFacet {
             revert IdeationMarket__AlreadyListed();
         }
 
+        // check Swap parameters
         validateSwapParameters(
             tokenAddress, tokenId, price, desiredTokenAddress, desiredTokenId, desiredErc1155Quantity
         );
@@ -385,7 +386,8 @@ contract IdeationMarketFacet {
         uint256 purchasePrice = listedItem.price;
 
         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
-            purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+            uint256 unitPrice = listedItem.price / listedItem.erc1155Quantity;
+            purchasePrice = unitPrice * erc1155PurchaseQuantity;
         }
 
         if (msg.value < purchasePrice) {
@@ -725,6 +727,7 @@ contract IdeationMarketFacet {
             }
         }
 
+        // check Swap parameters
         validateSwapParameters(
             tokenAddress, tokenId, newPrice, newDesiredTokenAddress, newDesiredTokenId, newDesiredErc1155Quantity
         );
@@ -926,21 +929,23 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity
     ) private view {
-        if (tokenAddress == desiredTokenAddress && tokenId == desiredTokenId) {
-            revert IdeationMarket__NoSwapForSameToken();
-        }
-
         if (desiredTokenAddress == address(0)) {
             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
-        } else if (desiredErc1155Quantity > 0) {
-            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
+        } else {
+            if (desiredErc1155Quantity > 0) {
+                if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+                    revert IdeationMarket__NotSupportedTokenStandard();
+                }
             }
-        } else if (desiredErc1155Quantity == 0) {
-            if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
-                revert IdeationMarket__NotSupportedTokenStandard();
+            if (desiredErc1155Quantity == 0) {
+                if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+                    revert IdeationMarket__NotSupportedTokenStandard();
+                }
+            }
+            if (tokenAddress == desiredTokenAddress && tokenId == desiredTokenId) {
+                revert IdeationMarket__NoSwapForSameToken();
             }
         }
     }
@@ -964,10 +969,5 @@ contract IdeationMarketFacet {
         }
     }
 
-    /////////////////////
-    // View Functions  //
-    /////////////////////
-
-    // Note: Getter functions are implemented in GetterFacet.sol
-    // to maintain separation of concerns in the diamond pattern
+    // View / Getter functions are implemented in GetterFacet.sol to maintain separation of concerns in the diamond pattern.
 }
