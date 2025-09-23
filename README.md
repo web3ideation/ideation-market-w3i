@@ -37,7 +37,7 @@ deployment log:
   Deployed Diamond contract at address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
   Diamond cuts complete
   Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
-
+https://louper.dev/diamond/0x8cE90712463c87a6d62941D67C3507D090Ea9d79?network=sepolia
 
 
 # IdeationMarketDiamond
