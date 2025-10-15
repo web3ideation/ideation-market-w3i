@@ -23,7 +23,7 @@ struct Listing {
     uint256 erc1155Quantity;
     /// @notice Total listing price in wei (for ERC-1155: total for all `erc1155Quantity` units).
     uint256 price;
-    /// @notice Seller address captured at listing time.
+    /// @notice Holder address captured at listing time.
     address seller;
     /// @notice Optional desired NFT contract for swap listings (address(0) means no swap).
     address desiredTokenAddress;

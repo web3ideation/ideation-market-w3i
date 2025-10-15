@@ -38,6 +38,12 @@ deployment log:
   Diamond cuts complete
   Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
 https://louper.dev/diamond/0x8cE90712463c87a6d62941D67C3507D090Ea9d79?network=sepolia
+https://sepolia.etherscan.io/address/0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+
+for etherscan interaction:
+add token address to 'collection whitelist'
+approve marketplace to handle the token in the token contract
+empty fields either '0' or '0x0000000000000000000000000000000000000000' or 'false'; erc1155 Quanitity for erc721 '1' empty array '[]', price in Wei, payableAmount in ETH
 
 
 # IdeationMarketDiamond

@@ -195,7 +195,7 @@ contract IdeationMarketFacet {
             revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
         }
 
-        // check if the user is an authorized Operator and set the seller Address
+        // check if the user is an authorized Operator and set the seller Address to be the tokenHolders Address
         address seller = address(0);
         if (erc1155Quantity > 0) {
             // check that the quantity matches the token Type
