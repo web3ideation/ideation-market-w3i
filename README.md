@@ -50,8 +50,8 @@ running the sepolia tests:
 'source .env' to initiate the dot env variables
 'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth' run the diamondhealth testscript against the local forked sepolia testnet
 'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke' run the MarketSmoke testscript against the local forked sepolia testnet
-'forge script script/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv' run the MarketSmokeBroadcast testscript against the real live sepolia testnet
-'forge script script/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull --rpc-url $SEPOLIA_RPC_URL --broadcast -vvv' run the MarketSmokeBroadcastFull testscript against the real live sepolia testnet
+'forge script test/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv' run the MarketSmokeBroadcast testscript against the real live sepolia testnet
+'forge script test/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull --rpc-url $SEPOLIA_RPC_URL --broadcast -vvv' run the MarketSmokeBroadcastFull testscript against the real live sepolia testnet
 
 
 # IdeationMarketDiamond
