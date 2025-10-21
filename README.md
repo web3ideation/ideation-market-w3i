@@ -46,6 +46,14 @@ approve marketplace to handle the token in the token contract
 empty fields either '0' or '0x0000000000000000000000000000000000000000' or 'false'; erc1155 Quanitity for erc721 '1' empty array '[]', price in Wei, payableAmount in ETH
 
 
+running the sepolia tests:
+'source .env' to initiate the dot env variables
+'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth' run the diamondhealth testscript against the local forked sepolia testnet
+'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke' run the MarketSmoke testscript against the local forked sepolia testnet
+'forge script script/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv' run the MarketSmokeBroadcast testscript against the real live sepolia testnet
+'forge script script/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull --rpc-url $SEPOLIA_RPC_URL --broadcast -vvv' run the MarketSmokeBroadcastFull testscript against the real live sepolia testnet
+
+
 # IdeationMarketDiamond
 
 A decentralized NFT marketplace built on the EIP-2535 Diamonds standard, allowing users to list, buy, sell, and swap NFTs efficiently while ensuring modularity, upgradability, and security. The repository leverages OpenZeppelin’s standards and introduces custom facets for enhanced functionality.
