@@ -60,10 +60,11 @@ struct AppStorage {
     mapping(address collection => uint256 index) whitelistedCollectionsIndex;
     /// @notice Per-listing buyer whitelist set by the listing seller.
     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId;
-    /// @notice Example upgrade variable to demonstrate adding new storage via a facet upgrade.
-    /// @dev Appended at the end to preserve storage layout of existing fields.
-    uint256 marketVersion;
 }
+// part of the sepolia facet upgrade test
+// /// @notice Example upgrade variable to demonstrate adding new storage via a facet upgrade.
+// /// @dev Appended at the end to preserve storage layout of existing fields.
+// uint256 marketVersion;
 
 /// @title LibAppStorage
 /// @notice Canonical application storage for the IdeationMarket diamond (separate from LibDiamond storage).
