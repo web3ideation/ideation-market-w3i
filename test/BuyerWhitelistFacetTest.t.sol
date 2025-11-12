@@ -25,6 +25,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
             tokenId,
             seller, // erc1155Holder
             price,
+            address(0), // currency (ETH)
             address(0), // desiredTokenAddress (no swap)
             0, // desiredTokenId
             0, // desiredErc1155Quantity
@@ -103,6 +104,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
             1,
             address(0),
             1 ether,
+            address(0), // currency (ETH)
             address(0),
             0,
             0,
@@ -129,6 +131,7 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         market.updateListing(
             listingId,
             1 ether,
+            address(0), // newCurrency (keep ETH)
             address(0),
             0,
             0, // no swap

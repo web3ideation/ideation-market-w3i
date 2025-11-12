@@ -25,6 +25,9 @@ struct Listing {
     uint256 price;
     /// @notice Holder address captured at listing time.
     address seller;
+    /// @notice Currency for this listing. address(0) = ETH, otherwise ERC-20 token address.
+    /// @dev Must be in the allowedCurrencies mapping at listing creation time.
+    address currency;
     /// @notice Optional desired NFT contract for swap listings (address(0) means no swap).
     address desiredTokenAddress;
     /// @notice Desired token id (swap only).
@@ -50,8 +53,17 @@ struct AppStorage {
     mapping(uint128 listingId => Listing listing) listings;
     /// @notice Reverse index: NFT (contract,id) → active listing ids.
     mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds;
-    /// @notice ETH proceeds available to withdraw by address (sellers, fee collector, royalty receivers, buyers’ change).
-    mapping(address seller => uint256 amount) proceeds;
+    /// @notice Multi-currency proceeds ledger: seller => currency => amount.
+    /// @dev address(0) represents ETH. All ERC-20 proceeds are tracked by token address.
+    mapping(address seller => mapping(address currency => uint256 amount)) proceedsByToken;
+    /// @notice Allowed currencies for listings (curated list to prevent scam tokens).
+    /// @dev address(0) = ETH is always allowed.
+    mapping(address currency => bool allowed) allowedCurrencies;
+    /// @notice Iterable list of allowed currencies.
+    address[] allowedCurrenciesArray;
+    /// @notice Index helper for `allowedCurrenciesArray`.
+    /// @dev Maps currency address => index in array. Check allowedCurrencies[addr] first to distinguish from index 0.
+    mapping(address currency => uint256 index) allowedCurrenciesIndex;
     /// @notice Collection whitelist flags set by the Diamond Owner to curate Utility Token Contracts.
     mapping(address collection => bool isWhitelisted) whitelistedCollections;
     /// @notice Iterable list of whitelisted collections.

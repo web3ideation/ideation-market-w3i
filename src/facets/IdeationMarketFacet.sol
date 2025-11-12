@@ -37,6 +37,8 @@ error IdeationMarket__StillApproved();
 error IdeationMarket__PartialBuyNotPossible();
 error IdeationMarket__InvalidPurchaseQuantity();
 error IdeationMarket__InvalidUnitPrice();
+error IdeationMarket__CurrencyNotAllowed();
+error IdeationMarket__WrongPaymentCurrency();
 
 /// @title IdeationMarketFacet
 /// @notice Core marketplace logic: create/update/cancel/purchase listings, optional buyer whitelists, swaps, partial buys, and fee/royalty accounting.
@@ -55,6 +57,7 @@ contract IdeationMarketFacet {
      * @param tokenAddress The address of the NFT contract.
      * @param tokenId The token ID being listed.
      * @param price Listing price.
+     * @param currency Payment currency (address(0) = ETH, otherwise ERC-20 token address).
      * @param seller The address of the seller.
      * @param desiredTokenAddress The desired NFT address for swaps (0 for non-swap listing).
      * @param desiredTokenId The desired token ID for swaps (only applicable for swap listing).
@@ -67,6 +70,7 @@ contract IdeationMarketFacet {
         uint256 indexed tokenId,
         uint256 erc1155Quantity,
         uint256 price,
+        address currency,
         uint32 feeRate,
         address seller,
         bool buyerWhitelistEnabled,
@@ -83,6 +87,7 @@ contract IdeationMarketFacet {
         uint256 erc1155Quantity,
         bool partialBuy,
         uint256 price,
+        address currency,
         uint32 feeRate,
         address seller,
         address buyer,
@@ -105,6 +110,7 @@ contract IdeationMarketFacet {
         uint256 indexed tokenId,
         uint256 erc1155Quantity,
         uint256 price,
+        address currency,
         uint32 feeRate,
         address seller,
         bool buyerWhitelistEnabled,
@@ -113,8 +119,6 @@ contract IdeationMarketFacet {
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity
     );
-
-    event ProceedsWithdrawn(address indexed withdrawer, uint256 amount);
 
     event InnovationFeeUpdated(uint32 previousFee, uint32 newFee);
 
@@ -147,8 +151,8 @@ contract IdeationMarketFacet {
         _;
     }
 
-    /// @notice Simple non-reentrancy guard.
-    /// @dev Reverts with `IdeationMarket__Reentrant` when re-entered in guarded functions.
+    /// @notice Prevents reentrancy attacks using a simple boolean lock.
+    /// @dev Uses AppStorage.reentrancyLock to work across all facets in the diamond.
     modifier nonReentrant() {
         AppStorage storage s = LibAppStorage.appStorage();
         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
@@ -180,6 +184,7 @@ contract IdeationMarketFacet {
         uint256 tokenId,
         address erc1155Holder,
         uint256 price,
+        address currency,
         address desiredTokenAddress,
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
@@ -189,6 +194,12 @@ contract IdeationMarketFacet {
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
         AppStorage storage s = LibAppStorage.appStorage();
+
+        // ============ Currency Validation ============
+        // Ensure the currency is allowed (prevents listing in scam/malicious tokens)
+        if (!s.allowedCurrencies[currency]) {
+            revert IdeationMarket__CurrencyNotAllowed();
+        }
 
         // check if the Collection is Whitelisted
         if (!s.whitelistedCollections[tokenAddress]) {
@@ -285,6 +296,7 @@ contract IdeationMarketFacet {
             price: price,
             feeRate: s.innovationFee,
             seller: seller,
+            currency: currency,
             buyerWhitelistEnabled: buyerWhitelistEnabled,
             partialBuyEnabled: partialBuyEnabled,
             desiredTokenAddress: desiredTokenAddress,
@@ -309,6 +321,7 @@ contract IdeationMarketFacet {
             tokenId,
             erc1155Quantity,
             price,
+            currency,
             s.innovationFee,
             seller,
             buyerWhitelistEnabled,
@@ -321,23 +334,26 @@ contract IdeationMarketFacet {
 
     /// @notice Purchases a listing (optionally as a partial ERC-1155 buy and/or fulfilling a swap).
     /// @param listingId The target listing id.
-    /// @param expectedPrice Caller’s view of `listing.price` to guard against mid-tx updates.
-    /// @param expectedErc1155Quantity Caller’s view of `listing.erc1155Quantity` to guard against mid-tx updates.
-    /// @param expectedDesiredTokenAddress Caller’s view of `listing.desiredTokenAddress` to guard against mid-tx updates.
-    /// @param expectedDesiredTokenId Caller’s view of `listing.desiredTokenId` to guard against mid-tx updates.
-    /// @param expectedDesiredErc1155Quantity Caller’s view of `listing.desiredErc1155Quantity` to guard against mid-tx updates.
+    /// @param expectedPrice Caller's view of `listing.price` to guard against mid-tx updates.
+    /// @param expectedCurrency Caller's view of `listing.currency` to guard against mid-tx updates (front-run protection).
+    /// @param expectedErc1155Quantity Caller's view of `listing.erc1155Quantity` to guard against mid-tx updates.
+    /// @param expectedDesiredTokenAddress Caller's view of `listing.desiredTokenAddress` to guard against mid-tx updates.
+    /// @param expectedDesiredTokenId Caller's view of `listing.desiredTokenId` to guard against mid-tx updates.
+    /// @param expectedDesiredErc1155Quantity Caller's view of `listing.desiredErc1155Quantity` to guard against mid-tx updates.
     /// @param erc1155PurchaseQuantity For ERC-1155: exact units to purchase (0 for ERC-721).
     /// @param desiredErc1155Holder If fulfilling an ERC-1155 swap, the holder whose balance/approval is checked for the desired token.
     /// @dev Reverts if: collection de-whitelisted; buyer not whitelisted (when enabled); terms mismatch (front-run protection);
-    /// invalid purchase quantity; partial buy disallowed; `msg.value` < computed price; seller equals buyer; seller no longer owns/approved;
+    /// invalid purchase quantity; partial buy disallowed; payment amount incorrect; seller equals buyer; seller no longer owns/approved;
     /// royalty exceeds proceeds; swap balance/approval insufficient.
-    /// Accounting: fee = `price * feeRate / 100_000`, royalty (ERC-2981) deducted from seller proceeds, excess ETH credited to buyer’s `proceeds`.
-    /// For swap listings, buyer’s desired NFT is transferred to the seller before receiving the listed NFT.
+    /// Accounting: fee = `price * feeRate / 100_000`, royalty (ERC-2981) deducted from seller proceeds.
+    /// For ETH listings: excess ETH credited to buyer's proceeds. For ERC-20 listings: exact amount pulled from buyer via SafeERC20.
+    /// For swap listings, buyer's desired NFT is transferred to the seller before receiving the listed NFT.
     /// Deprecated listings by the swap seller for that token are cleaned (swap-and-pop) if they can no longer be fulfilled.
     /// If a whitelisted token is removed from the collection whitelist after being listed, the listing becomes unpurchasable and must be cleaned up using the cleanListing function. This cleanup process is handled by an offchain bot.
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,
+        address expectedCurrency,
         uint256 expectedErc1155Quantity,
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
@@ -360,9 +376,10 @@ contract IdeationMarketFacet {
             }
         }
 
-        // Check if Terms have changed in the meantime to guard against mid-tx updates
+        // Check if Terms have changed in the meantime to guard against mid-tx updates (front-running protection)
         if (
-            listedItem.price != expectedPrice || listedItem.desiredTokenAddress != expectedDesiredTokenAddress
+            listedItem.price != expectedPrice || listedItem.currency != expectedCurrency
+                || listedItem.desiredTokenAddress != expectedDesiredTokenAddress
                 || listedItem.desiredTokenId != expectedDesiredTokenId
                 || listedItem.desiredErc1155Quantity != expectedDesiredErc1155Quantity
                 || listedItem.erc1155Quantity != expectedErc1155Quantity
@@ -390,8 +407,20 @@ contract IdeationMarketFacet {
             purchasePrice = unitPrice * erc1155PurchaseQuantity;
         }
 
-        if (msg.value < purchasePrice) {
-            revert IdeationMarket__PriceNotMet(listedItem.listingId, purchasePrice, msg.value);
+        // Payment Validation & Processing
+        if (listedItem.currency == address(0)) {
+            // ETH listing: require sufficient msg.value
+            if (msg.value < purchasePrice) {
+                revert IdeationMarket__PriceNotMet(listedItem.listingId, purchasePrice, msg.value);
+            }
+        } else {
+            // ERC-20 listing: msg.value must be 0, pull tokens from buyer
+            if (msg.value > 0) {
+                revert IdeationMarket__WrongPaymentCurrency();
+            }
+            // Pull exact ERC-20 amount from buyer using SafeERC20-style transfer
+            // Buyer must have approved diamond for this amount beforehand
+            _safeTransferFrom(listedItem.currency, msg.sender, address(this), purchasePrice);
         }
 
         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
@@ -430,19 +459,24 @@ contract IdeationMarketFacet {
             if (royaltyAmount > 0) {
                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
                 sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
-                s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
+                // Credit royalty in listing currency (all proceeds in same currency)
+                s.proceedsByToken[royaltyReceiver][listedItem.currency] += royaltyAmount;
                 emit RoyaltyPaid(listingId, royaltyReceiver, listedItem.tokenAddress, listedItem.tokenId, royaltyAmount);
             }
         }
 
-        // handle excess payment
-        uint256 excessPayment = msg.value - purchasePrice;
+        // Proceeds Distribution
+        // Credit seller proceeds in listing currency
+        s.proceedsByToken[listedItem.seller][listedItem.currency] += sellerProceeds;
+        // Credit marketplace fee in listing currency
+        s.proceedsByToken[LibDiamond.contractOwner()][listedItem.currency] += innovationProceeds;
 
-        // Update proceeds for the seller, marketplace owner and potentially buyer
-        s.proceeds[listedItem.seller] += sellerProceeds;
-        s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
-        if (excessPayment > 0) {
-            s.proceeds[msg.sender] += excessPayment;
+        // Handle excess ETH payment (only for ETH listings)
+        if (listedItem.currency == address(0)) {
+            uint256 excessPayment = msg.value - purchasePrice;
+            if (excessPayment > 0) {
+                s.proceedsByToken[msg.sender][address(0)] += excessPayment;
+            }
         }
 
         // in case it's a swap listing, send that desired token (the frontend approves the marketplace for that action beforehand)
@@ -556,6 +590,7 @@ contract IdeationMarketFacet {
             erc1155PurchaseQuantity,
             partialBuy,
             purchasePrice,
+            listedItem.currency,
             listedItem.feeRate,
             listedItem.seller,
             msg.sender,
@@ -650,6 +685,7 @@ contract IdeationMarketFacet {
     function updateListing(
         uint128 listingId,
         uint256 newPrice,
+        address newCurrency,
         address newDesiredTokenAddress,
         uint256 newDesiredTokenId,
         uint256 newDesiredErc1155Quantity,
@@ -710,6 +746,11 @@ contract IdeationMarketFacet {
             return;
         }
 
+        // Ensure the new currency is allowed
+        if (!s.allowedCurrencies[newCurrency]) {
+            revert IdeationMarket__CurrencyNotAllowed();
+        }
+
         // check validity of newPartialBuyEnabled Flag
         if (newErc1155Quantity <= 1 && newPartialBuyEnabled) {
             revert IdeationMarket__PartialBuyNotPossible();
@@ -733,6 +774,7 @@ contract IdeationMarketFacet {
         );
 
         listedItem.price = newPrice;
+        listedItem.currency = newCurrency;
         listedItem.desiredTokenAddress = newDesiredTokenAddress;
         listedItem.desiredTokenId = newDesiredTokenId;
         listedItem.desiredErc1155Quantity = newDesiredErc1155Quantity;
@@ -756,6 +798,7 @@ contract IdeationMarketFacet {
             tokenId,
             newErc1155Quantity,
             newPrice,
+            newCurrency,
             listedItem.feeRate,
             seller,
             newBuyerWhitelistEnabled,
@@ -764,25 +807,6 @@ contract IdeationMarketFacet {
             newDesiredTokenId,
             newDesiredErc1155Quantity
         );
-    }
-
-    /// @notice Withdraws the caller’s accumulated ETH proceeds.
-    /// @dev Reverts `IdeationMarket__NoProceeds` if zero. Sets balance to zero before transferring.
-    /// Emits `ProceedsWithdrawn`. Reverts `IdeationMarket__TransferFailed` on failed call.
-    function withdrawProceeds() external nonReentrant {
-        AppStorage storage s = LibAppStorage.appStorage();
-        uint256 proceeds = s.proceeds[msg.sender];
-
-        if (proceeds == 0) {
-            revert IdeationMarket__NoProceeds();
-        }
-
-        s.proceeds[msg.sender] = 0;
-        (bool success,) = payable(msg.sender).call{value: proceeds}("");
-        if (!success) {
-            revert IdeationMarket__TransferFailed();
-        }
-        emit ProceedsWithdrawn(msg.sender, proceeds);
     }
 
     /// @notice Updates the marketplace fee rate  (e.g., 1_000 for 1% with a denominator of 100_000).
@@ -966,6 +990,30 @@ contract IdeationMarketFacet {
                 listingArray[i] = listingArray[listingArray.length - 1];
                 listingArray.pop();
             }
+        }
+    }
+
+    /// @notice SafeERC20-style transferFrom that handles non-standard tokens.
+    /// @dev Handles tokens like USDT that don't return bool, and tokens that return false on failure.
+    /// Uses low-level call to avoid ABI decoding issues with non-compliant ERC-20 tokens.
+    /// @param token ERC-20 token address.
+    /// @param from Address to transfer from (buyer).
+    /// @param to Address to transfer to (this diamond contract).
+    /// @param amount Amount to transfer.
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+        // Build the calldata for ERC20.transferFrom(address,address,uint256)
+        // Function selector: bytes4(keccak256("transferFrom(address,address,uint256)")) = 0x23b872dd
+        bytes memory data = abi.encodeWithSelector(0x23b872dd, from, to, amount);
+
+        // Call the token contract
+        (bool success, bytes memory returndata) = token.call(data);
+
+        // Check for success:
+        // 1. Call must not revert
+        // 2. If returndata exists, it must decode to true (handles tokens that return bool)
+        // 3. If no returndata, assume success (handles USDT, XAUt that don't return anything)
+        if (!success || (returndata.length > 0 && !abi.decode(returndata, (bool)))) {
+            revert IdeationMarket__TransferFailed();
         }
     }
 

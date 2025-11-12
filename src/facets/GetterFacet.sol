@@ -72,14 +72,6 @@ contract GetterFacet {
         return listing;
     }
 
-    /// @notice Returns the proceeds available for a seller.
-    /// @param seller The seller's address.
-    /// @return The total proceeds for the seller (wei).
-    function getProceeds(address seller) external view returns (uint256) {
-        AppStorage storage s = LibAppStorage.appStorage();
-        return s.proceeds[seller];
-    }
-
     /// @notice Returns the contract's Ether balance.
     /// @return The balance of the contract in wei.
     function getBalance() external view returns (uint256) {
@@ -145,5 +137,83 @@ contract GetterFacet {
     /// @return The pending owner address or address(0) if none.
     function getPendingOwner() external view returns (address) {
         return LibDiamond.diamondStorage().pendingContractOwner;
+    }
+
+    // Multi-Currency Proceeds Getters
+
+    /// @notice Get proceeds balance for a user in a specific currency.
+    /// @param user Address to query (seller, royalty receiver, etc.).
+    /// @param currency Token address (address(0) = ETH).
+    /// @return amount Available proceeds in that currency.
+    function getProceeds(address user, address currency) external view returns (uint256 amount) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.proceedsByToken[user][currency];
+    }
+
+    /// @notice Get ALL proceeds for a user across all currencies in one call.
+    /// @dev Iterates through all allowed currencies and returns only those with non-zero balances.
+    /// @param user Address to query (seller, royalty receiver, etc.).
+    /// @return currencies Array of token addresses where user has proceeds.
+    /// @return amounts Array of proceeds amounts (same order as currencies).
+    function getAllProceeds(address user)
+        external
+        view
+        returns (address[] memory currencies, uint256[] memory amounts)
+    {
+        AppStorage storage s = LibAppStorage.appStorage();
+
+        // Get all allowed currencies
+        address[] memory allCurrencies = s.allowedCurrenciesArray;
+        uint256 totalCurrencies = allCurrencies.length;
+
+        // First pass: count how many currencies have non-zero balance
+        uint256 nonZeroCount = 0;
+        for (uint256 i = 0; i < totalCurrencies;) {
+            if (s.proceedsByToken[user][allCurrencies[i]] > 0) {
+                nonZeroCount++;
+            }
+            unchecked {
+                i++;
+            }
+        }
+
+        // Allocate memory arrays of exact size needed
+        currencies = new address[](nonZeroCount);
+        amounts = new uint256[](nonZeroCount);
+
+        // Second pass: populate arrays with non-zero balances
+        uint256 arrayIndex = 0;
+        for (uint256 i = 0; i < totalCurrencies;) {
+            address currency = allCurrencies[i];
+            uint256 balance = s.proceedsByToken[user][currency];
+            if (balance > 0) {
+                currencies[arrayIndex] = currency;
+                amounts[arrayIndex] = balance;
+                arrayIndex++;
+            }
+            unchecked {
+                i++;
+            }
+        }
+
+        return (currencies, amounts);
+    }
+
+    // Currency Allowlist Getters
+
+    /// @notice Check if a currency is allowed for new listings.
+    /// @param currency Token address to check.
+    /// @return allowed True if currency can be used in createListing.
+    function isAllowedCurrency(address currency) external view returns (bool allowed) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.allowedCurrencies[currency];
+    }
+
+    /// @notice Get all allowed currencies as an array.
+    /// @dev Array includes address(0) for ETH.
+    /// @return currencies Array of all allowed token addresses.
+    function getAllowedCurrencies() external view returns (address[] memory currencies) {
+        AppStorage storage s = LibAppStorage.appStorage();
+        return s.allowedCurrenciesArray;
     }
 }

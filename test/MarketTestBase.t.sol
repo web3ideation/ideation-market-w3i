@@ -13,6 +13,7 @@ import "../src/facets/IdeationMarketFacet.sol";
 import "../src/facets/CollectionWhitelistFacet.sol";
 import "../src/facets/BuyerWhitelistFacet.sol";
 import "../src/facets/GetterFacet.sol";
+import "../src/facets/PaymentFacet.sol";
 import "../src/interfaces/IDiamondCutFacet.sol";
 import "../src/interfaces/IDiamondLoupeFacet.sol";
 import "../src/interfaces/IERC165.sol";
@@ -37,6 +38,7 @@ abstract contract MarketTestBase is Test {
     CollectionWhitelistFacet internal collections;
     BuyerWhitelistFacet internal buyers;
     GetterFacet internal getter;
+    PaymentFacet internal payment;
 
     // Address of the initial diamondCut facet deployed in setUp
     address internal diamondCutFacetAddr;
@@ -48,6 +50,7 @@ abstract contract MarketTestBase is Test {
     address internal collectionsImpl;
     address internal buyersImpl;
     address internal getterImpl;
+    address internal paymentImpl;
 
     // Test addresses
     address internal owner;
@@ -82,6 +85,7 @@ abstract contract MarketTestBase is Test {
         CollectionWhitelistFacet collectionFacet = new CollectionWhitelistFacet();
         BuyerWhitelistFacet buyerFacet = new BuyerWhitelistFacet();
         GetterFacet getterFacet = new GetterFacet();
+        PaymentFacet paymentFacet = new PaymentFacet();
 
         // Deploy the diamond and add the initial diamondCut function
         diamond = new IdeationMarketDiamond(owner, address(cutFacet));
@@ -90,7 +94,7 @@ abstract contract MarketTestBase is Test {
         diamondCutFacetAddr = address(cutFacet);
 
         // Prepare facet cut definitions matching the deploy script
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](7);
 
         // Diamond Loupe selectors
         bytes4[] memory loupeSelectors = new bytes4[](5);
@@ -117,14 +121,13 @@ abstract contract MarketTestBase is Test {
         });
 
         // Marketplace selectors
-        bytes4[] memory marketSelectors = new bytes4[](7);
+        bytes4[] memory marketSelectors = new bytes4[](6);
         marketSelectors[0] = IdeationMarketFacet.createListing.selector;
         marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
         marketSelectors[2] = IdeationMarketFacet.cancelListing.selector;
         marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
-        marketSelectors[4] = IdeationMarketFacet.withdrawProceeds.selector;
-        marketSelectors[5] = IdeationMarketFacet.setInnovationFee.selector;
-        marketSelectors[6] = IdeationMarketFacet.cleanListing.selector;
+        marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
+        marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
         cuts[2] = IDiamondCutFacet.FacetCut({
             facetAddress: address(marketFacet),
             action: IDiamondCutFacet.FacetCutAction.Add,
@@ -153,21 +156,36 @@ abstract contract MarketTestBase is Test {
             functionSelectors: buyerSelectors
         });
 
+        // Payment selectors
+        bytes4[] memory paymentSelectors = new bytes4[](5);
+        paymentSelectors[0] = PaymentFacet.withdrawProceeds.selector;
+        paymentSelectors[1] = PaymentFacet.withdrawAllProceeds.selector;
+        paymentSelectors[2] = PaymentFacet.addAllowedCurrency.selector;
+        paymentSelectors[3] = PaymentFacet.removeAllowedCurrency.selector;
+        cuts[5] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(paymentFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: paymentSelectors
+        });
+
         // Getter selectors (add all view functions exposed by GetterFacet)
-        bytes4[] memory getterSelectors = new bytes4[](12);
+        bytes4[] memory getterSelectors = new bytes4[](15);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
-        getterSelectors[2] = GetterFacet.getProceeds.selector;
-        getterSelectors[3] = GetterFacet.getBalance.selector;
-        getterSelectors[4] = GetterFacet.getInnovationFee.selector;
-        getterSelectors[5] = GetterFacet.getNextListingId.selector;
-        getterSelectors[6] = GetterFacet.isCollectionWhitelisted.selector;
-        getterSelectors[7] = GetterFacet.getWhitelistedCollections.selector;
-        getterSelectors[8] = GetterFacet.getContractOwner.selector;
-        getterSelectors[9] = GetterFacet.isBuyerWhitelisted.selector;
-        getterSelectors[10] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
-        getterSelectors[11] = GetterFacet.getPendingOwner.selector;
-        cuts[5] = IDiamondCutFacet.FacetCut({
+        getterSelectors[2] = GetterFacet.getBalance.selector;
+        getterSelectors[3] = GetterFacet.getInnovationFee.selector;
+        getterSelectors[4] = GetterFacet.getNextListingId.selector;
+        getterSelectors[5] = GetterFacet.isCollectionWhitelisted.selector;
+        getterSelectors[6] = GetterFacet.getWhitelistedCollections.selector;
+        getterSelectors[7] = GetterFacet.getContractOwner.selector;
+        getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
+        getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[10] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[11] = GetterFacet.getProceeds.selector;
+        getterSelectors[12] = GetterFacet.getAllProceeds.selector;
+        getterSelectors[13] = GetterFacet.isAllowedCurrency.selector;
+        getterSelectors[14] = GetterFacet.getAllowedCurrencies.selector;
+        cuts[6] = IDiamondCutFacet.FacetCut({
             facetAddress: address(getterFacet),
             action: IDiamondCutFacet.FacetCutAction.Add,
             functionSelectors: getterSelectors
@@ -188,6 +206,7 @@ abstract contract MarketTestBase is Test {
         collections = CollectionWhitelistFacet(address(diamond));
         buyers = BuyerWhitelistFacet(address(diamond));
         getter = GetterFacet(address(diamond));
+        payment = PaymentFacet(address(diamond));
 
         // cache impl addrs
         loupeImpl = address(loupeFacet);
@@ -196,6 +215,7 @@ abstract contract MarketTestBase is Test {
         collectionsImpl = address(collectionFacet);
         buyersImpl = address(buyerFacet);
         getterImpl = address(getterFacet);
+        paymentImpl = address(paymentFacet);
 
         // Deploy mock tokens and mint balances for seller
         erc721 = new MockERC721();
@@ -244,9 +264,20 @@ abstract contract MarketTestBase is Test {
     {
         _whitelistCollectionAndApproveERC721();
         vm.startPrank(seller);
-        // Provide zero values for swap params and quantity
+        // Provide zero values for swap params and quantity, use ETH (address(0)) as currency
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, buyerWhitelistEnabled, false, allowedBuyers
+            address(erc721),
+            1,
+            address(0),
+            1 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            0,
+            buyerWhitelistEnabled,
+            false,
+            allowedBuyers
         );
         vm.stopPrank();
         // Next listing id is counter + 1
@@ -266,6 +297,7 @@ abstract contract MarketTestBase is Test {
             1, // tokenId (align with your ERC721 helper; change if needed)
             seller, // erc1155Holder (must be the holder or authorized operator)
             1 ether, // price
+            address(0), // currency (ETH)
             address(0), // desiredTokenAddress (no swap)
             0, // desiredTokenId
             0, // desiredErc1155Quantity (no swap)
@@ -557,17 +589,17 @@ contract VersionFacetV2 {
 // Attempts to re-enter withdrawProceeds from its receive() callback. The
 // nonReentrant modifier on withdrawProceeds should prevent success.
 contract ReentrantWithdrawer {
-    IdeationMarketFacet public market;
+    PaymentFacet public payment;
     bool internal attacked;
 
     constructor(address diamond) {
-        market = IdeationMarketFacet(diamond);
+        payment = PaymentFacet(diamond);
     }
 
     receive() external payable {
         if (!attacked) {
             attacked = true;
-            try market.withdrawProceeds() {
+            try payment.withdrawProceeds(address(0)) {
                 // ignore success; should revert due to nonReentrant
             } catch {
                 // ignore revert
@@ -581,11 +613,11 @@ contract ReentrantWithdrawer {
 contract MaliciousERC1155 {
     mapping(uint256 => mapping(address => uint256)) internal _balances;
     mapping(address => mapping(address => bool)) internal _operatorApprovals;
-    IdeationMarketFacet public market;
+    PaymentFacet public payment;
     bool internal attacked;
 
     constructor(address diamond) {
-        market = IdeationMarketFacet(diamond);
+        payment = PaymentFacet(diamond);
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
@@ -612,7 +644,7 @@ contract MaliciousERC1155 {
         // Attempt to re-enter withdrawProceeds once.
         if (!attacked) {
             attacked = true;
-            try market.withdrawProceeds() {
+            try payment.withdrawProceeds(address(0)) {
                 // no-op: should revert due to reentrancy lock
             } catch {
                 // ignore the revert
@@ -631,11 +663,11 @@ contract MaliciousERC721 {
     mapping(uint256 => address) internal _owners;
     mapping(uint256 => address) internal _tokenApprovals;
     mapping(address => mapping(address => bool)) internal _operatorApprovals;
-    IdeationMarketFacet public market;
+    PaymentFacet public payment;
     bool internal attacked;
 
     constructor(address diamond) {
-        market = IdeationMarketFacet(diamond);
+        payment = PaymentFacet(diamond);
     }
 
     function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
@@ -687,7 +719,7 @@ contract MaliciousERC721 {
         // Attempt reentrancy once.
         if (!attacked) {
             attacked = true;
-            try market.withdrawProceeds() {
+            try payment.withdrawProceeds(address(0)) {
                 // will revert due to reentrancy lock; ignore
             } catch {
                 // ignore revert
@@ -1010,7 +1042,7 @@ contract ReenteringReceiver721 {
         if (!attacked) {
             attacked = true;
             // If this ever succeeds, fail the whole test.
-            try market.purchaseListing{value: price}(listingId, price, 0, address(0), 0, 0, 0, address(0)) {
+            try market.purchaseListing{value: price}(listingId, price, address(0), 0, address(0), 0, 0, 0, address(0)) {
                 revert("reentrant 721 purchase succeeded");
             } catch { /* expected to fail */ }
         }
@@ -1039,7 +1071,9 @@ contract ReenteringReceiver1155 {
         if (!attacked) {
             attacked = true;
             // If this ever succeeds, fail the whole test.
-            try market.purchaseListing{value: price}(listingId, price, qty, address(0), 0, 0, qty, address(0)) {
+            try market.purchaseListing{value: price}(
+                listingId, price, address(0), qty, address(0), 0, 0, qty, address(0)
+            ) {
                 revert("reentrant 1155 purchase succeeded");
             } catch { /* expected to fail */ }
         }

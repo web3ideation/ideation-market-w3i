@@ -30,6 +30,7 @@ contract DeprecatedSwapListingDeletionTest is MarketTestBase {
             ID,
             buyer, // erc1155Holder
             priceWei, // price (any, irrelevant for this test)
+            address(0), // currency (ETH)
             address(0), // desiredTokenAddress (no swap)
             0, // desiredTokenId
             0, // desiredErc1155Quantity
@@ -48,6 +49,7 @@ contract DeprecatedSwapListingDeletionTest is MarketTestBase {
             ID,
             address(0), // erc1155Holder (unused for ERC721)
             0, // price (0 ok for swap listings)
+            address(0), // currency (ETH)
             address(erc1155), // desiredTokenAddress (want ERC1155)
             ID, // desiredTokenId
             desiredQty, // desiredErc1155Quantity (>0 => ERC1155 swap)
@@ -63,6 +65,7 @@ contract DeprecatedSwapListingDeletionTest is MarketTestBase {
         market.purchaseListing(
             swapId,
             0, // expectedPrice
+            address(0), // expectedCurrency (ETH)
             0, // expectedErc1155Quantity (listing is ERC721)
             address(erc1155), // expectedDesiredTokenAddress
             ID, // expectedDesiredTokenId
