@@ -53,9 +53,6 @@ struct AppStorage {
     mapping(uint128 listingId => Listing listing) listings;
     /// @notice Reverse index: NFT (contract,id) → active listing ids.
     mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds;
-    /// @notice Multi-currency proceeds ledger: seller => currency => amount.
-    /// @dev address(0) represents ETH. All ERC-20 proceeds are tracked by token address.
-    mapping(address seller => mapping(address currency => uint256 amount)) proceedsByToken;
     /// @notice Allowed currencies for listings (curated list to prevent scam tokens).
     /// @dev address(0) = ETH is always allowed.
     mapping(address currency => bool allowed) allowedCurrencies;

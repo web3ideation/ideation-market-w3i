@@ -14,6 +14,7 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 import {CollectionWhitelistFacet} from "../src/facets/CollectionWhitelistFacet.sol";
 import {BuyerWhitelistFacet} from "../src/facets/BuyerWhitelistFacet.sol";
 import {GetterFacet} from "../src/facets/GetterFacet.sol";
+import {CurrencyWhitelistFacet} from "../src/facets/CurrencyWhitelistFacet.sol";
 
 import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -60,6 +61,8 @@ contract DeployDiamond is Script {
         console.log("Deployed buyerWhitelistFacet contract at address:", address(buyerWhitelistFacet));
         GetterFacet getterFacet = new GetterFacet();
         console.log("Deployed getterFacet contract at address:", address(getterFacet));
+        CurrencyWhitelistFacet currencyWhitelistFacet = new CurrencyWhitelistFacet();
+        console.log("Deployed currencyWhitelistFacet contract at address:", address(currencyWhitelistFacet));
         DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
         console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
 
@@ -68,7 +71,7 @@ contract DeployDiamond is Script {
         console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](6);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](7);
 
         bytes4[] memory loupeSelectors = new bytes4[](5);
         loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
@@ -82,14 +85,13 @@ contract DeployDiamond is Script {
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
         ownershipSelectors[2] = OwnershipFacet.acceptOwnership.selector; // finalize handover
 
-        bytes4[] memory marketSelectors = new bytes4[](7);
+        bytes4[] memory marketSelectors = new bytes4[](6);
         marketSelectors[0] = IdeationMarketFacet.createListing.selector;
         marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
         marketSelectors[2] = IdeationMarketFacet.cancelListing.selector;
         marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
-        marketSelectors[4] = IdeationMarketFacet.withdrawProceeds.selector;
-        marketSelectors[5] = IdeationMarketFacet.setInnovationFee.selector;
-        marketSelectors[6] = IdeationMarketFacet.cleanListing.selector;
+        marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
+        marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
 
         bytes4[] memory collectionWhitelistSelectors = new bytes4[](4);
         collectionWhitelistSelectors[0] = CollectionWhitelistFacet.addWhitelistedCollection.selector;
@@ -101,19 +103,24 @@ contract DeployDiamond is Script {
         buyerWhitelistSelectors[0] = BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector;
         buyerWhitelistSelectors[1] = BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector;
 
-        bytes4[] memory getterSelectors = new bytes4[](12);
+        bytes4[] memory currencyWhitelistSelectors = new bytes4[](2);
+        currencyWhitelistSelectors[0] = CurrencyWhitelistFacet.addAllowedCurrency.selector;
+        currencyWhitelistSelectors[1] = CurrencyWhitelistFacet.removeAllowedCurrency.selector;
+
+        bytes4[] memory getterSelectors = new bytes4[](13);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
-        getterSelectors[2] = GetterFacet.getProceeds.selector;
-        getterSelectors[3] = GetterFacet.getBalance.selector;
-        getterSelectors[4] = GetterFacet.getInnovationFee.selector;
-        getterSelectors[5] = GetterFacet.getNextListingId.selector;
-        getterSelectors[6] = GetterFacet.isCollectionWhitelisted.selector;
-        getterSelectors[7] = GetterFacet.getWhitelistedCollections.selector;
-        getterSelectors[8] = GetterFacet.getContractOwner.selector;
-        getterSelectors[9] = GetterFacet.isBuyerWhitelisted.selector;
-        getterSelectors[10] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
-        getterSelectors[11] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[2] = GetterFacet.getBalance.selector;
+        getterSelectors[3] = GetterFacet.getInnovationFee.selector;
+        getterSelectors[4] = GetterFacet.getNextListingId.selector;
+        getterSelectors[5] = GetterFacet.isCollectionWhitelisted.selector;
+        getterSelectors[6] = GetterFacet.getWhitelistedCollections.selector;
+        getterSelectors[7] = GetterFacet.getContractOwner.selector;
+        getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
+        getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[10] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[11] = GetterFacet.isCurrencyAllowed.selector;
+        getterSelectors[12] = GetterFacet.getAllowedCurrencies.selector;
 
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
@@ -152,13 +159,19 @@ contract DeployDiamond is Script {
             functionSelectors: getterSelectors
         });
 
+        cuts[6] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(currencyWhitelistFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: currencyWhitelistSelectors
+        });
+
         // Cut and initialize storage variables
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
             cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );
 
-        // Post-deployment sanity check for the total of the 7 facets
-        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 7, "Diamond cut failed");
+        // Post-deployment sanity check for the total of the 8 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Cut)
+        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 8, "Diamond cut failed");
 
         console.log("Diamond cuts complete");
         console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());

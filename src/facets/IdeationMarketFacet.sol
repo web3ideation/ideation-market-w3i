@@ -16,7 +16,6 @@ error IdeationMarket__NotAuthorizedOperator();
 error IdeationMarket__ListingTermsChanged();
 error IdeationMarket__FreeListingsNotSupported();
 error IdeationMarket__PriceNotMet(uint128 listingId, uint256 price, uint256 value);
-error IdeationMarket__NoProceeds();
 error IdeationMarket__SameBuyerAsSeller();
 error IdeationMarket__NoSwapForSameToken();
 error IdeationMarket__NotSupportedTokenStandard();
@@ -28,7 +27,6 @@ error IdeationMarket__InvalidNoSwapParameters();
 error IdeationMarket__SellerInsufficientTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__RoyaltyFeeExceedsProceeds();
 error IdeationMarket__NotAuthorizedToCancel();
-error IdeationMarket__TransferFailed();
 error IdeationMarket__InsufficientSwapTokenBalance(uint256 required, uint256 available);
 error IdeationMarket__WhitelistDisabled();
 error IdeationMarket__WrongErc1155HolderParameter();
@@ -39,6 +37,8 @@ error IdeationMarket__InvalidPurchaseQuantity();
 error IdeationMarket__InvalidUnitPrice();
 error IdeationMarket__CurrencyNotAllowed();
 error IdeationMarket__WrongPaymentCurrency();
+error IdeationMarket__EthTransferFailed(address receiver);
+error IdeationMarket__ERC20TransferFailed(address token, address receiver);
 
 /// @title IdeationMarketFacet
 /// @notice Core marketplace logic: create/update/cancel/purchase listings, optional buyer whitelists, swaps, partial buys, and fee/royalty accounting.
@@ -47,8 +47,9 @@ error IdeationMarket__WrongPaymentCurrency();
 /// - Collection whitelist gates listing updates and purchases; de-whitelisting blocks buys and is cleaned via `cleanListing`.
 /// - ERC-1155 vs ERC-721: `erc1155Quantity == 0` ⇒ ERC-721, `> 0` ⇒ ERC-1155. Partial buys only for ERC-1155 and require `price % quantity == 0`.
 /// - Swaps: the buyer transfers a specified NFT to the seller during purchase; same-token swaps are disallowed.
-/// - Royalties (ERC-2981) are deducted from the seller’s proceeds and credited to the royalty receiver in `proceeds`.
-/// - Excess ETH sent in a purchase is credited to the buyer’s `proceeds` (withdrawn via `withdrawProceeds`), not auto-refunded inline.
+/// - Royalties (ERC-2981) are deducted from seller proceeds and transferred directly to the royalty receiver during purchase.
+/// - Payments are distributed atomically in order: marketplace owner (innovation fee) → seller (proceeds minus fees/royalties) → royalty receiver (if any). All transfers happen immediately during purchase.
+/// - ETH purchases require exact msg.value (no overpayment). ERC-20 purchases use buyer's approval for direct transfers to recipients (diamond never holds tokens).
 /// - Reentrancy guard: single boolean `reentrancyLock` flip-flop in storage.
 contract IdeationMarketFacet {
     /**
@@ -130,12 +131,16 @@ contract IdeationMarketFacet {
         address triggeredBy
     );
 
+    event InnovationFeePaid(
+        uint128 indexed listingId, address indexed marketplaceOwner, address indexed currency, uint256 innovationFee
+    );
+
     event RoyaltyPaid(
-        uint128 indexed listingId,
-        address indexed royaltyReceiver,
-        address indexed tokenAddress,
-        uint256 tokenId,
-        uint256 royaltyAmount
+        uint128 indexed listingId, address indexed royaltyReceiver, address indexed currency, uint256 royaltyAmount
+    );
+
+    event SellerProceedsPaid(
+        uint128 indexed listingId, address indexed seller, address indexed currency, uint256 sellerProceeds
     );
 
     event CollectionWhitelistRevokedCancelTriggered(uint128 indexed listingId, address indexed tokenAddress);
@@ -343,10 +348,11 @@ contract IdeationMarketFacet {
     /// @param erc1155PurchaseQuantity For ERC-1155: exact units to purchase (0 for ERC-721).
     /// @param desiredErc1155Holder If fulfilling an ERC-1155 swap, the holder whose balance/approval is checked for the desired token.
     /// @dev Reverts if: collection de-whitelisted; buyer not whitelisted (when enabled); terms mismatch (front-run protection);
-    /// invalid purchase quantity; partial buy disallowed; payment amount incorrect; seller equals buyer; seller no longer owns/approved;
+    /// invalid purchase quantity; partial buy disallowed; payment amount incorrect (must be exact for ETH); seller equals buyer; seller no longer owns/approved;
     /// royalty exceeds proceeds; swap balance/approval insufficient.
     /// Accounting: fee = `price * feeRate / 100_000`, royalty (ERC-2981) deducted from seller proceeds.
-    /// For ETH listings: excess ETH credited to buyer's proceeds. For ERC-20 listings: exact amount pulled from buyer via SafeERC20.
+    /// For ETH listings: requires exact msg.value (no overpayment allowed). For ERC-20 listings: uses buyer's approval to transfer directly to recipients.
+    /// Payments distributed atomically after NFT transfer: marketplace owner (innovation fee) → royalty receiver (if any, from curated collections) → seller (proceeds).
     /// For swap listings, buyer's desired NFT is transferred to the seller before receiving the listed NFT.
     /// Deprecated listings by the swap seller for that token are cleaned (swap-and-pop) if they can no longer be fulfilled.
     /// If a whitelisted token is removed from the collection whitelist after being listed, the listing becomes unpurchasable and must be cleaned up using the cleanListing function. This cleanup process is handled by an offchain bot.
@@ -407,20 +413,18 @@ contract IdeationMarketFacet {
             purchasePrice = unitPrice * erc1155PurchaseQuantity;
         }
 
-        // Payment Validation & Processing
+        // Payment Validation
         if (listedItem.currency == address(0)) {
-            // ETH listing: require sufficient msg.value
-            if (msg.value < purchasePrice) {
+            // ETH listing: require EXACT msg.value (no overpayment)
+            if (msg.value != purchasePrice) {
                 revert IdeationMarket__PriceNotMet(listedItem.listingId, purchasePrice, msg.value);
             }
         } else {
-            // ERC-20 listing: msg.value must be 0, pull tokens from buyer
+            // ERC-20 listing: msg.value must be 0
+            // Tokens will be transferred directly from buyer to recipients later using buyer's approval
             if (msg.value > 0) {
                 revert IdeationMarket__WrongPaymentCurrency();
             }
-            // Pull exact ERC-20 amount from buyer using SafeERC20-style transfer
-            // Buyer must have approved diamond for this amount beforehand
-            _safeTransferFrom(listedItem.currency, msg.sender, address(this), purchasePrice);
         }
 
         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
@@ -446,38 +450,24 @@ contract IdeationMarketFacet {
             requireERC721Approval(listedItem.tokenAddress, listedItem.tokenId);
         }
 
-        // Calculate the innovation fee based on the listing feeRate (e.g., 1_000 for 1% with a denominator of 100_000)
-        uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+        // Calculate payment splits (will be distributed after NFT transfer)
+        uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
+        uint256 remainingProceeds = purchasePrice - innovationFee;
 
-        // Seller receives sale price minus the innovation fee
-        uint256 sellerProceeds = purchasePrice - innovationProceeds;
+        address royaltyReceiver = address(0);
+        uint256 royaltyAmount = 0;
 
-        // in case there is a ERC2981 Royalty defined, Royalties will get deducted from the sellerProceeds aswell and added to the proceeds of the Royalty Receiver
+        // Check for ERC2981 royalties
         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
-            (address royaltyReceiver, uint256 royaltyAmount) =
+            (royaltyReceiver, royaltyAmount) =
                 IERC2981(listedItem.tokenAddress).royaltyInfo(listedItem.tokenId, purchasePrice);
             if (royaltyAmount > 0) {
-                if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
-                sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
-                // Credit royalty in listing currency (all proceeds in same currency)
-                s.proceedsByToken[royaltyReceiver][listedItem.currency] += royaltyAmount;
-                emit RoyaltyPaid(listingId, royaltyReceiver, listedItem.tokenAddress, listedItem.tokenId, royaltyAmount);
+                if (remainingProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
+                remainingProceeds -= royaltyAmount;
             }
         }
 
-        // Proceeds Distribution
-        // Credit seller proceeds in listing currency
-        s.proceedsByToken[listedItem.seller][listedItem.currency] += sellerProceeds;
-        // Credit marketplace fee in listing currency
-        s.proceedsByToken[LibDiamond.contractOwner()][listedItem.currency] += innovationProceeds;
-
-        // Handle excess ETH payment (only for ETH listings)
-        if (listedItem.currency == address(0)) {
-            uint256 excessPayment = msg.value - purchasePrice;
-            if (excessPayment > 0) {
-                s.proceedsByToken[msg.sender][address(0)] += excessPayment;
-            }
-        }
+        uint256 sellerProceeds = remainingProceeds;
 
         // in case it's a swap listing, send that desired token (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredTokenAddress != address(0)) {
@@ -582,6 +572,19 @@ contract IdeationMarketFacet {
         } else {
             IERC721(listedItem.tokenAddress).safeTransferFrom(listedItem.seller, msg.sender, listedItem.tokenId);
         }
+
+        // Distribute payments atomically after NFT transfer (security: CEI pattern)
+        _distributePayments(
+            listedItem.currency,
+            msg.sender,
+            sellerProceeds,
+            listedItem.seller,
+            innovationFee,
+            LibDiamond.contractOwner(),
+            royaltyReceiver,
+            royaltyAmount,
+            listingId
+        );
 
         emit ListingPurchased(
             listedItem.listingId,
@@ -993,12 +996,78 @@ contract IdeationMarketFacet {
         }
     }
 
+    /// @notice Distributes payment directly from buyer to all recipients atomically.
+    /// @dev Called AFTER NFT transfer to prevent reentrancy. For ETH: forwards from contract balance.
+    /// For ERC-20: uses buyer's approval to transfer directly (contract never holds tokens).
+    /// Payment order: marketplace owner (most trusted) → royalty receiver → seller (least trusted).
+    /// @param currency Payment currency (address(0) = ETH, otherwise ERC-20).
+    /// @param buyer Address of the buyer (for ERC-20 transferFrom source).
+    /// @param sellerProceeds Amount to send to seller.
+    /// @param seller Seller address.
+    /// @param innovationFee Marketplace fee amount.
+    /// @param marketplaceOwner Marketplace owner address.
+    /// @param royaltyReceiver Royalty recipient (address(0) if no royalty).
+    /// @param royaltyAmount Royalty amount (0 if no royalty).
+    /// @param listingId For RoyaltyPaid event emission.
+
+    function _distributePayments(
+        address currency,
+        address buyer,
+        uint256 sellerProceeds,
+        address seller,
+        uint256 innovationFee,
+        address marketplaceOwner,
+        address royaltyReceiver,
+        uint256 royaltyAmount,
+        uint128 listingId
+    ) private {
+        if (currency == address(0)) {
+            // ===== NATIVE ETH DISTRIBUTION =====
+            // Diamond received ETH via msg.value, now forward it
+
+            // 1. Pay marketplace owner FIRST (most trusted)
+            (bool successFee,) = payable(marketplaceOwner).call{value: innovationFee}("");
+            if (!successFee) revert IdeationMarket__EthTransferFailed(marketplaceOwner);
+            emit InnovationFeePaid(listingId, marketplaceOwner, currency, innovationFee);
+
+            // 2. Pay royalty receiver SECOND
+            if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+                (bool successRoyalty,) = payable(royaltyReceiver).call{value: royaltyAmount}("");
+                if (!successRoyalty) revert IdeationMarket__EthTransferFailed(royaltyReceiver);
+                emit RoyaltyPaid(listingId, royaltyReceiver, currency, royaltyAmount);
+            }
+
+            // 3. Pay seller LAST (least trusted)
+            (bool successSeller,) = payable(seller).call{value: sellerProceeds}("");
+            if (!successSeller) revert IdeationMarket__EthTransferFailed(seller);
+            emit SellerProceedsPaid(listingId, seller, currency, sellerProceeds);
+        } else {
+            // ===== ERC-20 DISTRIBUTION =====
+            // Use buyer's approval to transfer directly: buyer → recipients
+            // Diamond NEVER holds the tokens
+
+            // 1. Pay marketplace owner FIRST (most trusted)
+            _safeTransferFrom(currency, buyer, marketplaceOwner, innovationFee);
+            emit InnovationFeePaid(listingId, marketplaceOwner, currency, innovationFee);
+
+            // 2. Pay royalty receiver SECOND
+            if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+                _safeTransferFrom(currency, buyer, royaltyReceiver, royaltyAmount);
+                emit RoyaltyPaid(listingId, royaltyReceiver, currency, royaltyAmount);
+            }
+
+            // 3. Pay seller LAST (least trusted)
+            _safeTransferFrom(currency, buyer, seller, sellerProceeds);
+            emit SellerProceedsPaid(listingId, seller, currency, sellerProceeds);
+        }
+    }
+
     /// @notice SafeERC20-style transferFrom that handles non-standard tokens.
     /// @dev Handles tokens like USDT that don't return bool, and tokens that return false on failure.
     /// Uses low-level call to avoid ABI decoding issues with non-compliant ERC-20 tokens.
     /// @param token ERC-20 token address.
-    /// @param from Address to transfer from (buyer).
-    /// @param to Address to transfer to (this diamond contract).
+    /// @param from Address to transfer from.
+    /// @param to Address to transfer to.
     /// @param amount Amount to transfer.
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
         // Build the calldata for ERC20.transferFrom(address,address,uint256)
@@ -1013,7 +1082,7 @@ contract IdeationMarketFacet {
         // 2. If returndata exists, it must decode to true (handles tokens that return bool)
         // 3. If no returndata, assume success (handles USDT, XAUt that don't return anything)
         if (!success || (returndata.length > 0 && !abi.decode(returndata, (bool)))) {
-            revert IdeationMarket__TransferFailed();
+            revert IdeationMarket__ERC20TransferFailed(token, to);
         }
     }
 

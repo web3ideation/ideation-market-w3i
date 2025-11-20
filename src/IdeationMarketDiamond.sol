@@ -69,8 +69,4 @@ contract IdeationMarketDiamond {
             default { return(0, returndatasize()) }
         }
     }
-
-    /// @notice Accepts plain Ether transfers.
-    /// @dev Useful for accumulating proceeds or refunds directly to the diamond.
-    receive() external payable {}
 }
