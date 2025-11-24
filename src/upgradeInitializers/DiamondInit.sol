@@ -37,6 +37,9 @@ contract DiamondInit {
         ds.supportedInterfaces[type(IDiamondLoupeFacet).interfaceId] = true;
         ds.supportedInterfaces[type(IERC173).interfaceId] = true;
 
+        // Initialize emergency pause state
+        ds.paused = false;
+
         // Initialize marketplace state variables. / Constructor for IdeationMarketFacet.
         AppStorage storage s = LibAppStorage.appStorage();
         s.innovationFee = innovationFee; // Denominator is 100_000 (e.g., 1_000 = 1%). innovation/Marketplace fee (excluding gascosts) for each sale

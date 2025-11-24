@@ -39,6 +39,7 @@ error IdeationMarket__CurrencyNotAllowed();
 error IdeationMarket__WrongPaymentCurrency();
 error IdeationMarket__EthTransferFailed(address receiver);
 error IdeationMarket__ERC20TransferFailed(address token, address receiver);
+error IdeationMarket__ContractPaused();
 
 /// @title IdeationMarketFacet
 /// @notice Core marketplace logic: create/update/cancel/purchase listings, optional buyer whitelists, swaps, partial buys, and fee/royalty accounting.
@@ -198,6 +199,9 @@ contract IdeationMarketFacet {
         bool partialBuyEnabled,
         address[] calldata allowedBuyers // whitelisted Buyers
     ) external {
+        // Emergency pause check
+        if (LibDiamond.diamondStorage().paused) revert IdeationMarket__ContractPaused();
+
         AppStorage storage s = LibAppStorage.appStorage();
 
         // ============ Currency Validation ============
@@ -367,6 +371,9 @@ contract IdeationMarketFacet {
         uint256 erc1155PurchaseQuantity,
         address desiredErc1155Holder
     ) external payable nonReentrant listingExists(listingId) {
+        // Emergency pause check
+        if (LibDiamond.diamondStorage().paused) revert IdeationMarket__ContractPaused();
+
         AppStorage storage s = LibAppStorage.appStorage();
         Listing memory listedItem = s.listings[listingId];
 
@@ -697,6 +704,9 @@ contract IdeationMarketFacet {
         bool newPartialBuyEnabled,
         address[] calldata newAllowedBuyers
     ) external listingExists(listingId) {
+        // Emergency pause check
+        if (LibDiamond.diamondStorage().paused) revert IdeationMarket__ContractPaused();
+
         AppStorage storage s = LibAppStorage.appStorage();
         Listing storage listedItem = s.listings[listingId];
 

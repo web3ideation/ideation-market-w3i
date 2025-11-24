@@ -191,4 +191,10 @@ contract GetterFacet {
     function getImplementationId() external view returns (bytes32) {
         return LibDiamond.diamondStorage().currentImplementationId;
     }
+
+    /// @notice Returns whether the marketplace is currently paused.
+    /// @return paused True if paused (createListing, purchaseListing, updateListing disabled), false otherwise.
+    function isPaused() external view returns (bool) {
+        return LibDiamond.diamondStorage().paused;
+    }
 }

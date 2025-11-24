@@ -46,6 +46,9 @@ library LibDiamond {
         /// ownership (two-step transfer supported via `pendingContractOwner`)
         address contractOwner;
         address pendingContractOwner;
+        /// emergency pause: when true, critical marketplace functions are disabled
+        bool paused;
+        // 7 bytes padding for future small variables
         /// versioning: current diamond version string (e.g., "1.0.0", "1.1.0")
         string currentVersion;
         /// versioning: cryptographic hash of current diamond configuration (facets + selectors)

@@ -16,6 +16,7 @@ import {BuyerWhitelistFacet} from "../src/facets/BuyerWhitelistFacet.sol";
 import {GetterFacet} from "../src/facets/GetterFacet.sol";
 import {CurrencyWhitelistFacet} from "../src/facets/CurrencyWhitelistFacet.sol";
 import {VersionFacet} from "../src/facets/VersionFacet.sol";
+import {PauseFacet} from "../src/facets/PauseFacet.sol";
 
 import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -70,6 +71,8 @@ contract DeployDiamond is Script {
         console.log("Deployed currencyWhitelistFacet contract at address:", address(currencyWhitelistFacet));
         VersionFacet versionFacet = new VersionFacet();
         console.log("Deployed versionFacet contract at address:", address(versionFacet));
+        PauseFacet pauseFacet = new PauseFacet();
+        console.log("Deployed pauseFacet contract at address:", address(pauseFacet));
         DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
         console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
 
@@ -78,7 +81,7 @@ contract DeployDiamond is Script {
         console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](8);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](9);
 
         bytes4[] memory loupeSelectors = new bytes4[](5);
         loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
@@ -117,7 +120,7 @@ contract DeployDiamond is Script {
         bytes4[] memory versionSelectors = new bytes4[](1);
         versionSelectors[0] = VersionFacet.setVersion.selector;
 
-        bytes4[] memory getterSelectors = new bytes4[](17);
+        bytes4[] memory getterSelectors = new bytes4[](18);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getBalance.selector;
@@ -135,6 +138,7 @@ contract DeployDiamond is Script {
         getterSelectors[14] = GetterFacet.getPreviousVersion.selector;
         getterSelectors[15] = GetterFacet.getVersionString.selector;
         getterSelectors[16] = GetterFacet.getImplementationId.selector;
+        getterSelectors[17] = GetterFacet.isPaused.selector;
 
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
@@ -185,13 +189,23 @@ contract DeployDiamond is Script {
             functionSelectors: versionSelectors
         });
 
+        bytes4[] memory pauseSelectors = new bytes4[](2);
+        pauseSelectors[0] = PauseFacet.pause.selector;
+        pauseSelectors[1] = PauseFacet.unpause.selector;
+
+        cuts[8] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(pauseFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: pauseSelectors
+        });
+
         // Cut and initialize storage variables
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
             cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );
 
-        // Post-deployment sanity check for the total of the 9 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Version, Cut)
-        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 9, "Diamond cut failed");
+        // Post-deployment sanity check for the total of the 10 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Version, Pause, Cut)
+        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 10, "Diamond cut failed");
 
         console.log("Diamond cuts complete");
         console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
