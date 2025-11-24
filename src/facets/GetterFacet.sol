@@ -155,4 +155,40 @@ contract GetterFacet {
         AppStorage storage s = LibAppStorage.appStorage();
         return s.allowedCurrenciesArray;
     }
+
+    // Diamond Versioning Getters
+
+    /// @notice Returns the current version information.
+    /// @return version Semantic version string.
+    /// @return implementationId Hash of current diamond configuration.
+    /// @return timestamp When this version was set.
+    function getVersion() external view returns (string memory version, bytes32 implementationId, uint256 timestamp) {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        return (ds.currentVersion, ds.currentImplementationId, ds.currentVersionTimestamp);
+    }
+
+    /// @notice Returns the previous version information (before last upgrade).
+    /// @return version Previous semantic version string.
+    /// @return implementationId Hash of previous diamond configuration.
+    /// @return timestamp When that version was set.
+    function getPreviousVersion()
+        external
+        view
+        returns (string memory version, bytes32 implementationId, uint256 timestamp)
+    {
+        LibDiamond.DiamondStorage storage ds = LibDiamond.diamondStorage();
+        return (ds.previousVersion, ds.previousImplementationId, ds.previousVersionTimestamp);
+    }
+
+    /// @notice Returns the current version string only.
+    /// @dev Convenience method for simple version checks.
+    function getVersionString() external view returns (string memory) {
+        return LibDiamond.diamondStorage().currentVersion;
+    }
+
+    /// @notice Returns the current implementation ID only.
+    /// @dev Convenience method for configuration verification.
+    function getImplementationId() external view returns (bytes32) {
+        return LibDiamond.diamondStorage().currentImplementationId;
+    }
 }

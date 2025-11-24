@@ -35,7 +35,7 @@ library LibDiamond {
     /// @notice Full diamond storage layout.
     /// @dev All facets share this storage via delegatecall.
     struct DiamondStorage {
-        /// selector → (facet, pos in that facet’s selector array)
+        /// selector → (facet, pos in that facet's selector array)
         mapping(bytes4 selector => FacetAddressAndPosition facetInfo) selectorToFacetAndPosition;
         /// facet address → its selectors + its index in `facetAddresses`
         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
@@ -46,6 +46,18 @@ library LibDiamond {
         /// ownership (two-step transfer supported via `pendingContractOwner`)
         address contractOwner;
         address pendingContractOwner;
+        /// versioning: current diamond version string (e.g., "1.0.0", "1.1.0")
+        string currentVersion;
+        /// versioning: cryptographic hash of current diamond configuration (facets + selectors)
+        bytes32 currentImplementationId;
+        /// versioning: timestamp when current version was set
+        uint256 currentVersionTimestamp;
+        /// versioning: previous diamond version string (before last upgrade)
+        string previousVersion;
+        /// versioning: previous implementation ID (before last upgrade)
+        bytes32 previousImplementationId;
+        /// versioning: timestamp when previous version was set
+        uint256 previousVersionTimestamp;
     }
 
     /// @notice Returns a pointer to diamond storage at the canonical slot.
@@ -88,6 +100,7 @@ library LibDiamond {
     /// @notice Applies a diamond cut and optionally runs an initializer.
     /// @dev Iterates over cuts; for Add/Replace/Remove dispatches to helpers. Emits `DiamondCut` and
     /// then calls `initializeDiamondCut(_init, _calldata)`.
+    /// Version tracking is handled by deployment/upgrade scripts after the cut is complete.
     function diamondCut(IDiamondCutFacet.FacetCut[] memory _diamondCut, address _init, bytes memory _calldata)
         internal
     {

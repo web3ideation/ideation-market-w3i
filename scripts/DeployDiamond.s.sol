@@ -15,6 +15,7 @@ import {CollectionWhitelistFacet} from "../src/facets/CollectionWhitelistFacet.s
 import {BuyerWhitelistFacet} from "../src/facets/BuyerWhitelistFacet.sol";
 import {GetterFacet} from "../src/facets/GetterFacet.sol";
 import {CurrencyWhitelistFacet} from "../src/facets/CurrencyWhitelistFacet.sol";
+import {VersionFacet} from "../src/facets/VersionFacet.sol";
 
 import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -37,6 +38,10 @@ contract DeployDiamond is Script {
     /// @notice Maximum addresses per buyer-whitelist batch.
     /// @dev Enforced by `BuyerWhitelistFacet`; passed to `DiamondInit.init`.
     uint16 buyerWhitelistMaxBatchSize = 300;
+
+    /// @notice Initial version string for the diamond deployment.
+    /// @dev Set via environment variable VERSION_STRING, defaults to "1.0.0" if not set.
+    string versionString;
 
     /// @notice Deploys facets, the diamond, performs the diamond cut, and initializes storage.
     /// @dev Reverts if post-cut facet count isn’t 7 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Cut).
@@ -63,6 +68,8 @@ contract DeployDiamond is Script {
         console.log("Deployed getterFacet contract at address:", address(getterFacet));
         CurrencyWhitelistFacet currencyWhitelistFacet = new CurrencyWhitelistFacet();
         console.log("Deployed currencyWhitelistFacet contract at address:", address(currencyWhitelistFacet));
+        VersionFacet versionFacet = new VersionFacet();
+        console.log("Deployed versionFacet contract at address:", address(versionFacet));
         DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
         console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
 
@@ -71,7 +78,7 @@ contract DeployDiamond is Script {
         console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
 
         // Prepare an array of `cuts` that we want to upgrade our Diamond with.
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](7);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](8);
 
         bytes4[] memory loupeSelectors = new bytes4[](5);
         loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
@@ -107,7 +114,10 @@ contract DeployDiamond is Script {
         currencyWhitelistSelectors[0] = CurrencyWhitelistFacet.addAllowedCurrency.selector;
         currencyWhitelistSelectors[1] = CurrencyWhitelistFacet.removeAllowedCurrency.selector;
 
-        bytes4[] memory getterSelectors = new bytes4[](13);
+        bytes4[] memory versionSelectors = new bytes4[](1);
+        versionSelectors[0] = VersionFacet.setVersion.selector;
+
+        bytes4[] memory getterSelectors = new bytes4[](17);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getBalance.selector;
@@ -121,6 +131,10 @@ contract DeployDiamond is Script {
         getterSelectors[10] = GetterFacet.getPendingOwner.selector;
         getterSelectors[11] = GetterFacet.isCurrencyAllowed.selector;
         getterSelectors[12] = GetterFacet.getAllowedCurrencies.selector;
+        getterSelectors[13] = GetterFacet.getVersion.selector;
+        getterSelectors[14] = GetterFacet.getPreviousVersion.selector;
+        getterSelectors[15] = GetterFacet.getVersionString.selector;
+        getterSelectors[16] = GetterFacet.getImplementationId.selector;
 
         // Populate the `cuts` array with all data needed for each `FacetCut` struct
         cuts[0] = IDiamondCutFacet.FacetCut({
@@ -165,17 +179,85 @@ contract DeployDiamond is Script {
             functionSelectors: currencyWhitelistSelectors
         });
 
+        cuts[7] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(versionFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: versionSelectors
+        });
+
         // Cut and initialize storage variables
         IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
             cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
         );
 
-        // Post-deployment sanity check for the total of the 8 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Cut)
-        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 8, "Diamond cut failed");
+        // Post-deployment sanity check for the total of the 9 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Version, Cut)
+        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 9, "Diamond cut failed");
 
         console.log("Diamond cuts complete");
         console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
 
+        // Automatically set the version
+        versionString = vm.envOr("VERSION_STRING", string("1.0.0"));
+        console.log("Setting version:", versionString);
+
+        bytes32 implementationId = computeImplementationId(address(ideationMarketDiamond));
+        VersionFacet(address(ideationMarketDiamond)).setVersion(versionString, implementationId);
+
+        console.log("Version set:", versionString);
+        console.log("Implementation ID:");
+        console.logBytes32(implementationId);
+
         vm.stopBroadcast();
+    }
+
+    /// @notice Computes the implementationId for a diamond.
+    /// @dev Queries facets via DiamondLoupe, sorts deterministically, and hashes.
+    function computeImplementationId(address diamond) internal view returns (bytes32) {
+        IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamond);
+        IDiamondLoupeFacet.Facet[] memory facets = loupe.facets();
+        uint256 facetCount = facets.length;
+
+        address[] memory facetAddresses = new address[](facetCount);
+        bytes4[][] memory selectorsPerFacet = new bytes4[][](facetCount);
+
+        for (uint256 i = 0; i < facetCount; i++) {
+            facetAddresses[i] = facets[i].facetAddress;
+            selectorsPerFacet[i] = facets[i].functionSelectors;
+        }
+
+        // Sort facets by address
+        for (uint256 i = 0; i < facetCount; i++) {
+            for (uint256 j = i + 1; j < facetCount; j++) {
+                if (facetAddresses[i] > facetAddresses[j]) {
+                    (facetAddresses[i], facetAddresses[j]) = (facetAddresses[j], facetAddresses[i]);
+                    (selectorsPerFacet[i], selectorsPerFacet[j]) = (selectorsPerFacet[j], selectorsPerFacet[i]);
+                }
+            }
+        }
+
+        // Sort selectors within each facet
+        for (uint256 i = 0; i < facetCount; i++) {
+            selectorsPerFacet[i] = sortSelectors(selectorsPerFacet[i]);
+        }
+
+        return keccak256(abi.encode(block.chainid, diamond, facetAddresses, selectorsPerFacet));
+    }
+
+    /// @notice Sorts function selectors in ascending order.
+    function sortSelectors(bytes4[] memory selectors) internal pure returns (bytes4[] memory) {
+        uint256 length = selectors.length;
+        bytes4[] memory sorted = new bytes4[](length);
+        for (uint256 i = 0; i < length; i++) {
+            sorted[i] = selectors[i];
+        }
+
+        for (uint256 i = 0; i < length; i++) {
+            for (uint256 j = i + 1; j < length; j++) {
+                if (uint32(sorted[i]) > uint32(sorted[j])) {
+                    (sorted[i], sorted[j]) = (sorted[j], sorted[i]);
+                }
+            }
+        }
+        return sorted;
     }
 }

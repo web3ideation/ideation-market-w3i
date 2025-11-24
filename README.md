@@ -93,6 +93,9 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 - **`OwnershipFacet.sol`**
   Manages ownership of the diamond contract.
 
+- **`VersionFacet.sol`**
+  Tracks diamond versioning with cryptographic implementation fingerprints for audit verification.
+
 - **`IdeationMarketFacet.sol`**
   Core marketplace functionality, including:
   - Listing NFTs
@@ -109,6 +112,133 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 
 - **`LibAppStorage.sol`**
   Defines the application-specific storage structure for the marketplace.
+
+---
+
+## Diamond Versioning
+
+The IdeationMarketDiamond implements a comprehensive versioning system designed to provide transparency and verifiability for auditors, users, and integrators.
+
+### Overview
+
+Each diamond deployment or upgrade is assigned:
+- **Version String:** Semantic version (e.g., "1.0.0", "1.2.1") for human-readable tracking
+- **Implementation ID:** Cryptographic hash uniquely identifying the exact diamond configuration
+- **Timestamp:** When the version was set
+
+### Implementation ID
+
+The `implementationId` is a deterministic `bytes32` hash computed as:
+
+```solidity
+keccak256(abi.encode(
+    chainId,           // Network chain ID
+    diamondAddress,    // Diamond contract address
+    facetAddresses[],  // Sorted array of facet addresses
+    selectors[][]      // Sorted array of selectors per facet
+))
+```
+
+This fingerprint guarantees that:
+- Any change to facets or their functions produces a different ID
+- Two diamonds with identical configuration produce the same ID
+- Auditors can verify the deployed diamond matches the audited version
+
+### Querying Version Information
+
+```solidity
+// Get current version
+(string memory version, bytes32 implementationId, uint256 timestamp) = 
+    GetterFacet(diamond).getVersion();
+
+// Get previous version (after upgrades)
+(string memory prevVersion, bytes32 prevId, uint256 prevTimestamp) = 
+    GetterFacet(diamond).getPreviousVersion();
+
+// Convenience getters
+string memory version = GetterFacet(diamond).getVersionString();
+bytes32 id = GetterFacet(diamond).getImplementationId();
+```
+
+### Setting Versions (Automatic)
+
+The deployment and upgrade scripts automatically compute and set the version after every diamond cut.
+
+#### Initial Deployment
+
+```bash
+# Version defaults to "1.0.0" or set via VERSION_STRING
+VERSION_STRING="1.0.0" forge script scripts/DeployDiamond.s.sol:DeployDiamond \
+    --rpc-url $RPC_URL --broadcast
+```
+
+The script automatically:
+1. Deploys all facets and the diamond
+2. Executes the diamond cut
+3. **Automatically queries all facets and selectors via DiamondLoupe**
+4. **Computes the implementationId hash deterministically**
+5. **Calls `setVersion()` with the version string and ID**
+
+#### Upgrade Workflow
+
+```bash
+# Version set via VERSION_STRING
+DIAMOND_ADDRESS=0x... VERSION_STRING="1.1.0" \
+forge script scripts/UpgradeDiamond.s.sol:UpgradeDiamond \
+    --rpc-url $RPC_URL --broadcast
+```
+
+The upgrade script automatically:
+1. Performs the diamond cut (deploy facets, add/replace/remove functions)
+2. **Automatically computes and sets the new version**
+3. Shows before/after version information
+
+**No separate versioning step needed!** The version is always set automatically after any diamond modification.
+
+#### Manual Version Setting (Owner Only)
+
+If you ever need to manually update the version (e.g., to correct metadata), the diamond owner can call `setVersion()` directly:
+
+```solidity
+// Only the diamond owner can do this
+VersionFacet(diamondAddress).setVersion("1.0.1", computedImplementationId);
+```
+
+### For Auditors
+
+When auditing this diamond:
+
+1. **Record the Version:** Note the `implementationId` at audit time
+2. **Document in Report:** Include version string and implementationId in your audit report
+3. **Verification:** Users can call `getImplementationId()` to verify they're using the audited configuration
+
+### For Frontend Integrators
+
+```javascript
+// Check if diamond matches audited version
+const auditedImplementationId = "0x..."; // From audit report
+const currentId = await getterFacet.getImplementationId();
+
+if (currentId === auditedImplementationId) {
+    // Show: "✓ Audited version 1.0.0"
+} else {
+    // Show: "⚠ Warning: Post-audit upgrade detected"
+    const prevId = await getterFacet.getPreviousVersion();
+    // Check if previous version was audited
+}
+```
+
+### Version History
+
+The `VersionFacet` maintains:
+- **Current version:** Active diamond configuration
+- **Previous version:** Last configuration before most recent upgrade
+- **Events:** Logs every Version update on the EVM Log
+```
+VersionUpdated(string version, bytes32 indexed implementationId, uint256 timestamp);
+```
+
+This provides a minimal audit trail while keeping storage efficient.
 
 ---
 
