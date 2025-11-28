@@ -3,18 +3,18 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-interface IVersion {
-    function version() external pure returns (uint256);
+interface IDummyUpgrade {
+    function dummyFunction() external pure returns (uint256);
 }
 
 contract DiamondCutFacetTest is MarketTestBase {
     // --- Helpers ---
 
-    function _addVersionFacet(address facet) internal {
+    function _addDummyFacet(address facet) internal {
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory selectors = new bytes4[](1);
 
-        selectors[0] = IVersion.version.selector;
+        selectors[0] = IDummyUpgrade.dummyFunction.selector;
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: facet,
@@ -26,10 +26,10 @@ contract DiamondCutFacetTest is MarketTestBase {
         IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
     }
 
-    function _replaceVersionFacet(address newFacet) internal {
+    function _replaceDummyFacet(address newFacet) internal {
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory selectors = new bytes4[](1);
-        selectors[0] = IVersion.version.selector;
+        selectors[0] = IDummyUpgrade.dummyFunction.selector;
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: newFacet,
@@ -52,11 +52,11 @@ contract DiamondCutFacetTest is MarketTestBase {
     // 1) DiamondCut event payload: exact struct array, _init, _calldata
     // ---------------------------------------------------------------------
     function testDiamondCut_EmitsExactPayload() public {
-        VersionFacetV1 v1 = new VersionFacetV1();
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
 
         IDiamondCutFacet.FacetCut[] memory expectedCuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory selectors = new bytes4[](1);
-        selectors[0] = IVersion.version.selector;
+        selectors[0] = IDummyUpgrade.dummyFunction.selector;
 
         expectedCuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(v1),
@@ -108,19 +108,19 @@ contract DiamondCutFacetTest is MarketTestBase {
     // 2) Batch atomicity: later failing op reverts whole cut (no partial state)
     // ---------------------------------------------------------------------
     function testDiamondCut_BatchAtomicity_WhenLaterOpFails() public {
-        // Baseline: add V1 and confirm behavior is 1
-        VersionFacetV1 v1 = new VersionFacetV1();
-        _addVersionFacet(address(v1));
-        assertEq(IVersion(address(diamond)).version(), 1);
+        // Baseline: add V1 and confirm behavior is 100
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        _addDummyFacet(address(v1));
+        assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
 
         // Prepare a batch: [Replace OK, Remove FAIL (non-zero facetAddress)]
-        VersionFacetV2 v2 = new VersionFacetV2();
+        DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
 
         // Replace to V2 (valid)
         bytes4[] memory selReplace = new bytes4[](1);
-        selReplace[0] = IVersion.version.selector;
+        selReplace[0] = IDummyUpgrade.dummyFunction.selector;
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(v2),
             action: IDiamondCutFacet.FacetCutAction.Replace,
@@ -129,7 +129,7 @@ contract DiamondCutFacetTest is MarketTestBase {
 
         // Remove (invalid because facetAddress must be address(0))
         bytes4[] memory selRemove = new bytes4[](1);
-        selRemove[0] = IVersion.version.selector;
+        selRemove[0] = IDummyUpgrade.dummyFunction.selector;
         cuts[1] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0xBEEF), // non-zero → should revert in removeFunctions
             action: IDiamondCutFacet.FacetCutAction.Remove,
@@ -142,8 +142,8 @@ contract DiamondCutFacetTest is MarketTestBase {
         IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
 
         // Still V1
-        assertEq(IVersion(address(diamond)).version(), 1);
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(v1));
+        assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v1));
 
         // And V2 not added
         address[] memory facets = loupe.facetAddresses();
@@ -154,34 +154,34 @@ contract DiamondCutFacetTest is MarketTestBase {
     // 3) Functional replacement proof: return value flips from V1 → V2
     // ---------------------------------------------------------------------
     function testDiamondCut_FunctionalReplacementProof() public {
-        VersionFacetV1 v1 = new VersionFacetV1();
-        VersionFacetV2 v2 = new VersionFacetV2();
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
-        _addVersionFacet(address(v1));
-        assertEq(IVersion(address(diamond)).version(), 1);
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(v1));
+        _addDummyFacet(address(v1));
+        assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v1));
 
-        _replaceVersionFacet(address(v2));
-        assertEq(IVersion(address(diamond)).version(), 2);
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(v2));
+        _replaceDummyFacet(address(v2));
+        assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 200);
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v2));
     }
 
     // ---------------------------------------------------------------------
     // 4) Old facet address is pruned when its last selector is moved/replaced
     // ---------------------------------------------------------------------
     function testDiamondCut_ReplacementPrunesEmptyFacetAddress() public {
-        VersionFacetV1 v1 = new VersionFacetV1();
-        VersionFacetV2 v2 = new VersionFacetV2();
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
-        _addVersionFacet(address(v1));
+        _addDummyFacet(address(v1));
         assertTrue(_contains(loupe.facetAddresses(), address(v1)));
 
-        _replaceVersionFacet(address(v2));
+        _replaceDummyFacet(address(v2));
 
         // After replace, V1 had only one selector; it should be removed from facetAddresses
         address[] memory facets = loupe.facetAddresses();
         assertFalse(_contains(facets, address(v1)));
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(v2));
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v2));
     }
 
     // ---------------------------------------------------------------------
@@ -413,17 +413,48 @@ contract DiamondCutFacetTest is MarketTestBase {
         );
     }
 
+    // ---------------------------------------------------------------------
+    // 8) Owner authorization: only contract owner can call diamondCut
+    // ---------------------------------------------------------------------
+    function testDiamondCut_OnlyOwnerCanCall() public {
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        bytes4[] memory sels = new bytes4[](1);
+        sels[0] = DummyUpgradeFacetV1.dummyFunction.selector;
+
+        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
+        addCut[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(v1),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: sels
+        });
+
+        // Non-owner cannot call diamondCut
+        vm.prank(buyer);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+
+        // Owner can successfully call diamondCut
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+
+        // Verify the facet was added
+        (bool ok, bytes memory ret) =
+            address(diamond).call(abi.encodeWithSelector(DummyUpgradeFacetV1.dummyFunction.selector));
+        assertTrue(ok);
+        assertEq(abi.decode(ret, (uint256)), 100);
+    }
+
     function testDiamondCut_RemoveFacet_MakesSelectorUncallable() public {
         // 1) Add V1 and prove callable
-        VersionFacetV1 v1 = new VersionFacetV1();
-        _addVersionFacet(address(v1));
-        assertEq(IVersion(address(diamond)).version(), 1);
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(v1));
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        _addDummyFacet(address(v1));
+        assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v1));
 
         // 2) Remove the selector properly
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory selectors = new bytes4[](1);
-        selectors[0] = IVersion.version.selector;
+        selectors[0] = IDummyUpgrade.dummyFunction.selector;
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0), // REQUIRED for Remove
@@ -435,14 +466,14 @@ contract DiamondCutFacetTest is MarketTestBase {
         IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
 
         // 3) Loupe now returns zero for this selector
-        assertEq(loupe.facetAddress(IVersion.version.selector), address(0));
+        assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(0));
 
         // 4) Calling removed function reverts via diamond fallback
         vm.expectRevert();
-        IVersion(address(diamond)).version();
+        IDummyUpgrade(address(diamond)).dummyFunction();
 
         // 4b) Raw call also fails
-        (bool ok,) = address(diamond).call(abi.encodeWithSelector(IVersion.version.selector));
+        (bool ok,) = address(diamond).call(abi.encodeWithSelector(IDummyUpgrade.dummyFunction.selector));
         assertFalse(ok, "raw call to removed selector unexpectedly succeeded");
 
         // 5) Since V1 had only this selector, its address should be pruned
@@ -453,7 +484,7 @@ contract DiamondCutFacetTest is MarketTestBase {
         for (uint256 i = 0; i < facets.length; i++) {
             bytes4[] memory sels = loupe.facetFunctionSelectors(facets[i]);
             for (uint256 j = 0; j < sels.length; j++) {
-                assertTrue(sels[j] != IVersion.version.selector, "removed selector still listed");
+                assertTrue(sels[j] != IDummyUpgrade.dummyFunction.selector, "removed selector still listed");
             }
         }
     }

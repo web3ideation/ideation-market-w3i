@@ -727,12 +727,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.stopPrank();
     }
 
-    // withdraw with 0 balance reverts
-    function testWithdrawZeroBalanceReverts() public {
-        vm.expectRevert(IdeationMarket__NoProceeds.selector);
-        market.withdrawProceeds();
-    }
-
     // buyer not on whitelist cannot purchase when whitelist enabled
     function testWhitelistPreventsPurchase() public {
         _whitelistCollectionAndApproveERC721();
@@ -1041,68 +1035,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     }
 
     /// -----------------------------------------------------------------------
-    /// Diamond upgrade & owner auth tests
-    /// -----------------------------------------------------------------------
-
-    // Tests that only the contract owner can call diamondCut, and that
-    // selectors can be added, replaced and removed correctly.
-    function testDiamondCutAuthAndUpgradeFlow() public {
-        // Prepare a dummy facet with a version() function.
-        VersionFacetV1 v1 = new VersionFacetV1();
-        bytes4[] memory sels = new bytes4[](1);
-        sels[0] = VersionFacetV1.version.selector;
-        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
-        addCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v1),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-
-        // Only the owner may call diamondCut.
-        vm.prank(buyer);
-        vm.expectRevert("LibDiamond: Must be contract owner");
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
-
-        // Owner adds the new facet.
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
-
-        // Call the function through the diamond; should return 1.
-        (bool ok1, bytes memory ret1) = address(diamond).call(abi.encodeWithSelector(VersionFacetV1.version.selector));
-        assertTrue(ok1);
-        assertEq(abi.decode(ret1, (uint256)), 1);
-
-        // Replace the facet with another returning 2.
-        VersionFacetV2 v2 = new VersionFacetV2();
-        IDiamondCutFacet.FacetCut[] memory replaceCut = new IDiamondCutFacet.FacetCut[](1);
-        replaceCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v2),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: sels
-        });
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(replaceCut, address(0), "");
-
-        (bool ok2, bytes memory ret2) = address(diamond).call(abi.encodeWithSelector(VersionFacetV1.version.selector));
-        assertTrue(ok2);
-        assertEq(abi.decode(ret2, (uint256)), 2);
-
-        // Remove the selector entirely.
-        IDiamondCutFacet.FacetCut[] memory removeCut = new IDiamondCutFacet.FacetCut[](1);
-        removeCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCutFacet.FacetCutAction.Remove,
-            functionSelectors: sels
-        });
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(removeCut, address(0), "");
-
-        // Calling it now should revert via the diamond fallback.
-        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
-        VersionFacetV1(address(diamond)).version();
-    }
-
-    /// -----------------------------------------------------------------------
     /// Whitelisted buyer success path
     /// -----------------------------------------------------------------------
 
@@ -1298,100 +1230,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // -----------------------------------------------------------------------
     // Extra edge-case tests
     // -----------------------------------------------------------------------
-
-    function testLoupeReflectsAddReplaceRemove() public {
-        // Add v1
-        VersionFacetV1 v1 = new VersionFacetV1();
-        bytes4 sel = VersionFacetV1.version.selector;
-        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
-        bytes4[] memory sels = new bytes4[](1);
-
-        sels[0] = sel;
-        addCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v1),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
-
-        // Loupe should point selector -> v1
-        assertEq(loupe.facetAddress(sel), address(v1));
-
-        // Replace with v2
-        VersionFacetV2 v2 = new VersionFacetV2();
-        IDiamondCutFacet.FacetCut[] memory repCut = new IDiamondCutFacet.FacetCut[](1);
-        repCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v2),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(repCut, address(0), "");
-
-        // Loupe should now point selector -> v2
-        assertEq(loupe.facetAddress(sel), address(v2));
-
-        // Remove selector
-        IDiamondCutFacet.FacetCut[] memory remCut = new IDiamondCutFacet.FacetCut[](1);
-        remCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCutFacet.FacetCutAction.Remove,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(remCut, address(0), "");
-
-        // Loupe should return zero for removed selector
-        assertEq(loupe.facetAddress(sel), address(0));
-    }
-
-    function testDiamondCutAddZeroAddressReverts() public {
-        bytes4[] memory sels = new bytes4[](1);
-        sels[0] = VersionFacetV1.version.selector;
-
-        IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
-        cut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        vm.expectRevert("LibDiamondCut: Add facet can't be address(0)");
-        IDiamondCutFacet(address(diamond)).diamondCut(cut, address(0), "");
-    }
-
-    function testDiamondCutReplaceZeroAddressReverts() public {
-        // First add v1 so there is something to replace
-        VersionFacetV1 v1 = new VersionFacetV1();
-        bytes4[] memory sels = new bytes4[](1);
-        sels[0] = VersionFacetV1.version.selector;
-
-        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
-        addCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v1),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
-
-        // Now attempt to replace with zero facet address -> revert
-        IDiamondCutFacet.FacetCut[] memory repCut = new IDiamondCutFacet.FacetCut[](1);
-        repCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        vm.expectRevert("LibDiamondCut: Add facet can't be address(0)");
-        IDiamondCutFacet(address(diamond)).diamondCut(repCut, address(0), "");
-    }
 
     function testCollectionWhitelistZeroAddressReverts() public {
         vm.prank(owner);

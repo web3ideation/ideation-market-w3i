@@ -13,7 +13,6 @@ import "../src/facets/IdeationMarketFacet.sol";
 import "../src/facets/CollectionWhitelistFacet.sol";
 import "../src/facets/BuyerWhitelistFacet.sol";
 import "../src/facets/GetterFacet.sol";
-import "../src/facets/PaymentFacet.sol";
 import "../src/interfaces/IDiamondCutFacet.sol";
 import "../src/interfaces/IDiamondLoupeFacet.sol";
 import "../src/interfaces/IERC165.sol";
@@ -23,6 +22,7 @@ import "../src/interfaces/IERC1155.sol";
 import "../src/interfaces/IERC2981.sol";
 import "../src/libraries/LibAppStorage.sol";
 import "../src/libraries/LibDiamond.sol";
+// !!! Pause and version facet are missing
 
 // Openzeppelin Mock imports
 import {ERC721} from "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
@@ -38,7 +38,6 @@ abstract contract MarketTestBase is Test {
     CollectionWhitelistFacet internal collections;
     BuyerWhitelistFacet internal buyers;
     GetterFacet internal getter;
-    PaymentFacet internal payment;
 
     // Address of the initial diamondCut facet deployed in setUp
     address internal diamondCutFacetAddr;
@@ -85,7 +84,6 @@ abstract contract MarketTestBase is Test {
         CollectionWhitelistFacet collectionFacet = new CollectionWhitelistFacet();
         BuyerWhitelistFacet buyerFacet = new BuyerWhitelistFacet();
         GetterFacet getterFacet = new GetterFacet();
-        PaymentFacet paymentFacet = new PaymentFacet();
 
         // Deploy the diamond and add the initial diamondCut function
         diamond = new IdeationMarketDiamond(owner, address(cutFacet));
@@ -156,18 +154,6 @@ abstract contract MarketTestBase is Test {
             functionSelectors: buyerSelectors
         });
 
-        // Payment selectors
-        bytes4[] memory paymentSelectors = new bytes4[](5);
-        paymentSelectors[0] = PaymentFacet.withdrawProceeds.selector;
-        paymentSelectors[1] = PaymentFacet.withdrawAllProceeds.selector;
-        paymentSelectors[2] = PaymentFacet.addAllowedCurrency.selector;
-        paymentSelectors[3] = PaymentFacet.removeAllowedCurrency.selector;
-        cuts[5] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(paymentFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: paymentSelectors
-        });
-
         // Getter selectors (add all view functions exposed by GetterFacet)
         bytes4[] memory getterSelectors = new bytes4[](15);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
@@ -181,9 +167,7 @@ abstract contract MarketTestBase is Test {
         getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
         getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
         getterSelectors[10] = GetterFacet.getPendingOwner.selector;
-        getterSelectors[11] = GetterFacet.getProceeds.selector;
-        getterSelectors[12] = GetterFacet.getAllProceeds.selector;
-        getterSelectors[13] = GetterFacet.isAllowedCurrency.selector;
+        getterSelectors[13] = GetterFacet.isCurrencyAllowed.selector;
         getterSelectors[14] = GetterFacet.getAllowedCurrencies.selector;
         cuts[6] = IDiamondCutFacet.FacetCut({
             facetAddress: address(getterFacet),
@@ -206,7 +190,6 @@ abstract contract MarketTestBase is Test {
         collections = CollectionWhitelistFacet(address(diamond));
         buyers = BuyerWhitelistFacet(address(diamond));
         getter = GetterFacet(address(diamond));
-        payment = PaymentFacet(address(diamond));
 
         // cache impl addrs
         loupeImpl = address(loupeFacet);
@@ -215,7 +198,6 @@ abstract contract MarketTestBase is Test {
         collectionsImpl = address(collectionFacet);
         buyersImpl = address(buyerFacet);
         getterImpl = address(getterFacet);
-        paymentImpl = address(paymentFacet);
 
         // Deploy mock tokens and mint balances for seller
         erc721 = new MockERC721();
@@ -570,171 +552,6 @@ contract MockERC721Royalty {
         bytes calldata /*data*/
     ) external pure {
         revert("MockERC721Royalty: ERC1155.safeTransferFrom used on ERC721");
-    }
-}
-
-// Helper facets for upgrade testing
-contract VersionFacetV1 {
-    function version() external pure returns (uint256) {
-        return 1;
-    }
-}
-
-contract VersionFacetV2 {
-    function version() external pure returns (uint256) {
-        return 2;
-    }
-}
-
-// Attempts to re-enter withdrawProceeds from its receive() callback. The
-// nonReentrant modifier on withdrawProceeds should prevent success.
-contract ReentrantWithdrawer {
-    PaymentFacet public payment;
-    bool internal attacked;
-
-    constructor(address diamond) {
-        payment = PaymentFacet(diamond);
-    }
-
-    receive() external payable {
-        if (!attacked) {
-            attacked = true;
-            try payment.withdrawProceeds(address(0)) {
-                // ignore success; should revert due to nonReentrant
-            } catch {
-                // ignore revert
-            }
-        }
-    }
-}
-
-// Minimal ERC1155 that calls withdrawProceeds during safeTransferFrom to
-// attempt a reentrant attack. It catches the revert to allow the transfer.
-contract MaliciousERC1155 {
-    mapping(uint256 => mapping(address => uint256)) internal _balances;
-    mapping(address => mapping(address => bool)) internal _operatorApprovals;
-    PaymentFacet public payment;
-    bool internal attacked;
-
-    constructor(address diamond) {
-        payment = PaymentFacet(diamond);
-    }
-
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC1155).interfaceId;
-    }
-
-    function mint(address to, uint256 id, uint256 amount) external {
-        _balances[id][to] += amount;
-    }
-
-    function balanceOf(address account, uint256 id) external view returns (uint256) {
-        return _balances[id][account];
-    }
-
-    function isApprovedForAll(address account, address operator) external view returns (bool) {
-        return _operatorApprovals[account][operator];
-    }
-
-    function setApprovalForAll(address operator, bool approved) external {
-        _operatorApprovals[msg.sender][operator] = approved;
-    }
-
-    function safeTransferFrom(address from, address to, uint256 id, uint256 amount, bytes calldata) external {
-        // Attempt to re-enter withdrawProceeds once.
-        if (!attacked) {
-            attacked = true;
-            try payment.withdrawProceeds(address(0)) {
-                // no-op: should revert due to reentrancy lock
-            } catch {
-                // ignore the revert
-            }
-        }
-        require(msg.sender == from || _operatorApprovals[from][msg.sender], "not approved");
-        require(_balances[id][from] >= amount, "insufficient");
-        _balances[id][from] -= amount;
-        _balances[id][to] += amount;
-    }
-}
-
-// Minimal ERC721 that calls withdrawProceeds during transferFrom to attempt
-// a reentrant attack. It catches the revert to allow the transfer.
-contract MaliciousERC721 {
-    mapping(uint256 => address) internal _owners;
-    mapping(uint256 => address) internal _tokenApprovals;
-    mapping(address => mapping(address => bool)) internal _operatorApprovals;
-    PaymentFacet public payment;
-    bool internal attacked;
-
-    constructor(address diamond) {
-        payment = PaymentFacet(diamond);
-    }
-
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IERC165).interfaceId || interfaceId == type(IERC721).interfaceId;
-    }
-
-    function mint(address to, uint256 tokenId) external {
-        _owners[tokenId] = to;
-    }
-
-    function balanceOf(address owner) external view returns (uint256) {
-        uint256 count;
-        // Count tokens owned by 'owner'
-        // Not needed for test logic but provided for completeness
-        for (uint256 i = 0; i < 10; i++) {
-            if (_owners[i] == owner) count++;
-        }
-        return count;
-    }
-
-    function ownerOf(uint256 tokenId) external view returns (address) {
-        return _owners[tokenId];
-    }
-
-    function getApproved(uint256 tokenId) external view returns (address) {
-        return _tokenApprovals[tokenId];
-    }
-
-    function approve(address to, uint256 tokenId) external {
-        require(msg.sender == _owners[tokenId], "not owner");
-        _tokenApprovals[tokenId] = to;
-    }
-
-    function setApprovalForAll(address operator, bool approved) external {
-        _operatorApprovals[msg.sender][operator] = approved;
-    }
-
-    function isApprovedForAll(address owner, address operator) external view returns (bool) {
-        return _operatorApprovals[owner][operator];
-    }
-
-    function transferFrom(address from, address to, uint256 tokenId) public {
-        require(_owners[tokenId] == from, "not owner");
-        // caller must be owner or approved
-        require(
-            msg.sender == from || msg.sender == _tokenApprovals[tokenId] || _operatorApprovals[from][msg.sender],
-            "not approved"
-        );
-        // Attempt reentrancy once.
-        if (!attacked) {
-            attacked = true;
-            try payment.withdrawProceeds(address(0)) {
-                // will revert due to reentrancy lock; ignore
-            } catch {
-                // ignore revert
-            }
-        }
-        _owners[tokenId] = to;
-        _tokenApprovals[tokenId] = address(0);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) external {
-        transferFrom(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata) external {
-        transferFrom(from, to, tokenId);
     }
 }
 
@@ -1233,5 +1050,18 @@ contract MaliciousAdminERC721 {
 
     function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
         transferFrom(from, to, id);
+    }
+}
+
+// --- Dummy upgrade facets for testing diamond cut operations ---
+contract DummyUpgradeFacetV1 {
+    function dummyFunction() external pure returns (uint256) {
+        return 100;
+    }
+}
+
+contract DummyUpgradeFacetV2 {
+    function dummyFunction() external pure returns (uint256) {
+        return 200;
     }
 }
