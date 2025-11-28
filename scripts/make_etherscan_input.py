@@ -3,7 +3,7 @@ import json, subprocess, sys, os
 
 # Usage:
 #   python3 scripts/make_etherscan_input.py src/facets/VersionFacet.sol:VersionFacet ./etherscan/VersionFacet.standard-input.json
-#
+# for manual etherscan verification input generation.
 # If no 2nd arg is given, defaults to /tmp/etherscan-input.json
 
 fq = sys.argv[1] if len(sys.argv) > 1 else "src/facets/VersionFacet.sol:VersionFacet"

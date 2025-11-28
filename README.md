@@ -12,7 +12,7 @@ This project includes code from the following open-source project(s):
 <br><br><br><br><br>
 
 
-notes:
+notes: // !!!W check these if they are still up to date and integrate the info in the final readme
  logic	After a collection is de-whitelisted, its already-listed tokens can still be bought. purchaseListing() has no onlyWhitelistedCollection check, so a policy change doesn’t fully take effect. -> i think thats fine. just keep in mind that when revoking a collection from the whitelist to cancel all the listings manually.
  approved operators of erc721 can interact with the marketplacediamond on behalv of the owner, tho approced operators of erc1155 can NOT interact with the marketplacediamond on behalv of the owner because for the isApproved check the Owner address must be known tho it is not so it simply is impossible without offchain tracing. [I could add this funcitonality in the future by: require that users “register” as the controller in your protocol pre-listing]
  listedItem.seller == address(0) means that the listing is inactive
@@ -25,7 +25,7 @@ notes:
  explain the diamondstructure and where devs can find which functions (for example getters you would expect in the ideationmarketfacet are in the getterFacet)
 
 
-deployment log:
+deployment 1 log:
   Deployed diamondInit contract at address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
   Deployed diamondLoupeFacet contract at address: 0x84B5151b8258B025284F163650d220b930204A8F
   Deployed ownershipFacet contract at address: 0x032a247637cD41c675cC82A7149B907a559841aa
@@ -40,13 +40,34 @@ deployment log:
 https://louper.dev/diamond/0x8cE90712463c87a6d62941D67C3507D090Ea9d79?network=sepolia
 https://sepolia.etherscan.io/address/0x8cE90712463c87a6d62941D67C3507D090Ea9d79
 
-for etherscan interaction:
+deployment 2 log
+Diamond Address: 0xF422A7779D2feB884CcC1773b88d98494A946604
+Owner: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+Version: 1.0.0
+Implementation ID: 0x359675c94671bb21ec1b9cdf35889444129ffe792962a68e660b24c9b1eb1fed
+FACETS:
+DiamondInit: 0xc82B382b69cB613703cF6F01ba4867Ff5443a4E4
+DiamondLoupeFacet: 0x64218c3Fa4896be3F596177c1080C59751e013e7
+OwnershipFacet: 0x57db2c739633EF5A050CDB1dBB29f48f092b5078
+IdeationMarketFacet: 0x5Aa7C259D668cf3868b5D1831b760EfB2E9443e8
+CollectionWhitelistFacet: 0x1aF98799D02d1a46123725bDD65b96b2A7FAb2F8
+BuyerWhitelistFacet: 0xf14A6B456B465A38aCF44180B85AA3334F92a1F5
+GetterFacet: 0x80525592f21245EdfdDa6c725AC31c73f04F76D2
+CurrencyWhitelistFacet: 0x827E91DF79357679F9B02690746fa3F0e7dB3C11
+VersionFacet: 0xbd390aD3058E0BA40AcDa61a72ebAEEF58891394
+PauseFacet: 0x4285d039DBDBee9bAa4785b9e1919095Dc030CF6
+DiamondCutFacet: 0x8D6805898180257A38F89d1DFb868C1A8c38E2Fb
+EXPLORERS:
+Louper: https://louper.dev/diamond/0xF422A7779D2feB884CcC1773b88d98494A946604?network=sepolia
+Etherscan: https://sepolia.etherscan.io/address/0xF422A7779D2feB884CcC1773b88d98494A946604
+
+for etherscan interaction: // !!!W check these if they are still up to date and integrate the info in the final readme
 add token address to 'collection whitelist'
 approve marketplace to handle the token in the token contract
 empty fields either '0' or '0x0000000000000000000000000000000000000000' or 'false'; erc1155 Quanitity for erc721 '1' empty array '[]', price in Wei, payableAmount in ETH
 
 
-running the sepolia tests:
+running the sepolia tests: // !!!W check these if they are still up to date and integrate the info in the final readme
 'source .env' to initiate the dot env variables
 'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth' run the diamondhealth testscript against the local forked sepolia testnet
 'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke' run the MarketSmoke testscript against the local forked sepolia testnet

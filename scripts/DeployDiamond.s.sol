@@ -48,9 +48,10 @@ contract DeployDiamond is Script {
     /// @dev Reverts if post-cut facet count isn’t 7 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Cut).
     /// Emits Foundry `console.log` outputs with deployed addresses for traceability.
     function run() external {
-        vm.startBroadcast();
+        uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
 
-        address deployer = vm.envAddress("DEV_PUBLIC_KEY");
+        address deployer = vm.addr(deployerPrivateKey);
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();
