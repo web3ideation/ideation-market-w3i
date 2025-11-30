@@ -12,6 +12,7 @@ import "../src/facets/OwnershipFacet.sol";
 import "../src/facets/IdeationMarketFacet.sol";
 import "../src/facets/CollectionWhitelistFacet.sol";
 import "../src/facets/BuyerWhitelistFacet.sol";
+import "../src/facets/CurrencyWhitelistFacet.sol";
 import "../src/facets/GetterFacet.sol";
 import "../src/interfaces/IDiamondCutFacet.sol";
 import "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -37,6 +38,7 @@ abstract contract MarketTestBase is Test {
     IdeationMarketFacet internal market;
     CollectionWhitelistFacet internal collections;
     BuyerWhitelistFacet internal buyers;
+    CurrencyWhitelistFacet internal currencies;
     GetterFacet internal getter;
 
     // Address of the initial diamondCut facet deployed in setUp
@@ -48,8 +50,8 @@ abstract contract MarketTestBase is Test {
     address internal marketImpl;
     address internal collectionsImpl;
     address internal buyersImpl;
+    address internal currenciesImpl;
     address internal getterImpl;
-    address internal paymentImpl;
 
     // Test addresses
     address internal owner;
@@ -83,6 +85,7 @@ abstract contract MarketTestBase is Test {
         IdeationMarketFacet marketFacet = new IdeationMarketFacet();
         CollectionWhitelistFacet collectionFacet = new CollectionWhitelistFacet();
         BuyerWhitelistFacet buyerFacet = new BuyerWhitelistFacet();
+        CurrencyWhitelistFacet currencyFacet = new CurrencyWhitelistFacet();
         GetterFacet getterFacet = new GetterFacet();
 
         // Deploy the diamond and add the initial diamondCut function
@@ -92,7 +95,7 @@ abstract contract MarketTestBase is Test {
         diamondCutFacetAddr = address(cutFacet);
 
         // Prepare facet cut definitions matching the deploy script
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](7);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](8);
 
         // Diamond Loupe selectors
         bytes4[] memory loupeSelectors = new bytes4[](5);
@@ -154,6 +157,16 @@ abstract contract MarketTestBase is Test {
             functionSelectors: buyerSelectors
         });
 
+        // Currency whitelist selectors
+        bytes4[] memory currencySelectors = new bytes4[](2);
+        currencySelectors[0] = CurrencyWhitelistFacet.addAllowedCurrency.selector;
+        currencySelectors[1] = CurrencyWhitelistFacet.removeAllowedCurrency.selector;
+        cuts[5] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(currencyFacet),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: currencySelectors
+        });
+
         // Getter selectors (add all view functions exposed by GetterFacet)
         bytes4[] memory getterSelectors = new bytes4[](15);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
@@ -169,7 +182,7 @@ abstract contract MarketTestBase is Test {
         getterSelectors[10] = GetterFacet.getPendingOwner.selector;
         getterSelectors[13] = GetterFacet.isCurrencyAllowed.selector;
         getterSelectors[14] = GetterFacet.getAllowedCurrencies.selector;
-        cuts[6] = IDiamondCutFacet.FacetCut({
+        cuts[7] = IDiamondCutFacet.FacetCut({
             facetAddress: address(getterFacet),
             action: IDiamondCutFacet.FacetCutAction.Add,
             functionSelectors: getterSelectors
@@ -180,6 +193,9 @@ abstract contract MarketTestBase is Test {
             cuts, address(init), abi.encodeCall(DiamondInit.init, (INNOVATION_FEE, MAX_BATCH))
         );
 
+        // Whitelist ETH (address(0)) as default payment currency
+        CurrencyWhitelistFacet(address(diamond)).addAllowedCurrency(address(0));
+
         vm.stopPrank();
 
         // Cache facet handles through the diamond's address. Casting will
@@ -189,6 +205,7 @@ abstract contract MarketTestBase is Test {
         market = IdeationMarketFacet(address(diamond));
         collections = CollectionWhitelistFacet(address(diamond));
         buyers = BuyerWhitelistFacet(address(diamond));
+        currencies = CurrencyWhitelistFacet(address(diamond));
         getter = GetterFacet(address(diamond));
 
         // cache impl addrs
@@ -197,6 +214,7 @@ abstract contract MarketTestBase is Test {
         marketImpl = address(marketFacet);
         collectionsImpl = address(collectionFacet);
         buyersImpl = address(buyerFacet);
+        currenciesImpl = address(currencyFacet);
         getterImpl = address(getterFacet);
 
         // Deploy mock tokens and mint balances for seller
