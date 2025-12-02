@@ -150,12 +150,12 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         allowed[0] = buyer;
         uint128 listingId = _createListingERC721(true, allowed);
 
-        Listing memory L = getter.getListingByListingId(listingId);
+        Listing memory listing = getter.getListingByListingId(listingId);
         address newOwner = vm.addr(0xA11CE);
 
         // off-market transfer by seller
         vm.prank(seller);
-        IERC721(L.tokenAddress).safeTransferFrom(seller, newOwner, L.tokenId);
+        IERC721(listing.tokenAddress).safeTransferFrom(seller, newOwner, listing.tokenId);
 
         // attempt to edit whitelist should revert with SellerIsNotERC721Owner(seller, newOwner)
         address[] memory addrs = new address[](1);
@@ -173,12 +173,12 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         allowed[0] = buyer;
         uint128 listingId = _createListingERC721(true, allowed);
 
-        Listing memory L = getter.getListingByListingId(listingId);
+        Listing memory listing = getter.getListingByListingId(listingId);
         address newOwner = vm.addr(0xCAFE);
 
         // off-market transfer by seller
         vm.prank(seller);
-        IERC721(L.tokenAddress).safeTransferFrom(seller, newOwner, L.tokenId);
+        IERC721(listing.tokenAddress).safeTransferFrom(seller, newOwner, listing.tokenId);
 
         // attempt to edit whitelist by a random address still hits the owner-mismatch check first
         address rando = vm.addr(0xDEAD);
@@ -196,14 +196,14 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         address[] memory seed = new address[](1);
         seed[0] = buyer;
         uint128 listingId = _createListingERC1155(5, true, seed);
-        Listing memory L = getter.getListingByListingId(listingId);
+        Listing memory listing = getter.getListingByListingId(listingId);
 
         // Move enough so seller balance < listed quantity
-        uint256 sellerBal = erc1155.balanceOf(seller, L.tokenId);
+        uint256 sellerBal = erc1155.balanceOf(seller, listing.tokenId);
         address sink = vm.addr(0xBEEF);
-        uint256 toMove = sellerBal - (L.erc1155Quantity - 1); // leaves listedQty-1
+        uint256 toMove = sellerBal - (listing.erc1155Quantity - 1); // leaves listedQty-1
         vm.prank(seller);
-        erc1155.safeTransferFrom(seller, sink, L.tokenId, toMove, "");
+        erc1155.safeTransferFrom(seller, sink, listing.tokenId, toMove, "");
 
         // Grant operator approval & try to edit whitelist as operator
         address operator = vm.addr(0xC0FFEE);
@@ -224,14 +224,14 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         address[] memory seed = new address[](1);
         seed[0] = buyer;
         uint128 listingId = _createListingERC1155(5, true, seed);
-        Listing memory L = getter.getListingByListingId(listingId);
+        Listing memory listing = getter.getListingByListingId(listingId);
 
         // Move enough so seller balance < listed quantity
-        uint256 sellerBal = erc1155.balanceOf(seller, L.tokenId);
+        uint256 sellerBal = erc1155.balanceOf(seller, listing.tokenId);
         address sink = vm.addr(0xABCD);
-        uint256 toMove = sellerBal - (L.erc1155Quantity - 1);
+        uint256 toMove = sellerBal - (listing.erc1155Quantity - 1);
         vm.prank(seller);
-        erc1155.safeTransferFrom(seller, sink, L.tokenId, toMove, "");
+        erc1155.safeTransferFrom(seller, sink, listing.tokenId, toMove, "");
 
         // Seller tries to edit whitelist → should revert
         address[] memory addrs = new address[](1);
@@ -247,14 +247,14 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         address[] memory seed = new address[](1);
         seed[0] = buyer;
         uint128 listingId = _createListingERC1155(5, true, seed);
-        Listing memory L = getter.getListingByListingId(listingId);
+        Listing memory listing = getter.getListingByListingId(listingId);
 
         // Reduce to exactly listedQty
-        uint256 sellerBal = erc1155.balanceOf(seller, L.tokenId);
+        uint256 sellerBal = erc1155.balanceOf(seller, listing.tokenId);
         address sink = vm.addr(0xFEED);
-        uint256 toMove = sellerBal - L.erc1155Quantity; // leaves exactly listedQty
+        uint256 toMove = sellerBal - listing.erc1155Quantity; // leaves exactly listedQty
         vm.prank(seller);
-        erc1155.safeTransferFrom(seller, sink, L.tokenId, toMove, "");
+        erc1155.safeTransferFrom(seller, sink, listing.tokenId, toMove, "");
 
         // Seller can still update whitelist
         address[] memory addrs = new address[](1);

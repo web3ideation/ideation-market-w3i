@@ -56,6 +56,13 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 4. **MarketTestBase done**: Foundation is complete with CurrencyWhitelistFacet
 5. **Infrastructure tests skip migration**: Tests for diamond mechanics (cut/loupe), ownership, pausing don't touch marketplace functions
 6. **Fork tests are orthogonal**: Health checks on deployed contracts test ERC165/ERC173 compliance and loupe views, not marketplace logic
+7. **Gas tests need withdraw removal**: Delete withdrawProceeds test + WITHDRAW_BUDGET constant entirely (non-custodial = no withdrawal)
+8. **Naming convention**: Use `Listing memory listing` instead of `L` for readability
+9. **Invariant tests fundamentally different**: Remove `withdraw()` handler action, remove proceeds-sum invariant, add `invariant_DiamondBalanceIsZero()` (non-custodial = no balance accumulation)
+10. **Mock facet naming**: Use `DummyUpgradeFacetV1/V2` from MarketTestBase, not `VersionFacetV1/V2` (which don't exist)
+11. **Fork tests with minimal interfaces**: Import `Listing` struct from `LibAppStorage.sol` - GetterFacet actually returns `Listing memory` not destructured values. Add `isCurrencyAllowed(address)` to IGetterFacet interface. Add ETH whitelisting in setUp using low-level call to CurrencyWhitelistFacet's `addAllowedCurrency(address(0))`
+12. **Balance/proceeds tests fundamentally different**: Remove overpay logic (exact ETH required), remove `getProceeds()` calls, replace with balance snapshots before/after purchase. Test that diamond balance is UNCHANGED after purchase (non-custodial = no accumulation), verify seller/owner receive atomic payments directly
+13. **Storage collision/invariant tests**: Add currency params everywhere (createListing, updateListing, purchaseListing), replace `getProceeds()` with balance diffs, remove `withdrawProceeds()` from invariant handlers. Storage canary checks (innovationFee, maxBatch, whitelistedCollections) remain unchanged - they validate storage slots don't drift during marketplace operations
 
 ### New Errors to Handle
 ```solidity
@@ -157,14 +164,29 @@ function helperCreateListing(...) internal {
 - **DeprecatedSwapListingDeletionTest.t.sol** - Already migrated, no changes needed
 - **DiamondCutFacetTest.t.sol** - No changes needed
 - **DiamondHealth.t.sol** - No changes needed
+- **IdeationMarketGasTest.t.sol** - Migrated: added currency params, removed withdrawProceeds test
+- **InvariantTest.t.sol** - Migrated: added currency params, removed withdraw function, replaced proceeds invariant with zero-balance invariant
+- **LibDiamondEdgesTest.t.sol** - Fixed: replaced VersionFacetV1/V2 with DummyUpgradeFacetV1/V2
+- **MarketSmoke.t.sol** - Migrated: imported Listing struct, updated minimal interfaces, added currency params to all calls (5 createListing + 6 purchaseListing), added ETH whitelisting in setUp
+- **MarketSmokeBroadcast.s.sol** - Migrated: imported Listing struct, updated minimal interfaces, added currency params to all calls (2 createListing + 1 purchaseListing), added ETH whitelisting in run()
+- **MarketSmokeBroadcastFull.s.sol** - Migrated: imported Listing struct, updated minimal interfaces, added currency params to all calls (4 createListing + 4 purchaseListing including ERC1155 partial), added ETH whitelisting in run()
+- **ReceiveAndGetterBalanceTest.t.sol** - Migrated: added currency param to createListing/purchaseListing, replaced overpay test with atomic payment test verifying zero diamond balance after purchase
+- **StorageCollisionTest.t.sol** - Migrated: added currency params to all createListing/updateListing/purchaseListing calls, replaced getProceeds with balance snapshots, removed withdrawProceeds from handlers, all storage collision canary tests intact
 
+### 🔄 In Progress
+- None
 
+### 📝 Pending
+- **IdeationMarketDiamondTest.t.sol** - Has ReentrantWithdrawer (needs withdrawal removal)
+- **PauseFacetTest.t.sol** - TBD
+- **ReceiveAndGetterBalanceTest.t.sol** - TBD (may test old proceeds mapping)
+- **StorageCollisionTest.t.sol** - TBD
+- **VersionFacetTest.t.sol** - TBD
 
-### ⏳ Pending
-- IdeationMarketDiamondTest.t.sol (has ReentrantWithdrawer error)
-- Other test files [to be assigned]
 
 ### Test Type Insights
+- **Invariant Tests**: Remove withdraw actions, replace proceeds invariants with atomic payment invariants (InvariantTest)
+- **Gas Benchmarks**: Need full migration + remove withdrawProceeds test (IdeationMarketGasTest)
 - **Infrastructure Tests**: No marketplace calls = no migration (DiamondCutFacet tests EIP-2535 diamond upgrades)
 - **Whitelist/Access Control Tests**: No currency changes needed (BuyerWhitelistFacetTest, CollectionWhitelistFacetEdgeTest)
 - **Swap Logic Tests**: Already migrated if currency params present (DeprecatedSwapListingDeletionTest)

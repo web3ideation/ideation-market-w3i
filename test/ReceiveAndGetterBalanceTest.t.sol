@@ -42,9 +42,9 @@ contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
         assertEq(address(diamond).balance, beforeNative);
     }
 
-    /// A simple ERC721 sale with overpay credits buyer, splits fee to owner,
-    /// pays seller proceeds, and total recorded proceeds equal both balances.
-    function testPurchaseERC721_Overpay_ProceedsSumEqualsBalances() public {
+    /// A simple ERC721 sale with atomic payment: seller and owner receive funds directly,
+    /// and diamond balance returns to zero after the purchase (non-custodial).
+    function testPurchaseERC721_AtomicPayment_DiamondBalanceZero() public {
         _whitelistDefaultMocks();
         // Approve & list an already-whitelisted mock ERC721 from the base
         // (MarketTestBase whitelists `erc721` in setUp and mints tokenId 1 & 2 to `seller`)
@@ -54,41 +54,50 @@ contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
         uint256 price = 1 ether;
         vm.prank(seller);
         market.createListing(
-            address(erc721), // nft
+            address(erc721), // tokenAddress
             2, // tokenId
-            address(0), // desired NFT (swap disabled)
+            address(0), // erc1155Holder (not used for ERC721)
             price, // price
-            address(0), // desired token addr (swap disabled)
-            0, // desired tokenId
-            0, // unit price (only for 1155)
-            0, // erc1155 qty (ERC721 -> 0)
-            false, // partial buy disabled
-            false, // whitelist disabled
-            new address[](0) // whitelist
+            address(0), // currency: ETH
+            address(0), // desiredTokenAddress (swap disabled)
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity (swap disabled)
+            0, // erc1155Quantity (0 = ERC721)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
         );
         uint128 id = getter.getNextListingId() - 1;
 
-        // Buyer overpays by 0.2 ether (credit should be recorded for buyer)
+        // Capture balances before purchase (non-custodial: atomic payment)
+        uint256 diamondBalBefore = address(diamond).balance;
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+
+        // Buyer pays exact amount (no overpay allowed in non-custodial)
         vm.deal(buyer, 2 ether);
         vm.prank(buyer);
-        market.purchaseListing{value: 1.2 ether}(
+        market.purchaseListing{value: price}(
             id, // listing id
             price, // expected price
+            address(0), // expected currency: ETH
             0, // expected qty (ERC721)
             address(0), // expected desired addr
             0, // expected desired id
-            0, // expected unit price
             0, // expected desired qty
-            address(0) // expected royalty receiver (0 for "don't care")
+            0, // erc1155PurchaseQuantity (not used for ERC721)
+            address(0) // desiredErc1155Holder (not used)
         );
 
-        // Sum up the plausible recipients:
-        // - seller receives (price - fee - royalty)
-        // - owner (contract owner) receives fee
-        // - buyer receives 0.2 ether credit (overpay)
-        uint256 sum = getter.getProceeds(seller) + getter.getProceeds(owner) + getter.getProceeds(buyer);
+        // Non-custodial: diamond should NOT hold any balance after purchase
+        assertEq(
+            address(diamond).balance, diamondBalBefore, "diamond balance changed (should be unchanged in non-custodial)"
+        );
+        assertEq(getter.getBalance(), diamondBalBefore, "getter.getBalance() != diamond balance");
 
-        assertEq(sum, getter.getBalance(), "sum(proceeds) != getter.getBalance()");
-        assertEq(getter.getBalance(), address(diamond).balance, "getter.getBalance() != native balance");
+        // Verify seller and owner received their shares (fee split atomic during purchase)
+        uint256 fee = (price * getter.getInnovationFee()) / 100_000;
+        assertEq(seller.balance, sellerBalBefore + (price - fee), "seller did not receive net proceeds");
+        assertEq(owner.balance, ownerBalBefore + fee, "owner did not receive fee");
     }
 }

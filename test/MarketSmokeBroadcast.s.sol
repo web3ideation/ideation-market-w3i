@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
+import {Listing} from "../src/libraries/LibAppStorage.sol";
 
 // same interfaces as in the test file
 interface IERC721 {
@@ -17,6 +18,8 @@ interface IERC721 {
 interface IGetterFacet {
     function getNextListingId() external view returns (uint128);
     function isCollectionWhitelisted(address collection) external view returns (bool);
+    function isCurrencyAllowed(address currency) external view returns (bool);
+    function getListingByListingId(uint128 listingId) external view returns (Listing memory listing);
 }
 
 interface ICollectionWhitelistFacet {
@@ -29,6 +32,7 @@ interface IIdeationMarketFacet {
         uint256 tokenId,
         address erc1155Holder,
         uint256 price,
+        address currency,
         address desiredTokenAddress,
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity,
@@ -40,6 +44,7 @@ interface IIdeationMarketFacet {
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,
+        address expectedCurrency,
         uint256 expectedErc1155Quantity,
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
@@ -77,6 +82,15 @@ contract MarketSmokeBroadcast is Script {
         require(vm.addr(pk1) == ACCOUNT1, "PRIVATE_KEY_1 does not control ACCOUNT1");
         require(vm.addr(pk2) == ACCOUNT2, "PRIVATE_KEY_2 does not control ACCOUNT2");
 
+        // whitelist ETH as currency if not yet (non-custodial multi-currency requirement)
+        if (!getter.isCurrencyAllowed(address(0))) {
+            vm.startBroadcast(pk1);
+            (bool success,) = DIAMOND.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
+            require(success, "ETH whitelisting failed - CurrencyWhitelistFacet may need to be deployed");
+            vm.stopBroadcast();
+            console.log("ETH whitelisted as currency");
+        }
+
         // whitelist 721 if needed (owner is ACCOUNT1 per your deploy log) :contentReference[oaicite:13]{index=13}
         if (!getter.isCollectionWhitelisted(TOKEN721)) {
             vm.startBroadcast(pk1);
@@ -93,13 +107,24 @@ contract MarketSmokeBroadcast is Script {
             vm.startBroadcast(pk1);
             {
                 market.createListing(
-                    TOKEN721, TOKEN1, address(0), PRICE1, address(0), 0, 0, 0, false, false, new address[](0)
+                    TOKEN721,
+                    TOKEN1,
+                    address(0),
+                    PRICE1,
+                    address(0),
+                    address(0),
+                    0,
+                    0,
+                    0,
+                    false,
+                    false,
+                    new address[](0)
                 );
             }
             vm.stopBroadcast();
 
             vm.startBroadcast(pk2);
-            market.purchaseListing{value: PRICE1}(idA, PRICE1, 0, address(0), 0, 0, 0, address(0));
+            market.purchaseListing{value: PRICE1}(idA, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
             erc721.safeTransferFrom(ACCOUNT2, ACCOUNT1, TOKEN1); // cleanup
             vm.stopBroadcast();
         } else {
@@ -115,7 +140,18 @@ contract MarketSmokeBroadcast is Script {
             vm.startBroadcast(pk2);
             {
                 market.createListing(
-                    TOKEN721, TOKEN2, address(0), PRICE2, address(0), 0, 0, 0, false, false, new address[](0)
+                    TOKEN721,
+                    TOKEN2,
+                    address(0),
+                    PRICE2,
+                    address(0),
+                    address(0),
+                    0,
+                    0,
+                    0,
+                    false,
+                    false,
+                    new address[](0)
                 );
             }
             vm.stopBroadcast();

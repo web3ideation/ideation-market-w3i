@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
+import {Listing} from "../src/libraries/LibAppStorage.sol";
 
 // ---- Minimal interfaces (matching your live diamond on Louper) ----
 // Louper shows these function names/selectors on your diamond at
@@ -18,23 +19,8 @@ interface IERC721 {
 interface IGetterFacet {
     function getNextListingId() external view returns (uint128);
     function isCollectionWhitelisted(address collection) external view returns (bool);
-    function getListingByListingId(uint128 listingId)
-        external
-        view
-        returns (
-            uint128 listingId_,
-            uint32 feeRate,
-            bool buyerWhitelistEnabled,
-            bool partialBuyEnabled,
-            address tokenAddress,
-            uint256 tokenId,
-            uint256 erc1155Quantity,
-            uint256 price,
-            address seller,
-            address desiredTokenAddress,
-            uint256 desiredTokenId,
-            uint256 desiredErc1155Quantity
-        );
+    function isCurrencyAllowed(address currency) external view returns (bool);
+    function getListingByListingId(uint128 listingId) external view returns (Listing memory listing);
 }
 
 interface ICollectionWhitelistFacet {
@@ -52,6 +38,7 @@ interface IIdeationMarketFacet {
         uint256 tokenId,
         address erc1155Holder,
         uint256 price,
+        address currency,
         address desiredTokenAddress,
         uint256 desiredTokenId,
         uint256 desiredErc1155Quantity,
@@ -64,6 +51,7 @@ interface IIdeationMarketFacet {
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,
+        address expectedCurrency,
         uint256 expectedErc1155Quantity,
         address expectedDesiredTokenAddress,
         uint256 expectedDesiredTokenId,
@@ -148,6 +136,16 @@ contract MarketSmoke is Test {
         assertEq(erc721.ownerOf(TOKEN1), ACCOUNT1, "token 16 not at ACCOUNT1");
         assertEq(erc721.ownerOf(TOKEN2), ACCOUNT2, "token 534 not at ACCOUNT2");
 
+        // whitelist ETH as currency if not yet (non-custodial multi-currency requirement)
+        if (!getter.isCurrencyAllowed(address(0))) {
+            vm.startPrank(ACCOUNT1); // diamond owner
+            // Note: This will fail if CurrencyWhitelistFacet not deployed on fork
+            // In that case, the fork needs to be upgraded first
+            (bool success,) = DIAMOND.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
+            require(success, "ETH whitelisting failed - may need CurrencyWhitelistFacet upgrade");
+            vm.stopPrank();
+        }
+
         // whitelist the 721 collection if not yet
         if (!getter.isCollectionWhitelisted(TOKEN721)) {
             vm.startPrank(ACCOUNT1); // diamond owner (per README deploy log) :contentReference[oaicite:3]{index=3}
@@ -169,6 +167,7 @@ contract MarketSmoke is Test {
                 TOKEN1,
                 address(0), // erc1155Holder not used for 721
                 PRICE1,
+                address(0), // currency: ETH
                 address(0),
                 0,
                 0,
@@ -181,7 +180,7 @@ contract MarketSmoke is Test {
         vm.stopPrank();
 
         vm.prank(ACCOUNT2);
-        market.purchaseListing{value: PRICE1}(id, PRICE1, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: PRICE1}(id, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
 
         assertEq(erc721.ownerOf(TOKEN1), ACCOUNT2, "buyer did not receive 721");
 
@@ -202,7 +201,7 @@ contract MarketSmoke is Test {
         vm.startPrank(ACCOUNT2);
         {
             market.createListing(
-                TOKEN721, TOKEN2, address(0), PRICE2, address(0), 0, 0, 0, false, false, new address[](0)
+                TOKEN721, TOKEN2, address(0), PRICE2, address(0), address(0), 0, 0, 0, false, false, new address[](0)
             );
         }
         vm.stopPrank();
@@ -228,6 +227,7 @@ contract MarketSmoke is Test {
                 TOKEN1,
                 address(0),
                 PRICE1,
+                address(0), // currency: ETH
                 address(0),
                 0,
                 0,
@@ -240,7 +240,7 @@ contract MarketSmoke is Test {
         vm.stopPrank();
 
         vm.prank(ACCOUNT2);
-        market.purchaseListing{value: PRICE1}(id, PRICE1, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: PRICE1}(id, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // cleanup
         vm.startPrank(ACCOUNT2);
@@ -265,6 +265,7 @@ contract MarketSmoke is Test {
                 TOKEN1,
                 address(0),
                 PRICE1,
+                address(0), // currency: ETH
                 address(0),
                 0,
                 0,
@@ -278,7 +279,7 @@ contract MarketSmoke is Test {
 
         vm.prank(ACCOUNT2);
         vm.expectRevert(); // generic (custom error selector unknown here)
-        market.purchaseListing{value: PRICE1}(id, PRICE1, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: PRICE1}(id, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // cleanup
         vm.prank(ACCOUNT1);
@@ -312,6 +313,7 @@ contract MarketSmoke is Test {
                 ID1155,
                 ACCOUNT1, // erc1155Holder
                 PRICE1155 * QTY1155, // Total Listing price at creation
+                address(0), // currency: ETH
                 address(0),
                 0,
                 0,
@@ -326,7 +328,7 @@ contract MarketSmoke is Test {
         // Buyer takes partials 3 then 7 (total 10)
         vm.prank(ACCOUNT2);
         market.purchaseListing{value: PRICE1155 * PARTIAL1}(
-            id, PRICE1155 * QTY1155, QTY1155, address(0), 0, 0, PARTIAL1, ACCOUNT2
+            id, PRICE1155 * QTY1155, address(0), QTY1155, address(0), 0, 0, PARTIAL1, ACCOUNT2
         );
 
         // Buyer partial #2 (use UPDATED remaining terms)
@@ -335,7 +337,7 @@ contract MarketSmoke is Test {
 
         vm.prank(ACCOUNT2);
         market.purchaseListing{value: PRICE1155 * PARTIAL2}(
-            id, remainingTotal, remainingQty, address(0), 0, 0, PARTIAL2, ACCOUNT2
+            id, remainingTotal, address(0), remainingQty, address(0), 0, 0, PARTIAL2, ACCOUNT2
         );
 
         // assertion + cleanup (return to seller)

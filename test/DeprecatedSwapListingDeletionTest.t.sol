@@ -92,9 +92,9 @@ contract DeprecatedSwapListingDeletionTest is MarketTestBase {
         _purchaseSwap(swapId, desiredQty);
 
         // should still exist (NOT deleted)
-        Listing memory L = getter.getListingByListingId(depId);
-        assertEq(L.seller, buyer, "seller mismatch");
-        assertEq(L.erc1155Quantity, depQty, "erc1155Quantity changed");
+        Listing memory listing = getter.getListingByListingId(depId);
+        assertEq(listing.seller, buyer, "seller mismatch");
+        assertEq(listing.erc1155Quantity, depQty, "erc1155Quantity changed");
     }
 
     /// Case 2: remaining > listed qty  => NOT deleted
@@ -111,9 +111,9 @@ contract DeprecatedSwapListingDeletionTest is MarketTestBase {
         _purchaseSwap(swapId, desiredQty);
 
         // should still exist (NOT deleted)
-        Listing memory L = getter.getListingByListingId(depId);
-        assertEq(L.seller, buyer, "seller mismatch");
-        assertEq(L.erc1155Quantity, depQty, "erc1155Quantity changed");
+        Listing memory listing = getter.getListingByListingId(depId);
+        assertEq(listing.seller, buyer, "seller mismatch");
+        assertEq(listing.erc1155Quantity, depQty, "erc1155Quantity changed");
     }
 
     /// Case 3: remaining < listed qty  => deleted

@@ -37,7 +37,9 @@ contract StorageCollisionTest is MarketTestBase {
         allow1[0] = buyer;
 
         vm.prank(seller);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, allow1);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allow1
+        );
 
         uint128 listingId = getter.getNextListingId() - 1;
 
@@ -47,7 +49,7 @@ contract StorageCollisionTest is MarketTestBase {
         allow2[0] = altBuyer;
 
         vm.prank(seller);
-        market.updateListing(listingId, 1 ether, address(0), 0, 0, 0, true, false, allow2);
+        market.updateListing(listingId, 1 ether, address(0), address(0), 0, 0, 0, true, false, allow2);
 
         // assert reverse index unchanged before purchase
         Listing[] memory ids = getter.getListingsByNFT(address(erc721), 1);
@@ -55,20 +57,24 @@ contract StorageCollisionTest is MarketTestBase {
         assertEq(ids[0].listingId, listingId, "reverse index id drifted");
 
         // --- Purchase by whitelisted buyer; should not touch canaries ---
-        vm.deal(buyer, 2 ether); // give buyer enough ETH for the purchase
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(listingId, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        // fee snapshot proceeds check (no risky subtraction)
         address diamondOwner = getter.getContractOwner();
         uint256 pricePaid = 1 ether;
         uint256 expectedFee = (pricePaid * fee0) / 100_000;
 
-        uint256 ownerGot = getter.getProceeds(diamondOwner);
-        uint256 sellerGot = getter.getProceeds(seller);
+        // Capture balances before purchase (non-custodial: atomic payment)
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = diamondOwner.balance;
 
-        assertEq(ownerGot, expectedFee, "owner proceeds mismatch");
-        assertEq(sellerGot + ownerGot, pricePaid, "seller+owner proceeds must equal price");
+        vm.deal(buyer, 2 ether); // give buyer enough ETH for the purchase
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Verify atomic payments (non-custodial: no proceeds accumulation)
+        uint256 ownerGot = diamondOwner.balance - ownerBalBefore;
+        uint256 sellerGot = seller.balance - sellerBalBefore;
+
+        assertEq(ownerGot, expectedFee, "owner did not receive fee atomically");
+        assertEq(sellerGot + ownerGot, pricePaid, "seller+owner payments must equal price");
 
         // Canaries unchanged
         assertEq(getter.getInnovationFee(), fee0, "innovationFee drifted");
@@ -92,7 +98,7 @@ contract StorageCollisionTest is MarketTestBase {
         uint256 price = 2 ether;
 
         vm.prank(seller);
-        market.createListing(address(erc721), 2, address(0), price, address(0), 0, 0, 0, true, false, allow);
+        market.createListing(address(erc721), 2, address(0), price, address(0), address(0), 0, 0, 0, true, false, allow);
 
         uint128 id = getter.getNextListingId() - 1;
 
@@ -102,15 +108,15 @@ contract StorageCollisionTest is MarketTestBase {
         assertFalse(getter.isBuyerWhitelisted(id, stranger), "stranger must not be whitelisted");
 
         // Unrelated listing fields unchanged
-        Listing memory L = getter.getListingByListingId(id);
-        assertEq(L.listingId, id);
-        assertEq(L.tokenAddress, address(erc721));
-        assertEq(L.tokenId, 2);
-        assertEq(L.erc1155Quantity, 0);
-        assertEq(L.price, price, "price drifted");
-        assertEq(L.seller, seller, "seller drifted");
-        assertTrue(L.buyerWhitelistEnabled, "whitelist flag drifted");
-        assertFalse(L.partialBuyEnabled, "partialBuy flag drifted");
+        Listing memory listing = getter.getListingByListingId(id);
+        assertEq(listing.listingId, id);
+        assertEq(listing.tokenAddress, address(erc721));
+        assertEq(listing.tokenId, 2);
+        assertEq(listing.erc1155Quantity, 0);
+        assertEq(listing.price, price, "price drifted");
+        assertEq(listing.seller, seller, "seller drifted");
+        assertTrue(listing.buyerWhitelistEnabled, "whitelist flag drifted");
+        assertFalse(listing.partialBuyEnabled, "partialBuy flag drifted");
     }
 
     /// -----------------------------------------------------------------------
@@ -124,7 +130,9 @@ contract StorageCollisionTest is MarketTestBase {
         vm.stopPrank();
 
         vm.prank(seller);
-        market.createListing(address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 6, true, false, new address[](0));
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 6, true, false, new address[](0)
+        );
 
         uint128 id = getter.getNextListingId() - 1;
 
@@ -314,7 +322,7 @@ contract SellerHandler {
         if (hasListing721) return;
 
         market.createListing(
-            address(erc721), 100, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 100, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         lastListingId721 = getter.getNextListingId() - 1;
         hasListing721 = true;
@@ -323,16 +331,17 @@ contract SellerHandler {
     /// Enable whitelist (no new addresses provided here)
     function enableWhitelist() external {
         if (!hasListing721) return;
-        Listing memory L = getter.getListingByListingId(lastListingId721);
+        Listing memory listing = getter.getListingByListingId(lastListingId721);
         market.updateListing(
             lastListingId721,
-            L.price,
-            L.desiredTokenAddress,
-            L.desiredTokenId,
-            L.desiredErc1155Quantity,
-            L.erc1155Quantity,
+            listing.price,
+            listing.currency,
+            listing.desiredTokenAddress,
+            listing.desiredTokenId,
+            listing.desiredErc1155Quantity,
+            listing.erc1155Quantity,
             true, // enable whitelist
-            L.partialBuyEnabled,
+            listing.partialBuyEnabled,
             new address[](0)
         );
     }
@@ -364,7 +373,7 @@ contract SellerHandler {
     /// Create a small ERC1155 listing to mix flows (whitelist disabled)
     function create1155Listing() external {
         market.createListing(
-            address(erc1155), 5, address(this), 2 ether, address(0), 0, 0, 2, false, false, new address[](0)
+            address(erc1155), 5, address(this), 2 ether, address(0), address(0), 0, 0, 2, false, false, new address[](0)
         );
     }
 }
@@ -387,19 +396,20 @@ contract BuyerHandler {
         uint128 id = sellerH.lastListingId721();
         if (id == 0) return;
 
-        Listing memory L = getter.getListingByListingId(id);
+        Listing memory listing = getter.getListingByListingId(id);
         // must be ERC721 path
-        if (L.erc1155Quantity != 0) return;
+        if (listing.erc1155Quantity != 0) return;
 
         // Try exact-price purchase
         // (If whitelist not enabled or not added, or approval drifted, this may revert—acceptable for invariants.)
-        market.purchaseListing{value: L.price}(
+        market.purchaseListing{value: listing.price}(
             id,
-            L.price,
-            L.erc1155Quantity, // 0
-            L.desiredTokenAddress,
-            L.desiredTokenId,
-            L.desiredErc1155Quantity,
+            listing.price,
+            listing.currency,
+            listing.erc1155Quantity, // 0
+            listing.desiredTokenAddress,
+            listing.desiredTokenId,
+            listing.desiredErc1155Quantity,
             0, // erc1155PurchaseQuantity
             address(0)
         );
@@ -407,11 +417,5 @@ contract BuyerHandler {
 
     function setSeller(address _sellerH) external {
         sellerH = ISellerHandlerView(_sellerH);
-    }
-
-    /// Withdraw any proceeds this buyer may have (e.g., from overpays credit)
-    function withdraw() external {
-        // ignore revert if zero
-        try market.withdrawProceeds() {} catch {}
     }
 }

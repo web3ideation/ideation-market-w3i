@@ -20,7 +20,6 @@ contract IdeationMarketGasTest is MarketTestBase {
     uint256 private constant PURCHASE_1155_BUDGET = 190_000; // full-qty buy, partial disabled
     uint256 private constant UPDATE_1155_BUDGET = 90_000;
 
-    uint256 private constant WITHDRAW_BUDGET = 70_000;
     uint256 private constant SWAP_721_PURCHASE_BUDGET = 200_000;
     uint256 private constant CLEAN_721_BUDGET = 80_000;
 
@@ -40,9 +39,10 @@ contract IdeationMarketGasTest is MarketTestBase {
             1,
             address(0), // erc1155Holder (unused for 721)
             1 ether, // price
-            address(0),
-            0,
-            0, // no swap
+            address(0), // currency (ETH)
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity (no swap)
             0, // erc1155Quantity = 0 => ERC721
             false, // buyerWhitelistEnabled
             false, // partialBuyEnabled
@@ -79,6 +79,7 @@ contract IdeationMarketGasTest is MarketTestBase {
             1,
             address(0), // erc1155Holder (unused for 721)
             1 ether, // price (plus swap)
+            address(0), // currency (ETH)
             address(erc721), // desiredTokenAddress (ERC721)
             3, // desiredTokenId
             0, // desiredErc1155Quantity (0 for ERC721)
@@ -90,20 +91,21 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.stopPrank();
 
         uint128 listingId = getter.getNextListingId() - 1;
-        Listing memory L = getter.getListingByListingId(listingId);
-        vm.deal(buyer, L.price);
+        Listing memory listing = getter.getListingByListingId(listingId);
+        vm.deal(buyer, listing.price);
         vm.resumeGasMetering();
 
         // Purchase as buyer, providing expected terms
         vm.startPrank(buyer);
         uint256 gasBefore = gasleft();
-        market.purchaseListing{value: L.price}(
+        market.purchaseListing{value: listing.price}(
             listingId,
-            L.price,
+            listing.price,
+            address(0), // expectedCurrency (ETH)
             0, // expectedErc1155Quantity
-            L.desiredTokenAddress,
-            L.desiredTokenId,
-            L.desiredErc1155Quantity,
+            listing.desiredTokenAddress,
+            listing.desiredTokenId,
+            listing.desiredErc1155Quantity,
             0, // erc1155PurchaseQuantity (0 for 721)
             address(0) // desiredErc1155Holder (unused for 721 swap)
         );
@@ -144,19 +146,20 @@ contract IdeationMarketGasTest is MarketTestBase {
     function testGas_Purchase_ERC721_underBudget() public {
         vm.pauseGasMetering();
         uint128 listingId = _createListingERC721(false, new address[](0));
-        Listing memory L = getter.getListingByListingId(listingId);
-        vm.deal(buyer, L.price);
+        Listing memory listing = getter.getListingByListingId(listingId);
+        vm.deal(buyer, listing.price);
         vm.resumeGasMetering();
 
         vm.startPrank(buyer);
         uint256 gasBefore = gasleft();
-        market.purchaseListing{value: L.price}(
+        market.purchaseListing{value: listing.price}(
             listingId,
-            L.price,
+            listing.price,
+            address(0), // expectedCurrency (ETH)
             0, // expectedErc1155Quantity
-            address(0),
-            0,
-            0,
+            address(0), // expectedDesiredTokenAddress
+            0, // expectedDesiredTokenId
+            0, // expectedDesiredErc1155Quantity
             0, // erc1155PurchaseQuantity (0 for 721)
             address(0) // desiredErc1155Holder
         );
@@ -182,9 +185,10 @@ contract IdeationMarketGasTest is MarketTestBase {
         market.updateListing(
             listingId,
             0.9 ether, // new price
-            address(0),
-            0,
-            0, // no swap
+            address(0), // newCurrency (ETH)
+            address(0), // newDesiredTokenAddress
+            0, // newDesiredTokenId
+            0, // newDesiredErc1155Quantity (no swap)
             0, // still ERC721 quantity
             false, // whitelist
             false, // partialBuy
@@ -213,10 +217,11 @@ contract IdeationMarketGasTest is MarketTestBase {
             address(erc1155),
             1,
             seller, // erc1155Holder
-            1 ether,
-            address(0),
-            0,
-            0, // no swap
+            1 ether, // price (TOTAL for all 5 units)
+            address(0), // currency (ETH)
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity (no swap)
             5, // erc1155Quantity
             false, // whitelist disabled
             false, // partialBuy disabled
@@ -236,21 +241,22 @@ contract IdeationMarketGasTest is MarketTestBase {
     function testGas_Purchase_ERC1155_underBudget() public {
         vm.pauseGasMetering();
         uint128 listingId = _createListingERC1155(5, false, new address[](0));
-        Listing memory L = getter.getListingByListingId(listingId);
-        vm.deal(buyer, L.price);
+        Listing memory listing = getter.getListingByListingId(listingId);
+        vm.deal(buyer, listing.price);
         vm.resumeGasMetering();
 
         vm.startPrank(buyer);
         uint256 gasBefore = gasleft();
-        market.purchaseListing{value: L.price}(
+        market.purchaseListing{value: listing.price}(
             listingId,
-            L.price,
-            L.erc1155Quantity, // expected
-            address(0),
-            0,
-            0,
-            L.erc1155Quantity, // full purchase
-            address(0)
+            listing.price,
+            address(0), // expectedCurrency (ETH)
+            listing.erc1155Quantity, // expectedErc1155Quantity
+            address(0), // expectedDesiredTokenAddress
+            0, // expectedDesiredTokenId
+            0, // expectedDesiredErc1155Quantity
+            listing.erc1155Quantity, // full purchase
+            address(0) // desiredErc1155Holder
         );
         uint256 gasUsed = gasBefore - gasleft();
         vm.stopPrank();
@@ -274,9 +280,10 @@ contract IdeationMarketGasTest is MarketTestBase {
         market.updateListing(
             listingId,
             0.8 ether, // new price
-            address(0),
-            0,
-            0, // no swap
+            address(0), // newCurrency (ETH)
+            address(0), // newDesiredTokenAddress
+            0, // newDesiredTokenId
+            0, // newDesiredErc1155Quantity (no swap)
             5, // same qty
             false, // whitelist
             false, // partialBuy
@@ -287,31 +294,6 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.stopPrank();
 
         assertLe(gasUsed, UPDATE_1155_BUDGET, "ERC1155 updateListing gas regression");
-        vm.resumeGasMetering();
-    }
-
-    // ---------------------------------------------------------------------
-    // withdrawProceeds: after a sale
-    // ---------------------------------------------------------------------
-    function testGas_WithdrawProceeds_underBudget() public {
-        // Seed proceeds: create & buy off-meter
-        vm.pauseGasMetering();
-        uint128 listingId = _createListingERC721(false, new address[](0));
-        Listing memory L = getter.getListingByListingId(listingId);
-        vm.deal(buyer, L.price);
-        vm.prank(buyer);
-        market.purchaseListing{value: L.price}(listingId, L.price, 0, address(0), 0, 0, 0, address(0));
-        vm.resumeGasMetering();
-
-        // Measure withdraw
-        vm.startPrank(seller);
-        uint256 gasBefore = gasleft();
-        market.withdrawProceeds();
-        uint256 gasUsed = gasBefore - gasleft();
-        vm.stopPrank();
-
-        vm.pauseGasMetering();
-        assertLe(gasUsed, WITHDRAW_BUDGET, "withdrawProceeds gas regression");
         vm.resumeGasMetering();
     }
 }

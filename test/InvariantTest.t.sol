@@ -29,7 +29,7 @@ contract InvariantHandler {
     // Track listings we created so we can pick among them
     uint128[] internal _listingIds;
 
-    // Track every address that could have non-zero proceeds
+    // Track every address involved in marketplace actions (for testing purposes)
     mapping(address => bool) internal _seen;
     address[] internal _actors;
 
@@ -80,10 +80,6 @@ contract InvariantHandler {
         }
     }
 
-    function getActors() external view returns (address[] memory) {
-        return _actors;
-    }
-
     function _pushListing(uint128 id) internal {
         _listingIds.push(id);
     }
@@ -114,7 +110,18 @@ contract InvariantHandler {
 
         vm.prank(seller);
         market.createListing(
-            address(erc721Roy), tokenId, address(0), price, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721Roy),
+            tokenId,
+            address(0), // erc1155Holder (unused for 721)
+            price,
+            address(0), // currency (ETH)
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            0, // erc1155Quantity (0 => ERC721)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
@@ -141,14 +148,15 @@ contract InvariantHandler {
             address(erc1155),
             id,
             seller, // erc1155Holder
-            price,
-            address(0),
-            0,
-            0,
-            qty,
-            false,
-            allowPartial,
-            new address[](0)
+            price, // TOTAL price for all units
+            address(0), // currency (ETH)
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            qty, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            allowPartial, // partialBuyEnabled
+            new address[](0) // allowedBuyers
         );
         uint128 lid = getter.getNextListingId() - 1;
         _pushListing(lid);
@@ -169,15 +177,16 @@ contract InvariantHandler {
         market.createListing(
             address(erc721Roy),
             offeredId,
-            address(0),
-            0,
-            address(erc721Roy),
-            wantedId,
-            0,
-            0,
-            false,
-            false,
-            new address[](0)
+            address(0), // erc1155Holder (unused for 721)
+            0, // price (0 for swap)
+            address(0), // currency (ETH)
+            address(erc721Roy), // desiredTokenAddress
+            wantedId, // desiredTokenId
+            0, // desiredErc1155Quantity (0 for ERC721 desired)
+            0, // erc1155Quantity (0 => ERC721 listing)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
@@ -198,61 +207,62 @@ contract InvariantHandler {
         market.createListing(
             address(erc721Roy),
             offeredId,
-            address(0),
-            0,
-            address(erc1155),
-            wantedId,
-            wantedQty,
-            0,
-            false,
-            false,
-            new address[](0)
+            address(0), // erc1155Holder (unused for 721)
+            0, // price (0 for swap)
+            address(0), // currency (ETH)
+            address(erc1155), // desiredTokenAddress
+            wantedId, // desiredTokenId
+            wantedQty, // desiredErc1155Quantity
+            0, // erc1155Quantity (0 => ERC721 listing)
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            new address[](0) // allowedBuyers
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
     }
 
-    /// @notice Purchase a non-swap listing, with optional overpay and partial ERC1155 quantity.
-    function purchase(uint256 pickSeed, uint256 overpaySeed, uint256 qtySeed, uint256 buyerSeed) external {
+    /// @notice Purchase a non-swap listing with optional partial ERC1155 quantity.
+    function purchase(uint256 pickSeed, uint256 qtySeed, uint256 buyerSeed) external {
         uint128 id = _randomListing(pickSeed);
         if (id == 0) return;
 
-        Listing memory L = getter.getListingByListingId(id);
+        Listing memory listing = getter.getListingByListingId(id);
         // skip removed listings or swaps (handled by purchaseSwap)
-        if (L.seller == address(0) || L.desiredTokenAddress != address(0)) return;
+        if (listing.seller == address(0) || listing.desiredTokenAddress != address(0)) return;
 
         // decide buyer
         address buyer = buyers[buyerSeed % buyers.length];
 
         // choose purchase quantity
-        uint256 buyQty = (L.erc1155Quantity == 0) ? 0 : (1 + (qtySeed % L.erc1155Quantity));
-        if (!L.partialBuyEnabled && L.erc1155Quantity > 0) buyQty = L.erc1155Quantity;
+        uint256 buyQty = (listing.erc1155Quantity == 0) ? 0 : (1 + (qtySeed % listing.erc1155Quantity));
+        if (!listing.partialBuyEnabled && listing.erc1155Quantity > 0) buyQty = listing.erc1155Quantity;
 
         // compute price respecting partial buys
-        uint256 purchasePrice = L.price;
-        if (buyQty > 0 && buyQty != L.erc1155Quantity) {
-            purchasePrice = L.price * buyQty / L.erc1155Quantity;
+        uint256 purchasePrice = listing.price;
+        if (buyQty > 0 && buyQty != listing.erc1155Quantity) {
+            purchasePrice = listing.price * buyQty / listing.erc1155Quantity;
         }
 
-        // bounded overpay
-        uint256 overpay = overpaySeed % 0.1 ether;
-        vm.deal(buyer, buyer.balance + purchasePrice + overpay);
+        // Non-custodial requires EXACT ETH payment (no overpay allowed)
+        vm.deal(buyer, buyer.balance + purchasePrice);
 
         // execute
         vm.prank(buyer);
-        market.purchaseListing{value: purchasePrice + overpay}(
+        market.purchaseListing{value: purchasePrice}(
             id,
-            L.price,
-            L.erc1155Quantity,
-            L.desiredTokenAddress,
-            L.desiredTokenId,
-            L.desiredErc1155Quantity,
+            listing.price,
+            address(0), // expectedCurrency (ETH)
+            listing.erc1155Quantity,
+            listing.desiredTokenAddress,
+            listing.desiredTokenId,
+            listing.desiredErc1155Quantity,
             buyQty,
             address(0) // desiredErc1155Holder (not used here)
         );
 
-        // track participants that may receive proceeds
-        _addActor(L.seller);
+        // track participants that receive payments directly (non-custodial)
+        _addActor(listing.seller);
         _addActor(buyer);
         _addActor(owner);
         if (royaltyReceiver != address(0)) _addActor(royaltyReceiver);
@@ -263,60 +273,57 @@ contract InvariantHandler {
         uint128 id = _randomListing(pickSeed);
         if (id == 0) return;
 
-        Listing memory L = getter.getListingByListingId(id);
-        if (L.seller == address(0) || L.desiredTokenAddress == address(0)) return;
+        Listing memory listing = getter.getListingByListingId(id);
+        if (listing.seller == address(0) || listing.desiredTokenAddress == address(0)) return;
 
         address buyer = buyers[buyerSeed % buyers.length];
 
-        if (L.desiredErc1155Quantity > 0) {
+        if (listing.desiredErc1155Quantity > 0) {
             // desired is ERC1155
             vm.prank(buyer);
-            erc1155.mint(buyer, L.desiredTokenId, L.desiredErc1155Quantity);
+            erc1155.mint(buyer, listing.desiredTokenId, listing.desiredErc1155Quantity);
             vm.prank(buyer);
             erc1155.setApprovalForAll(address(market), true);
 
             vm.prank(buyer);
-            market.purchaseListing{value: L.price}(
+            market.purchaseListing{value: listing.price}(
                 id,
-                L.price,
-                L.erc1155Quantity,
-                L.desiredTokenAddress,
-                L.desiredTokenId,
-                L.desiredErc1155Quantity,
-                0,
+                listing.price,
+                address(0), // expectedCurrency (ETH)
+                listing.erc1155Quantity,
+                listing.desiredTokenAddress,
+                listing.desiredTokenId,
+                listing.desiredErc1155Quantity,
+                0, // erc1155PurchaseQuantity (not used for 721 listing)
                 buyer // desiredErc1155Holder
             );
         } else {
             // desired is ERC721
             vm.prank(buyer);
-            erc721Roy.mint(buyer, L.desiredTokenId);
+            erc721Roy.mint(buyer, listing.desiredTokenId);
             vm.prank(buyer);
-            erc721Roy.approve(address(market), L.desiredTokenId);
+            erc721Roy.approve(address(market), listing.desiredTokenId);
 
             vm.prank(buyer);
-            market.purchaseListing{value: L.price}(
-                id, L.price, L.erc1155Quantity, L.desiredTokenAddress, L.desiredTokenId, 0, 0, address(0)
+            market.purchaseListing{value: listing.price}(
+                id,
+                listing.price,
+                address(0), // expectedCurrency (ETH)
+                listing.erc1155Quantity,
+                listing.desiredTokenAddress,
+                listing.desiredTokenId,
+                0, // expectedDesiredErc1155Quantity (0 for ERC721)
+                0, // erc1155PurchaseQuantity (not used for 721 listing)
+                address(0) // desiredErc1155Holder (not used for 721 desired)
             );
         }
 
-        // no ETH distribution on pure swaps with 0 price,
-        // but if L.price > 0, owner/seller/buyer/royaltyReceiver may be involved.
-        _addActor(L.seller);
+        // Payments distributed atomically during purchase (non-custodial)
+        // if listing.price > 0, owner/seller/royaltyReceiver receive payments directly
+        _addActor(listing.seller);
         _addActor(buyer);
         _addActor(owner);
         if (royaltyReceiver != address(0)) _addActor(royaltyReceiver);
-    }
-
-    /// @notice Withdraw proceeds for any actor who has a positive balance.
-    function withdraw(uint256 whoSeed) external {
-        address[] memory A = _actors;
-        if (A.length == 0) return;
-        address who = A[whoSeed % A.length];
-        uint256 p = getter.getProceeds(who);
-        if (p == 0) return;
-
-        vm.prank(who);
-        market.withdrawProceeds();
     }
 }
 
@@ -371,18 +378,9 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
         targetContract(address(handler));
     }
 
-    /// @notice Σ(proceeds of all known actors) == getter.getBalance() == address(diamond).balance
-    function invariant_ProceedsSumEqualsDiamondBalance() public view {
-        address[] memory A = handler.getActors();
-        uint256 sum;
-        for (uint256 i; i < A.length; i++) {
-            sum += getter.getProceeds(A[i]);
-        }
-
-        uint256 gbal = getter.getBalance();
+    /// @notice In non-custodial model, diamond should hold zero balance (all payments are atomic)
+    function invariant_DiamondBalanceIsZero() public view {
         uint256 dbal = address(diamond).balance;
-
-        assertEq(sum, gbal, "Sum(proceeds) != getter.getBalance()");
-        assertEq(gbal, dbal, "getter.getBalance() != diamond balance");
+        assertEq(dbal, 0, "Diamond balance should be zero (non-custodial: atomic payments)");
     }
 }

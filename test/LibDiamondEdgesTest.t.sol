@@ -40,11 +40,11 @@ contract LibDiamondEdgesTest is MarketTestBase {
     ------------------------------------------------------------------------ */
     function testCut_AddReplaceRemove_Flow() public {
         // deploy our two facet impls
-        VersionFacetV1 v1 = new VersionFacetV1();
-        VersionFacetV2 v2 = new VersionFacetV2();
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
         // selector we manage in this test
-        bytes4 versionSel = VersionFacetV1.version.selector;
+        bytes4 versionSel = DummyUpgradeFacetV1.dummyFunction.selector;
 
         // --- add ---
         {
@@ -72,8 +72,8 @@ contract LibDiamondEdgesTest is MarketTestBase {
             assertEq(loupe.facetAddress(versionSel), address(v1));
 
             // call through the diamond and see v1 behavior
-            uint256 ver = VersionFacetV1(address(diamond)).version();
-            assertEq(ver, 1);
+            uint256 ver = DummyUpgradeFacetV1(address(diamond)).dummyFunction();
+            assertEq(ver, 100);
         }
 
         // --- replace ---
@@ -93,8 +93,8 @@ contract LibDiamondEdgesTest is MarketTestBase {
 
             // selector now points at v2
             assertEq(loupe.facetAddress(versionSel), address(v2));
-            uint256 ver = VersionFacetV2(address(diamond)).version();
-            assertEq(ver, 2);
+            uint256 ver = DummyUpgradeFacetV2(address(diamond)).dummyFunction();
+            assertEq(ver, 200);
         }
 
         // --- remove ---
@@ -119,7 +119,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
 
             // calling it should hit the diamond fallback and revert with "missing function"
             vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
-            VersionFacetV2(address(diamond)).version();
+            DummyUpgradeFacetV2(address(diamond)).dummyFunction();
         }
     }
 
@@ -130,7 +130,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](1);
 
-        sels[0] = VersionFacetV1.version.selector;
+        sels[0] = DummyUpgradeFacetV1.dummyFunction.selector;
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
@@ -147,7 +147,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](1);
 
-        sels[0] = VersionFacetV1.version.selector;
+        sels[0] = DummyUpgradeFacetV1.dummyFunction.selector;
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
@@ -167,7 +167,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](1);
 
-        sels[0] = VersionFacetV1.version.selector; // not added yet
+        sels[0] = DummyUpgradeFacetV1.dummyFunction.selector; // not added yet
 
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(0),
@@ -185,8 +185,8 @@ contract LibDiamondEdgesTest is MarketTestBase {
     ------------------------------------------------------------------------ */
     function testCut_InitializerRevert_RollsBack() public {
         // First add v1 normally so we can prove no change on rollback later
-        VersionFacetV1 v1 = new VersionFacetV1();
-        bytes4 versionSel = VersionFacetV1.version.selector;
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        bytes4 versionSel = DummyUpgradeFacetV1.dummyFunction.selector;
 
         {
             IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
@@ -201,7 +201,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
 
             vm.prank(owner);
             IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
-            assertEq(VersionFacetV1(address(diamond)).version(), 1);
+            assertEq(DummyUpgradeFacetV1(address(diamond)).dummyFunction(), 100);
         }
 
         // Now attempt a no-op cut but with a reverting initializer
@@ -213,7 +213,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         IDiamondCutFacet(address(diamond)).diamondCut(noops, address(bad), abi.encodeCall(RevertingInit.init, ()));
 
         // prove nothing changed
-        assertEq(VersionFacetV1(address(diamond)).version(), 1);
+        assertEq(DummyUpgradeFacetV1(address(diamond)).dummyFunction(), 100);
     }
 
     function testCut_AddDuplicateSelectorReverts() public {
@@ -271,7 +271,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         address eoa = vm.addr(0xBEEF);
         IDiamondCutFacet.FacetCut[] memory cut = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](1);
-        sels[0] = VersionFacetV1.version.selector;
+        sels[0] = DummyUpgradeFacetV1.dummyFunction.selector;
 
         cut[0] = IDiamondCutFacet.FacetCut({
             facetAddress: eoa,
