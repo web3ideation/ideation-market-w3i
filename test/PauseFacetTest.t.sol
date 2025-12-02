@@ -1,27 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-import "forge-std/Test.sol";
-import {PauseFacet} from "../src/facets/PauseFacet.sol";
-import {GetterFacet} from "../src/facets/GetterFacet.sol";
-import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
-import {BuyerWhitelistFacet} from "../src/facets/BuyerWhitelistFacet.sol";
-import {LibAppStorage, AppStorage} from "../src/libraries/LibAppStorage.sol";
-import {LibDiamond} from "../src/libraries/LibDiamond.sol";
+import "./MarketTestBase.t.sol";
+import {Listing} from "../src/libraries/LibAppStorage.sol";
+import {IdeationMarket__ContractPaused} from "../src/facets/IdeationMarketFacet.sol";
 
 /// @title PauseFacetTest
 /// @notice Comprehensive tests for emergency pause functionality
 /// @dev Tests pause/unpause access control, paused function behavior, and non-paused function access during pause
-contract PauseFacetTest is Test {
-    // Note: This test file won't compile yet due to test base setup issues mentioned by the user
-    // The tests are structured to be production-ready once the test infrastructure is fixed
-
-    PauseFacet pauseFacet;
-    GetterFacet getterFacet;
-    IdeationMarketFacet marketFacet;
-    BuyerWhitelistFacet whitelistFacet;
-
-    address owner;
+contract PauseFacetTest is MarketTestBase {
     address user1;
     address user2;
     address attacker;
@@ -30,21 +17,40 @@ contract PauseFacetTest is Test {
     event Paused(address indexed triggeredBy);
     event Unpaused(address indexed triggeredBy);
 
-    function setUp() public {
-        // Setup will be completed when test infrastructure is ready
-        owner = makeAddr("owner");
-        user1 = makeAddr("user1");
-        user2 = makeAddr("user2");
-        attacker = makeAddr("attacker");
+    function setUp() public override {
+        super.setUp();
 
-        // Deploy or setup diamond with all facets
-        // pauseFacet = new PauseFacet();
-        // getterFacet = new GetterFacet();
-        // marketFacet = new IdeationMarketFacet();
-        // whitelistFacet = new BuyerWhitelistFacet();
+        // Additional test addresses
+        user1 = vm.addr(0x2001);
+        user2 = vm.addr(0x2002);
+        attacker = vm.addr(0x2003);
 
-        // Set owner in LibDiamond storage
-        // vm.prank(owner);
+        // Whitelist collections and give users some tokens
+        _whitelistDefaultMocks();
+        vm.startPrank(seller);
+        erc721.mint(user1, 10);
+        erc721.mint(user2, 11);
+        erc721.mint(attacker, 12);
+        vm.stopPrank();
+    }
+
+    // ============================================
+    // Diamond Routing Verification
+    // ============================================
+
+    /// @notice Verify pause/unpause selectors route to PauseFacet through diamond
+    function testPauseFacetSelectorsRoutedCorrectly() public view {
+        // Verify pause() selector routes to PauseFacet implementation
+        address pauseAddr = loupe.facetAddress(PauseFacet.pause.selector);
+        assertEq(pauseAddr, pauseImpl, "pause() must route to PauseFacet implementation");
+
+        // Verify unpause() selector routes to PauseFacet implementation
+        address unpauseAddr = loupe.facetAddress(PauseFacet.unpause.selector);
+        assertEq(unpauseAddr, pauseImpl, "unpause() must route to PauseFacet implementation");
+
+        // Verify isPaused() selector routes to GetterFacet implementation
+        address isPausedAddr = loupe.facetAddress(GetterFacet.isPaused.selector);
+        assertEq(isPausedAddr, getterImpl, "isPaused() must route to GetterFacet implementation");
     }
 
     // ============================================
@@ -53,47 +59,47 @@ contract PauseFacetTest is Test {
 
     /// @notice Test that only owner can pause the marketplace
     function testPauseOnlyOwner() public {
-        // vm.prank(owner);
-        // pauseFacet.pause();
-        // assertTrue(getterFacet.isPaused());
+        vm.prank(owner);
+        pauseFacet.pause();
+        assertTrue(getter.isPaused());
     }
 
     /// @notice Test that non-owner cannot pause
     function testPauseRevertsForNonOwner() public {
-        // vm.prank(user1);
-        // vm.expectRevert("LibDiamond: Must be contract owner");
-        // pauseFacet.pause();
+        vm.prank(user1);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        pauseFacet.pause();
     }
 
     /// @notice Test that only owner can unpause
     function testUnpauseOnlyOwner() public {
         // Setup: pause first
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Test unpause
-        // vm.prank(owner);
-        // pauseFacet.unpause();
-        // assertFalse(getterFacet.isPaused());
+        vm.prank(owner);
+        pauseFacet.unpause();
+        assertFalse(getter.isPaused());
     }
 
     /// @notice Test that non-owner cannot unpause
     function testUnpauseRevertsForNonOwner() public {
         // Setup: pause first
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Test unpause by non-owner
-        // vm.prank(user1);
-        // vm.expectRevert("LibDiamond: Must be contract owner");
-        // pauseFacet.unpause();
+        vm.prank(user1);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        pauseFacet.unpause();
     }
 
     /// @notice Test that attacker cannot pause
     function testAttackerCannotPause() public {
-        // vm.prank(attacker);
-        // vm.expectRevert("LibDiamond: Must be contract owner");
-        // pauseFacet.pause();
+        vm.prank(attacker);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        pauseFacet.pause();
     }
 
     // ============================================
@@ -102,68 +108,68 @@ contract PauseFacetTest is Test {
 
     /// @notice Test pause emits correct event
     function testPauseEmitsEvent() public {
-        // vm.prank(owner);
-        // vm.expectEmit(true, false, false, false);
-        // emit Paused(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, false);
+        emit Paused(owner);
+        pauseFacet.pause();
     }
 
     /// @notice Test unpause emits correct event
     function testUnpauseEmitsEvent() public {
         // Setup: pause first
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Test unpause event
-        // vm.prank(owner);
-        // vm.expectEmit(true, false, false, false);
-        // emit Unpaused(owner);
-        // pauseFacet.unpause();
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, false);
+        emit Unpaused(owner);
+        pauseFacet.unpause();
     }
 
     /// @notice Test cannot pause when already paused
     function testCannotPauseWhenAlreadyPaused() public {
-        // vm.startPrank(owner);
-        // pauseFacet.pause();
+        vm.startPrank(owner);
+        pauseFacet.pause();
 
         // Try to pause again
-        // vm.expectRevert(PauseFacet.Pause__AlreadyPaused.selector);
-        // pauseFacet.pause();
-        // vm.stopPrank();
+        vm.expectRevert(PauseFacet.Pause__AlreadyPaused.selector);
+        pauseFacet.pause();
+        vm.stopPrank();
     }
 
     /// @notice Test cannot unpause when not paused
     function testCannotUnpauseWhenNotPaused() public {
-        // vm.prank(owner);
-        // vm.expectRevert(PauseFacet.Pause__NotPaused.selector);
-        // pauseFacet.unpause();
+        vm.prank(owner);
+        vm.expectRevert(PauseFacet.Pause__NotPaused.selector);
+        pauseFacet.unpause();
     }
 
     /// @notice Test initial state is not paused
-    function testInitialStateNotPaused() public {
-        // assertFalse(getterFacet.isPaused());
+    function testInitialStateNotPaused() public view {
+        assertFalse(getter.isPaused());
     }
 
     /// @notice Test pause-unpause cycle
     function testPauseUnpauseCycle() public {
-        // vm.startPrank(owner);
+        vm.startPrank(owner);
 
         // Initial state
-        // assertFalse(getterFacet.isPaused());
+        assertFalse(getter.isPaused());
 
         // Pause
-        // pauseFacet.pause();
-        // assertTrue(getterFacet.isPaused());
+        pauseFacet.pause();
+        assertTrue(getter.isPaused());
 
         // Unpause
-        // pauseFacet.unpause();
-        // assertFalse(getterFacet.isPaused());
+        pauseFacet.unpause();
+        assertFalse(getter.isPaused());
 
         // Pause again
-        // pauseFacet.pause();
-        // assertTrue(getterFacet.isPaused());
+        pauseFacet.pause();
+        assertTrue(getter.isPaused());
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 
     // ============================================
@@ -173,110 +179,128 @@ contract PauseFacetTest is Test {
     /// @notice Test createListing reverts when paused
     function testCreateListingRevertsWhenPaused() public {
         // Setup: pause marketplace
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Setup listing parameters
-        // address tokenAddress = makeAddr("nft");
-        // uint256 tokenId = 1;
-        // address erc1155Holder = address(0);
-        // uint256 price = 1 ether;
-        // address currency = address(0); // ETH
-        // address desiredTokenAddress = address(0);
-        // uint256 desiredTokenId = 0;
-        // uint256 desiredErc1155Quantity = 0;
-        // uint256 erc1155Quantity = 0;
-        // bool buyerWhitelistEnabled = false;
-        // bool partialBuyEnabled = false;
-        // address[] memory allowedBuyers = new address[](0);
+        address tokenAddress = address(erc721);
+        uint256 tokenId = 10;
+        address erc1155Holder = address(0);
+        uint256 price = 1 ether;
+        address currency = address(0); // ETH
+        address desiredTokenAddress = address(0);
+        uint256 desiredTokenId = 0;
+        uint256 desiredErc1155Quantity = 0;
+        uint256 erc1155Quantity = 0;
+        bool buyerWhitelistEnabled = false;
+        bool partialBuyEnabled = false;
+        address[] memory allowedBuyers = new address[](0);
 
         // Attempt to create listing
-        // vm.prank(user1);
-        // vm.expectRevert(IdeationMarketFacet.IdeationMarket__ContractPaused.selector);
-        // marketFacet.createListing(
-        //     tokenAddress,
-        //     tokenId,
-        //     erc1155Holder,
-        //     price,
-        //     currency,
-        //     desiredTokenAddress,
-        //     desiredTokenId,
-        //     desiredErc1155Quantity,
-        //     erc1155Quantity,
-        //     buyerWhitelistEnabled,
-        //     partialBuyEnabled,
-        //     allowedBuyers
-        // );
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), tokenId);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.createListing(
+            tokenAddress,
+            tokenId,
+            erc1155Holder,
+            price,
+            currency,
+            desiredTokenAddress,
+            desiredTokenId,
+            desiredErc1155Quantity,
+            erc1155Quantity,
+            buyerWhitelistEnabled,
+            partialBuyEnabled,
+            allowedBuyers
+        );
+        vm.stopPrank();
     }
 
     /// @notice Test purchaseListing reverts when paused
     function testPurchaseListingRevertsWhenPaused() public {
-        // Setup: create listing while unpaused, then pause
-        // ... create listing ...
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        // Setup: create listing while unpaused
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721),
+            10,
+            address(0), // erc1155Holder
+            1 ether,
+            address(0), // ETH
+            address(0),
+            0,
+            0,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
 
-        // Setup purchase parameters
-        // uint128 listingId = 1;
-        // uint256 expectedPrice = 1 ether;
-        // address expectedCurrency = address(0);
-        // uint256 expectedErc1155Quantity = 0;
-        // address expectedDesiredTokenAddress = address(0);
-        // uint256 expectedDesiredTokenId = 0;
-        // uint256 expectedDesiredErc1155Quantity = 0;
-        // uint256 erc1155PurchaseQuantity = 0;
-        // address desiredErc1155Holder = address(0);
+        // Then pause
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Attempt to purchase
-        // vm.prank(user2);
-        // vm.expectRevert(IdeationMarketFacet.IdeationMarket__ContractPaused.selector);
-        // marketFacet.purchaseListing{value: expectedPrice}(
-        //     listingId,
-        //     expectedPrice,
-        //     expectedCurrency,
-        //     expectedErc1155Quantity,
-        //     expectedDesiredTokenAddress,
-        //     expectedDesiredTokenId,
-        //     expectedDesiredErc1155Quantity,
-        //     erc1155PurchaseQuantity,
-        //     desiredErc1155Holder
-        // );
+        vm.prank(user2);
+        vm.deal(user2, 1 ether);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.purchaseListing{value: 1 ether}(
+            listingId,
+            1 ether, // expectedPrice
+            address(0), // expectedCurrency
+            0, // expectedErc1155Quantity
+            address(0), // expectedDesiredTokenAddress
+            0, // expectedDesiredTokenId
+            0, // expectedDesiredErc1155Quantity
+            0, // erc1155PurchaseQuantity
+            address(0) // desiredErc1155Holder
+        );
     }
 
     /// @notice Test updateListing reverts when paused
     function testUpdateListingRevertsWhenPaused() public {
-        // Setup: create listing while unpaused, then pause
-        // ... create listing ...
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        // Setup: create listing while unpaused
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721),
+            10,
+            address(0), // erc1155Holder
+            1 ether,
+            address(0), // ETH
+            address(0),
+            0,
+            0,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
 
-        // Setup update parameters
-        // uint128 listingId = 1;
-        // uint256 newPrice = 2 ether;
-        // address newCurrency = address(0);
-        // address newDesiredTokenAddress = address(0);
-        // uint256 newDesiredTokenId = 0;
-        // uint256 newDesiredErc1155Quantity = 0;
-        // uint256 newErc1155Quantity = 0;
-        // bool newBuyerWhitelistEnabled = false;
-        // bool newPartialBuyEnabled = false;
-        // address[] memory newAllowedBuyers = new address[](0);
+        // Then pause
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Attempt to update
-        // vm.prank(user1);
-        // vm.expectRevert(IdeationMarketFacet.IdeationMarket__ContractPaused.selector);
-        // marketFacet.updateListing(
-        //     listingId,
-        //     newPrice,
-        //     newCurrency,
-        //     newDesiredTokenAddress,
-        //     newDesiredTokenId,
-        //     newDesiredErc1155Quantity,
-        //     newErc1155Quantity,
-        //     newBuyerWhitelistEnabled,
-        //     newPartialBuyEnabled,
-        //     newAllowedBuyers
-        // );
+        vm.prank(user1);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.updateListing(
+            listingId,
+            2 ether, // newPrice
+            address(0), // newCurrency
+            address(0), // newDesiredTokenAddress
+            0, // newDesiredTokenId
+            0, // newDesiredErc1155Quantity
+            0, // newErc1155Quantity
+            false, // newBuyerWhitelistEnabled
+            false, // newPartialBuyEnabled
+            new address[](0) // newAllowedBuyers
+        );
     }
 
     // ============================================
@@ -285,110 +309,143 @@ contract PauseFacetTest is Test {
 
     /// @notice Test cancelListing works when paused (users can exit)
     function testCancelListingWorksWhenPaused() public {
-        // Setup: create listing while unpaused, then pause
-        // ... create listing ...
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        // Setup: create listing while unpaused
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        // Then pause
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Cancel should work
-        // vm.prank(user1); // seller
-        // marketFacet.cancelListing(1);
-        // Should succeed without revert
+        vm.prank(user1);
+        market.cancelListing(listingId);
     }
 
     /// @notice Test cleanListing works when paused (cleanup needed)
     function testCleanListingWorksWhenPaused() public {
-        // Setup: create listing, revoke approval, then pause
-        // ... create listing and revoke approval ...
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        // Setup: create listing and revoke approval
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        erc721.approve(address(0), 10); // Revoke approval
+        vm.stopPrank();
+
+        // Then pause
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Clean should work
-        // vm.prank(user2); // anyone
-        // marketFacet.cleanListing(1);
-        // Should succeed without revert
+        vm.prank(user2);
+        market.cleanListing(listingId);
     }
 
     /// @notice Test setInnovationFee works when paused (owner admin function)
     function testSetInnovationFeeWorksWhenPaused() public {
-        // vm.startPrank(owner);
-        // pauseFacet.pause();
+        vm.startPrank(owner);
+        pauseFacet.pause();
 
         // setInnovationFee should work
-        // marketFacet.setInnovationFee(2000); // 2%
-        // Should succeed without revert
+        market.setInnovationFee(2000); // 2%
+        assertEq(getter.getInnovationFee(), 2000);
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 
     /// @notice Test buyer whitelist operations work when paused
     function testBuyerWhitelistWorksWhenPaused() public {
-        // Setup: create listing with whitelist enabled, then pause
-        // ... create listing ...
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        // Setup: create listing with whitelist enabled
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721),
+            10,
+            address(0),
+            1 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            0,
+            true,
+            false,
+            new address[](0) // whitelist enabled
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        // Then pause
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Whitelist operations should work
-        // address[] memory buyers = new address[](1);
-        // buyers[0] = user2;
+        address[] memory buyersToAdd = new address[](1);
+        buyersToAdd[0] = user2;
 
-        // vm.prank(user1); // seller
-        // whitelistFacet.addBuyerWhitelistAddresses(1, buyers);
-        // Should succeed without revert
+        vm.startPrank(user1);
+        buyers.addBuyerWhitelistAddresses(listingId, buyersToAdd);
+        assertTrue(getter.isBuyerWhitelisted(listingId, user2));
 
-        // whitelistFacet.removeBuyerWhitelistAddresses(1, buyers);
-        // Should succeed without revert
+        buyers.removeBuyerWhitelistAddresses(listingId, buyersToAdd);
+        assertFalse(getter.isBuyerWhitelisted(listingId, user2));
+        vm.stopPrank();
     }
 
     /// @notice Test collection whitelist operations work when paused (owner admin)
     function testCollectionWhitelistWorksWhenPaused() public {
-        // vm.startPrank(owner);
-        // pauseFacet.pause();
+        vm.startPrank(owner);
+        pauseFacet.pause();
 
         // Collection whitelist should work
-        // address collection = makeAddr("collection");
-        // collectionWhitelistFacet.addWhitelistedCollection(collection);
-        // Should succeed without revert
+        address newCollection = vm.addr(0x9999);
+        collections.addWhitelistedCollection(newCollection);
+        assertTrue(getter.isCollectionWhitelisted(newCollection));
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 
     /// @notice Test all getter functions work when paused
     function testGetterFunctionsWorkWhenPaused() public {
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // All getter functions should work
-        // getterFacet.isPaused(); // Should return true
-        // getterFacet.getInnovationFee();
-        // getterFacet.getNextListingId();
-        // getterFacet.getContractOwner();
-        // All should succeed without revert
+        assertTrue(getter.isPaused());
+        assertEq(getter.getInnovationFee(), INNOVATION_FEE);
+        assertGt(getter.getNextListingId(), 0);
+        assertEq(getter.getContractOwner(), owner);
     }
 
     /// @notice Test ownership transfer works when paused
     function testOwnershipTransferWorksWhenPaused() public {
-        // vm.startPrank(owner);
-        // pauseFacet.pause();
+        vm.startPrank(owner);
+        pauseFacet.pause();
 
         // Ownership transfer should work
-        // ownershipFacet.transferOwnership(user1);
-        // Should succeed without revert
+        ownership.transferOwnership(user1);
+        assertEq(getter.getPendingOwner(), user1);
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 
     /// @notice Test diamondCut works when paused (critical for recovery)
     function testDiamondCutWorksWhenPaused() public {
-        // vm.startPrank(owner);
-        // pauseFacet.pause();
+        vm.startPrank(owner);
+        pauseFacet.pause();
 
         // Diamond cut should work (needed for emergency upgrades)
-        // IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-        // diamondCutFacet.diamondCut(cuts, address(0), "");
-        // Should succeed without revert
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 
     // ============================================
@@ -398,82 +455,115 @@ contract PauseFacetTest is Test {
     /// @notice Test full pause scenario: pause, verify blocked, unpause, verify restored
     function testFullPauseScenario() public {
         // 1. Create listing while unpaused
-        // ... create listing ...
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
 
         // 2. Pause marketplace
-        // vm.prank(owner);
-        // pauseFacet.pause();
-        // assertTrue(getterFacet.isPaused());
+        vm.prank(owner);
+        pauseFacet.pause();
+        assertTrue(getter.isPaused());
 
         // 3. Verify critical functions are blocked
-        // vm.expectRevert(IdeationMarketFacet.IdeationMarket__ContractPaused.selector);
-        // vm.prank(user2);
-        // marketFacet.purchaseListing(...);
+        vm.prank(user2);
+        vm.deal(user2, 1 ether);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.purchaseListing{value: 1 ether}(listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // 4. Verify seller can still cancel
-        // vm.prank(user1);
-        // marketFacet.cancelListing(1);
+        vm.prank(user1);
+        market.cancelListing(listingId);
 
         // 5. Unpause
-        // vm.prank(owner);
-        // pauseFacet.unpause();
-        // assertFalse(getterFacet.isPaused());
+        vm.prank(owner);
+        pauseFacet.unpause();
+        assertFalse(getter.isPaused());
 
         // 6. Verify functions work again
-        // ... create new listing should work ...
+        vm.startPrank(user2);
+        erc721.approve(address(diamond), 11);
+        market.createListing(
+            address(erc721), 11, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
     }
 
     /// @notice Test emergency response: attacker detected, pause immediately
     function testEmergencyResponse() public {
-        // Simulate normal operation
-        // ... users creating listings ...
+        // Simulate normal operation - user creates listing
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
 
         // Emergency detected by monitoring
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // All user transactions should now fail
-        // vm.expectRevert(IdeationMarketFacet.IdeationMarket__ContractPaused.selector);
-        // ... attempt malicious transaction ...
+        vm.startPrank(attacker);
+        erc721.approve(address(diamond), 12);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.createListing(
+            address(erc721), 12, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
 
-        // Owner investigates and fixes via upgrade
-        // ... diamond cut to fix issue ...
+        // Owner investigates and can still perform diamond cut if needed
+        vm.startPrank(owner);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
+        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
 
         // Resume operations
-        // vm.prank(owner);
-        // pauseFacet.unpause();
+        pauseFacet.unpause();
+        vm.stopPrank();
     }
 
     /// @notice Test pause doesn't affect existing listing data
     function testPausePreservesListingData() public {
         // Create listing
-        // ... create listing ...
-        // Listing memory before = getterFacet.getListingByListingId(1);
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        Listing memory listingBefore = getter.getListingByListingId(listingId);
 
         // Pause
-        // vm.prank(owner);
-        // pauseFacet.pause();
+        vm.prank(owner);
+        pauseFacet.pause();
 
         // Verify listing data unchanged
-        // Listing memory after = getterFacet.getListingByListingId(1);
-        // assertEq(before.seller, after.seller);
-        // assertEq(before.price, after.price);
-        // ... etc ...
+        Listing memory listingAfter = getter.getListingByListingId(listingId);
+        assertEq(listingBefore.seller, listingAfter.seller);
+        assertEq(listingBefore.price, listingAfter.price);
+        assertEq(listingBefore.currency, listingAfter.currency);
+        assertEq(listingBefore.tokenAddress, listingAfter.tokenAddress);
+        assertEq(listingBefore.tokenId, listingAfter.tokenId);
     }
 
     /// @notice Test multiple pause/unpause cycles don't corrupt state
     function testMultiplePauseUnpauseCycles() public {
-        // vm.startPrank(owner);
+        vm.startPrank(owner);
 
-        // for (uint256 i = 0; i < 5; i++) {
-        //     pauseFacet.pause();
-        //     assertTrue(getterFacet.isPaused());
-        //
-        //     pauseFacet.unpause();
-        //     assertFalse(getterFacet.isPaused());
-        // }
+        for (uint256 i = 0; i < 5; i++) {
+            pauseFacet.pause();
+            assertTrue(getter.isPaused());
 
-        // vm.stopPrank();
+            pauseFacet.unpause();
+            assertFalse(getter.isPaused());
+        }
+
+        vm.stopPrank();
     }
 
     // ============================================
@@ -482,26 +572,28 @@ contract PauseFacetTest is Test {
 
     /// @notice Fuzz test: random addresses cannot pause
     function testFuzz_OnlyOwnerCanPause(address randomUser) public {
-        // vm.assume(randomUser != owner);
-        // vm.prank(randomUser);
-        // vm.expectRevert("LibDiamond: Must be contract owner");
-        // pauseFacet.pause();
+        vm.assume(randomUser != owner && randomUser != address(0));
+        vm.prank(randomUser);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        pauseFacet.pause();
     }
 
     /// @notice Fuzz test: pause state is consistent across all checks
     function testFuzz_PauseStateConsistent(bool shouldPause) public {
-        // vm.startPrank(owner);
+        vm.startPrank(owner);
 
-        // if (shouldPause) {
-        //     pauseFacet.pause();
-        //     assertTrue(getterFacet.isPaused());
-        // } else {
-        //     if (getterFacet.isPaused()) {
-        //         pauseFacet.unpause();
-        //     }
-        //     assertFalse(getterFacet.isPaused());
-        // }
+        if (shouldPause) {
+            if (!getter.isPaused()) {
+                pauseFacet.pause();
+            }
+            assertTrue(getter.isPaused());
+        } else {
+            if (getter.isPaused()) {
+                pauseFacet.unpause();
+            }
+            assertFalse(getter.isPaused());
+        }
 
-        // vm.stopPrank();
+        vm.stopPrank();
     }
 }

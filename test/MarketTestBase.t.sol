@@ -13,6 +13,8 @@ import "../src/facets/IdeationMarketFacet.sol";
 import "../src/facets/CollectionWhitelistFacet.sol";
 import "../src/facets/BuyerWhitelistFacet.sol";
 import "../src/facets/CurrencyWhitelistFacet.sol";
+import "../src/facets/PauseFacet.sol";
+import "../src/facets/VersionFacet.sol";
 import "../src/facets/GetterFacet.sol";
 import "../src/interfaces/IDiamondCutFacet.sol";
 import "../src/interfaces/IDiamondLoupeFacet.sol";
@@ -23,7 +25,6 @@ import "../src/interfaces/IERC1155.sol";
 import "../src/interfaces/IERC2981.sol";
 import "../src/libraries/LibAppStorage.sol";
 import "../src/libraries/LibDiamond.sol";
-// !!! Pause and version facet are missing
 
 // Openzeppelin Mock imports
 import {ERC721} from "lib/openzeppelin-contracts/contracts/token/ERC721/ERC721.sol";
@@ -39,6 +40,8 @@ abstract contract MarketTestBase is Test {
     CollectionWhitelistFacet internal collections;
     BuyerWhitelistFacet internal buyers;
     CurrencyWhitelistFacet internal currencies;
+    PauseFacet internal pauseFacet;
+    VersionFacet internal versionFacet;
     GetterFacet internal getter;
 
     // Address of the initial diamondCut facet deployed in setUp
@@ -51,6 +54,8 @@ abstract contract MarketTestBase is Test {
     address internal collectionsImpl;
     address internal buyersImpl;
     address internal currenciesImpl;
+    address internal pauseImpl;
+    address internal versionImpl;
     address internal getterImpl;
 
     // Test addresses
@@ -86,6 +91,8 @@ abstract contract MarketTestBase is Test {
         CollectionWhitelistFacet collectionFacet = new CollectionWhitelistFacet();
         BuyerWhitelistFacet buyerFacet = new BuyerWhitelistFacet();
         CurrencyWhitelistFacet currencyFacet = new CurrencyWhitelistFacet();
+        PauseFacet pauseFacetImpl = new PauseFacet();
+        VersionFacet versionFacetImpl = new VersionFacet();
         GetterFacet getterFacet = new GetterFacet();
 
         // Deploy the diamond and add the initial diamondCut function
@@ -95,7 +102,7 @@ abstract contract MarketTestBase is Test {
         diamondCutFacetAddr = address(cutFacet);
 
         // Prepare facet cut definitions matching the deploy script
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](8);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](9);
 
         // Diamond Loupe selectors
         bytes4[] memory loupeSelectors = new bytes4[](5);
@@ -168,7 +175,7 @@ abstract contract MarketTestBase is Test {
         });
 
         // Getter selectors (add all view functions exposed by GetterFacet)
-        bytes4[] memory getterSelectors = new bytes4[](15);
+        bytes4[] memory getterSelectors = new bytes4[](18);
         getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getBalance.selector;
@@ -180,12 +187,36 @@ abstract contract MarketTestBase is Test {
         getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
         getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
         getterSelectors[10] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[11] = GetterFacet.isPaused.selector;
+        getterSelectors[12] = GetterFacet.getVersion.selector;
         getterSelectors[13] = GetterFacet.isCurrencyAllowed.selector;
         getterSelectors[14] = GetterFacet.getAllowedCurrencies.selector;
-        cuts[7] = IDiamondCutFacet.FacetCut({
+        getterSelectors[15] = GetterFacet.getPreviousVersion.selector;
+        getterSelectors[16] = GetterFacet.getVersionString.selector;
+        getterSelectors[17] = GetterFacet.getImplementationId.selector;
+        cuts[6] = IDiamondCutFacet.FacetCut({
             facetAddress: address(getterFacet),
             action: IDiamondCutFacet.FacetCutAction.Add,
             functionSelectors: getterSelectors
+        });
+
+        // PauseFacet selectors
+        bytes4[] memory pauseSelectors = new bytes4[](2);
+        pauseSelectors[0] = PauseFacet.pause.selector;
+        pauseSelectors[1] = PauseFacet.unpause.selector;
+        cuts[7] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(pauseFacetImpl),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: pauseSelectors
+        });
+
+        // VersionFacet selectors (setVersion only - getters are in GetterFacet)
+        bytes4[] memory versionSelectors = new bytes4[](1);
+        versionSelectors[0] = VersionFacet.setVersion.selector;
+        cuts[8] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(versionFacetImpl),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: versionSelectors
         });
 
         // Execute diamond cut and initializer
@@ -193,8 +224,7 @@ abstract contract MarketTestBase is Test {
             cuts, address(init), abi.encodeCall(DiamondInit.init, (INNOVATION_FEE, MAX_BATCH))
         );
 
-        // Whitelist ETH (address(0)) as default payment currency
-        CurrencyWhitelistFacet(address(diamond)).addAllowedCurrency(address(0));
+        // Note: DiamondInit.init() already initializes 76 allowed currencies including ETH
 
         vm.stopPrank();
 
@@ -206,6 +236,8 @@ abstract contract MarketTestBase is Test {
         collections = CollectionWhitelistFacet(address(diamond));
         buyers = BuyerWhitelistFacet(address(diamond));
         currencies = CurrencyWhitelistFacet(address(diamond));
+        pauseFacet = PauseFacet(address(diamond));
+        versionFacet = VersionFacet(address(diamond));
         getter = GetterFacet(address(diamond));
 
         // cache impl addrs
@@ -215,6 +247,8 @@ abstract contract MarketTestBase is Test {
         collectionsImpl = address(collectionFacet);
         buyersImpl = address(buyerFacet);
         currenciesImpl = address(currencyFacet);
+        pauseImpl = address(pauseFacetImpl);
+        versionImpl = address(versionFacetImpl);
         getterImpl = address(getterFacet);
 
         // Deploy mock tokens and mint balances for seller
