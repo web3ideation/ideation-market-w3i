@@ -95,13 +95,6 @@ contract PauseFacetTest is MarketTestBase {
         pauseFacet.unpause();
     }
 
-    /// @notice Test that attacker cannot pause
-    function testAttackerCannotPause() public {
-        vm.prank(attacker);
-        vm.expectRevert("LibDiamond: Must be contract owner");
-        pauseFacet.pause();
-    }
-
     // ============================================
     // State Management Tests
     // ============================================

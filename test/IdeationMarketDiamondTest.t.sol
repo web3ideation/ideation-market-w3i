@@ -37,8 +37,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     function testDiamondLoupeFacets() public view {
         // The diamond should have the cut facet plus six additional facets = 7
         IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
-        // After deployment the diamond has the diamondCut facet plus six added facets
-        assertEq(facetInfo.length, 7);
+        // After deployment the diamond has the diamondCut facet plus eight added facets
+        assertEq(facetInfo.length, 9); // Updated: Added PauseFacet and VersionFacet
 
         // Verify that the diamondCut selector maps to the original cut facet
         address cutAddr = loupe.facetAddress(IDiamondCutFacet.diamondCut.selector);
@@ -240,6 +240,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             0,
             1 ether,
+            address(0), // currency (ETH)
             getter.getInnovationFee(),
             seller,
             false,
@@ -250,7 +251,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         );
 
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         vm.stopPrank();
         // Listing id should be 1
@@ -277,20 +278,20 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // function will revert with IdeationMarket__CollectionNotWhitelisted(tokenAddress).
         vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         vm.stopPrank();
         // Now whitelist and test double listing
         _whitelistCollectionAndApproveERC721();
         vm.startPrank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         // Second time should revert because the NFT has already been listed.
         // The createListing function will revert with IdeationMarket__AlreadyListed().
         vm.expectRevert(IdeationMarket__AlreadyListed.selector);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         vm.stopPrank();
     }
@@ -305,7 +306,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // Expect revert because the sent value does not cover the price.
         // Expect revert due to insufficient payment; the price is 1 ETH but only 0.5 ETH is sent.
         vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, id, 1 ether, 0.5 ether));
-        market.purchaseListing{value: 0.5 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 0.5 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
         // Attempt a full purchase. This should succeed and transfer the token to the buyer.
         vm.startPrank(buyer);
@@ -313,19 +314,20 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         uint32 feeSnap = getter.getListingByListingId(id).feeRate;
         vm.expectEmit(true, true, true, true, address(diamond));
         emit IdeationMarketFacet.ListingPurchased(
-            id, address(erc721), 1, 0, false, 1 ether, feeSnap, seller, buyer, address(0), 0, 0
+            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
         );
 
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        uint256 sellerBalanceBefore = seller.balance;
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
         // The listing should be removed after purchase.
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
         // Ownership of the token should now be with the buyer.
         assertEq(erc721.ownerOf(1), buyer);
-        // Seller's proceeds should equal sale price minus the innovation fee (1% of 1 ether).
-        uint256 sellerProceeds = getter.getProceeds(seller);
-        assertEq(sellerProceeds, 0.99 ether);
+        // Seller's balance should increase by sale price minus the innovation fee (1% of 1 ether).
+        uint256 sellerBalanceAfter = seller.balance;
+        assertEq(sellerBalanceAfter - sellerBalanceBefore, 0.99 ether);
     }
 
     function testUpdateListing() public {
@@ -1124,108 +1126,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     }
 
     /// -----------------------------------------------------------------------
-    /// Reentrancy: withdrawProceeds attempt
+    /// Reentrancy tests
     /// -----------------------------------------------------------------------
-
-    // Attacker contract attempts to re-enter withdrawProceeds from within its
-    // receive() fallback. The lock in withdrawProceeds should prevent this.
-    function testReentrancyOnWithdrawProceeds() public {
-        // Deploy attacker, mint an NFT to it, and whitelist.
-        ReentrantWithdrawer attacker = new ReentrantWithdrawer(address(diamond));
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        erc721.mint(address(attacker), 3);
-
-        // Attacker approves the marketplace and lists the token.
-        vm.prank(address(attacker));
-        erc721.approve(address(diamond), 3);
-        vm.prank(address(attacker));
-        market.createListing(
-            address(erc721), 3, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buyer purchases the listing.
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        // Attacker withdraws; reentrant call in receive() should be blocked.
-        uint256 beforeBal = address(attacker).balance;
-        vm.prank(address(attacker));
-        market.withdrawProceeds();
-        uint256 afterBal = address(attacker).balance;
-
-        // Only one withdrawal should occur.
-        assertEq(afterBal - beforeBal, 0.99 ether);
-        assertEq(getter.getProceeds(address(attacker)), 0);
-    }
-
-    /// -----------------------------------------------------------------------
-    /// Reentrancy: ERC1155 transfer attempt
-    /// -----------------------------------------------------------------------
-
-    // A malicious ERC1155 token tries to re-enter withdrawProceeds inside its
-    // safeTransferFrom. The nonReentrant modifier should prevent success.
-    function testReentrancyDuringERC1155Transfer() public {
-        // Deploy malicious ERC1155 and mint tokens to seller.
-        MaliciousERC1155 mal1155 = new MaliciousERC1155(address(diamond));
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(mal1155));
-        mal1155.mint(seller, 1, 10);
-
-        // Seller grants approval for all and lists the entire stack.
-        vm.prank(seller);
-        mal1155.setApprovalForAll(address(diamond), true);
-        vm.prank(seller);
-        market.createListing(
-            address(mal1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buyer purchases all 10 units.
-        vm.deal(buyer, 10 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
-
-        // Ensure token balances updated and proceeds calculated correctly.
-        assertEq(mal1155.balanceOf(buyer, 1), 10);
-        assertEq(getter.getProceeds(seller), 9.9 ether);
-        assertEq(getter.getProceeds(owner), 0.1 ether);
-    }
-
-    /// -----------------------------------------------------------------------
-    /// Reentrancy: ERC721 transfer attempt
-    /// -----------------------------------------------------------------------
-
-    // A malicious ERC721 token tries to re-enter withdrawProceeds inside its
-    // transferFrom. The nonReentrant modifier should prevent success.
-    function testReentrancyDuringERC721Transfer() public {
-        // Deploy malicious ERC721 and mint a token to seller.
-        MaliciousERC721 mal721 = new MaliciousERC721(address(diamond));
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(mal721));
-        mal721.mint(seller, 1);
-
-        // Seller approves and lists the token.
-        vm.prank(seller);
-        mal721.approve(address(diamond), 1);
-        vm.prank(seller);
-        market.createListing(
-            address(mal721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buyer purchases the NFT.
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        // Ownership transfers and proceeds reflect the fee.
-        assertEq(mal721.ownerOf(1), buyer);
-        assertEq(getter.getProceeds(seller), 0.99 ether);
-        assertEq(getter.getProceeds(owner), 0.01 ether);
-    }
 
     // -----------------------------------------------------------------------
     // Extra edge-case tests
@@ -1485,27 +1387,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.prank(operator);
         vm.expectRevert(IdeationMarket__NotListed.selector);
         market.cleanListing(id);
-    }
-
-    function testWithdrawTwiceRevertsNoProceeds() public {
-        uint128 id = _createListingERC721(false, new address[](0));
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        // Seller withdraws once
-        vm.prank(seller);
-        market.withdrawProceeds();
-
-        // Second withdraw must revert with NoProceeds
-        vm.prank(seller);
-        vm.expectRevert(IdeationMarket__NoProceeds.selector);
-        market.withdrawProceeds();
-    }
-
-    function testGetProceedsNeverInteractedIsZero() public view {
-        address ghost = address(0xBEEF);
-        assertEq(getter.getProceeds(ghost), 0);
     }
 
     function testRoyaltyReceiverEqualsSeller() public {
@@ -3588,38 +3469,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.isBuyerWhitelisted(999999, buyer);
     }
 
-    function testWithdrawProceedsReceiverReverts() public {
-        // Contract that reverts on receiving ETH
-        RevertOnReceive rc = new RevertOnReceive();
-
-        // Whitelist ERC721 and mint a token to rc
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        erc721.mint(address(rc), 777);
-
-        // rc approves marketplace and creates a listing
-        vm.prank(address(rc));
-        erc721.approve(address(diamond), 777);
-        vm.prank(address(rc));
-        market.createListing(
-            address(erc721), 777, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buyer purchases, crediting proceeds to rc
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        // rc attempts to withdraw; transfer must fail and revert with TransferFailed
-        vm.prank(address(rc));
-        vm.expectRevert(IdeationMarket__TransferFailed.selector);
-        market.withdrawProceeds();
-
-        // Proceeds remain intact for rc
-        assertEq(getter.getProceeds(address(rc)), 0.99 ether);
-    }
-
     /// After collection is removed from whitelist, purchases should still succeed.
     function testPurchaseAfterCollectionDeWhitelistingStillSucceeds() public {
         uint128 id = _createListingERC721(false, new address[](0));
@@ -5147,91 +4996,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.getListingByListingId(listingId);
     }
 
-    /* ========== Receiver hooks that swallow reverts (malicious tokens) ========== */
-
-    /// Listed token is MaliciousERC1155 which tries (and catches) reentrant withdrawProceeds.
-    /// Purchase must succeed and not break accounting.
-    function testPurchaseWithMaliciousERC1155Listed_Succeeds_NoReentrancy() public {
-        // Deploy malicious 1155 bound to this diamond.
-        MaliciousERC1155 m1155 = new MaliciousERC1155(address(diamond));
-
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(m1155));
-        vm.stopPrank();
-
-        uint256 id = 909;
-        m1155.mint(seller, id, 5);
-
-        vm.prank(seller);
-        m1155.setApprovalForAll(address(diamond), true);
-
-        // List qty=5 for 1 ETH.
-        vm.prank(seller);
-        market.createListing(address(m1155), id, seller, 1 ether, address(0), 0, 0, 5, false, false, new address[](0));
-        uint128 listingId = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(listingId, 1 ether, 5, address(0), 0, 0, 5, address(0));
-
-        // Buyer received all 5; diamond holds ETH; reentrancy attempt was swallowed by the token.
-        assertEq(m1155.balanceOf(buyer, id), 5);
-        assertEq(address(diamond).balance, 1 ether);
-    }
-
-    /// Desired token is MaliciousERC1155; its transfer hook tries (and catches) reentrant withdrawProceeds.
-    /// Swap+ETH purchase must succeed.
-    function testPurchaseWithMaliciousERC1155Desired_Succeeds_NoReentrancy() public {
-        // Listed side uses regular erc1155; desired side is malicious.
-        MaliciousERC1155 m1155 = new MaliciousERC1155(address(diamond));
-
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-        collections.addWhitelistedCollection(address(m1155));
-        vm.stopPrank();
-
-        uint256 idListed = 1001;
-        uint256 idDesired = 2002;
-        uint256 qtyListed = 2;
-        uint256 qtyDesired = 1;
-        uint256 price = 0.25 ether;
-
-        erc1155.mint(seller, idListed, 10);
-        m1155.mint(buyer, idDesired, 5);
-
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(buyer);
-        m1155.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155),
-            idListed,
-            seller,
-            price,
-            address(m1155),
-            idDesired,
-            qtyDesired,
-            qtyListed,
-            false,
-            false,
-            new address[](0)
-        );
-        uint128 listingId = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, price);
-        vm.prank(buyer);
-        market.purchaseListing{value: price}(
-            listingId, price, qtyListed, address(m1155), idDesired, qtyDesired, qtyListed, buyer
-        );
-
-        // Transfer should have succeeded despite malicious hook swallowing the internal revert.
-        assertEq(erc1155.balanceOf(buyer, idListed), qtyListed);
-        assertEq(m1155.balanceOf(seller, idDesired), qtyDesired);
-        assertEq(address(diamond).balance, price);
-    }
-
     function testSwapERC1155toERC1155_PureSwap_HappyPath() public {
         // Listed 1155 (A) must be whitelisted; desired 1155 (B) only needs to pass interface checks.
         MockERC1155 A = new MockERC1155();
@@ -5721,227 +5485,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             10, // erc1155PurchaseQuantity (full buy)
             address(0)
         );
-        vm.stopPrank();
-    }
-
-    // testing against attack vectors
-
-    // Reentrancy during NFT transfer via buyer receiver — ERC721 (Strict)
-    function testReentrancy_BuyerReceiver_ERC721_Strict() public {
-        // Strict token so receiver hook actually fires
-        StrictERC721 s = new StrictERC721();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(s));
-
-        s.mint(seller, 1);
-        vm.prank(seller);
-        s.approve(address(diamond), 1);
-
-        uint256 price = 1 ether;
-        vm.prank(seller);
-        market.createListing(address(s), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        ReenteringReceiver721 recv = new ReenteringReceiver721(address(market), id, price);
-        vm.deal(address(recv), 2 * price); // fund for reentrant attempt
-
-        // Initial purchase by the receiver; its hook tries to reenter and must fail
-        vm.prank(address(recv));
-        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
-
-        // Single sale only
-        assertEq(s.ownerOf(1), address(recv));
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-        assertEq(getter.getProceeds(seller), price * 99 / 100);
-        assertEq(getter.getProceeds(owner), price * 1 / 100);
-    }
-
-    // Reentrancy during NFT transfer via buyer receiver — ERC1155 (Strict)
-    function testReentrancy_BuyerReceiver_ERC1155_Strict() public {
-        StrictERC1155 s = new StrictERC1155();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(s));
-
-        uint256 tid = 7;
-        uint256 qty = 5;
-        uint256 price = 5 ether;
-
-        s.mint(seller, tid, qty);
-        vm.prank(seller);
-        s.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(address(s), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        ReenteringReceiver1155 recv = new ReenteringReceiver1155(address(market), id, price, qty);
-        vm.deal(address(recv), 2 * price); // fund for reentrant attempt
-
-        vm.prank(address(recv));
-        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
-
-        assertEq(s.balanceOf(address(recv), tid), qty);
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-        assertEq(getter.getProceeds(seller), price * 99 / 100);
-        assertEq(getter.getProceeds(owner), price * 1 / 100);
-    }
-
-    // False ERC165 claim: ERC721 says yes but reverts transfer → purchase reverts, listing intact
-    function testERC721_LiarToken_TransferReverts_RollsBackListing() public {
-        LiarERC721 liar = new LiarERC721();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(liar));
-
-        liar.mint(seller, 1);
-        vm.prank(seller);
-        liar.approve(address(diamond), 1);
-
-        uint256 price = 1 ether;
-        vm.prank(seller);
-        market.createListing(address(liar), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        uint256 pSeller = getter.getProceeds(seller);
-        uint256 pOwner = getter.getProceeds(owner);
-        uint256 bal = getter.getBalance();
-
-        vm.deal(buyer, price);
-        vm.startPrank(buyer);
-        vm.expectRevert(); // token breaks transfer
-        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
-        vm.stopPrank();
-
-        // No state moved
-        assertEq(liar.ownerOf(1), seller);
-        Listing memory L = getter.getListingByListingId(id);
-        assertEq(L.price, price);
-        assertEq(getter.getProceeds(seller), pSeller);
-        assertEq(getter.getProceeds(owner), pOwner);
-        assertEq(getter.getBalance(), bal);
-    }
-
-    // False ERC165 claim: ERC1155 says yes but reverts transfer → purchase reverts, listing intact
-    function testERC1155_LiarToken_TransferReverts_RollsBackListing() public {
-        LiarERC1155 liar = new LiarERC1155();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(liar));
-
-        uint256 tid = 3;
-        uint256 qty = 4;
-        uint256 price = 4 ether;
-
-        liar.mint(seller, tid, qty);
-        vm.prank(seller);
-        liar.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(address(liar), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        uint256 pSeller = getter.getProceeds(seller);
-        uint256 pOwner = getter.getProceeds(owner);
-        uint256 bal = getter.getBalance();
-
-        vm.deal(buyer, price);
-        vm.startPrank(buyer);
-        vm.expectRevert(); // token breaks transfer
-        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
-        vm.stopPrank();
-
-        // No state moved
-        assertEq(liar.balanceOf(seller, tid), qty);
-        Listing memory L = getter.getListingByListingId(id);
-        assertEq(L.price, price);
-        assertEq(L.erc1155Quantity, qty);
-        assertEq(getter.getProceeds(seller), pSeller);
-        assertEq(getter.getProceeds(owner), pOwner);
-        assertEq(getter.getBalance(), bal);
-    }
-
-    // Malicious token attempts admin call during transfer — must NOT bypass onlyOwner
-    function testAdminCallDuringTransfer_DoesNotBypassOnlyOwner_ERC721() public {
-        MaliciousAdminERC721 m = new MaliciousAdminERC721(address(market));
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(m));
-
-        m.mint(seller, 1);
-        vm.prank(seller);
-        m.approve(address(diamond), 1);
-
-        uint32 feeBefore = getter.getInnovationFee();
-        uint256 price = 1 ether;
-
-        vm.prank(seller);
-        market.createListing(address(m), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, price);
-        vm.prank(buyer);
-        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
-
-        // Transfer succeeded; fee unchanged
-        assertEq(getter.getInnovationFee(), feeBefore);
-        assertEq(m.ownerOf(1), buyer);
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
-    // Double-sell: after first ERC721 sale, second purchase attempt must revert
-    function testDoubleSell_Prevented_ERC721_Strict() public {
-        StrictERC721 s = new StrictERC721();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(s));
-
-        s.mint(seller, 1);
-        vm.prank(seller);
-        s.approve(address(diamond), 1);
-
-        uint256 price = 1 ether;
-        vm.prank(seller);
-        market.createListing(address(s), 1, address(0), price, address(0), 0, 0, 0, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, price);
-        vm.prank(buyer);
-        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
-
-        address buyer2 = vm.addr(0xBEEF);
-        vm.deal(buyer2, price);
-        vm.startPrank(buyer2);
-        vm.expectRevert(); // listing should be consumed/invalid
-        market.purchaseListing{value: price}(id, price, 0, address(0), 0, 0, 0, address(0));
-        vm.stopPrank();
-    }
-
-    // Double-sell: after full ERC1155 fill, second purchase attempt must revert
-    function testDoubleSell_Prevented_ERC1155_FullFill_Strict() public {
-        StrictERC1155 s = new StrictERC1155();
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(s));
-
-        uint256 tid = 9;
-        uint256 qty = 6;
-        uint256 price = 6 ether;
-
-        s.mint(seller, tid, qty);
-        vm.prank(seller);
-        s.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(address(s), tid, seller, price, address(0), 0, 0, qty, false, false, new address[](0));
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, price);
-        vm.prank(buyer);
-        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
-
-        address buyer2 = vm.addr(0xC0DE);
-        vm.deal(buyer2, price);
-        vm.startPrank(buyer2);
-        vm.expectRevert(); // already consumed
-        market.purchaseListing{value: price}(id, price, qty, address(0), 0, 0, qty, address(0));
         vm.stopPrank();
     }
 

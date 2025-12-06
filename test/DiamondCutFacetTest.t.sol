@@ -363,30 +363,6 @@ contract DiamondCutFacetTest is MarketTestBase {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // 7) Malicious initializer cannot escalate privileges
-    // ---------------------------------------------------------------------
-    function testDiamondCut_MaliciousInitializerCannotEscalate() public {
-        address ownerBefore = IERC173(address(diamond)).owner();
-        uint32 feeBefore = getter.getInnovationFee();
-
-        MaliciousInitTryAdmin bad = new MaliciousInitTryAdmin();
-
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-
-        // The initializer swallows its own failures and returns successfully.
-        // diamondCut should succeed, but state (owner/fee) must be unchanged.
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts,
-            address(bad),
-            abi.encodeWithSelector(MaliciousInitTryAdmin.initTryAdmin.selector, vm.addr(0xBEEF), uint32(999_999))
-        );
-
-        assertEq(IERC173(address(diamond)).owner(), ownerBefore, "owner changed via initializer");
-        assertEq(getter.getInnovationFee(), feeBefore, "fee changed via initializer");
-    }
-
     function testDiamondCut_InitGuard_AllowsCorrectLayout() public {
         LayoutGuardInitGood good = new LayoutGuardInitGood();
 

@@ -1105,6 +1105,76 @@ contract MaliciousAdminERC721 {
     }
 }
 
+// Malicious ERC1155 that attempts reentrancy during safeTransferFrom
+contract MaliciousERC1155 {
+    mapping(uint256 => mapping(address => uint256)) internal _bal;
+    mapping(address => mapping(address => bool)) internal _op;
+    IdeationMarketFacet public market;
+    bool internal attacked;
+
+    constructor(address _market) {
+        market = IdeationMarketFacet(_market);
+    }
+
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 /* ERC165 */ || iid == 0xd9b67a26; /* ERC1155 */
+    }
+
+    function mint(address to, uint256 id, uint256 qty) external {
+        _bal[id][to] += qty;
+    }
+
+    function balanceOf(address a, uint256 id) external view returns (uint256) {
+        return _bal[id][a];
+    }
+
+    function setApprovalForAll(address op, bool ok) external {
+        _op[msg.sender][op] = ok;
+    }
+
+    function isApprovedForAll(address a, address op) external view returns (bool) {
+        return _op[a][op];
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, uint256 qty, bytes calldata) external {
+        require(from == msg.sender || _op[from][msg.sender], "not auth");
+        require(_bal[id][from] >= qty, "insufficient");
+
+        // Attempt reentrancy during transfer
+        if (!attacked) {
+            attacked = true;
+            // Try to purchase the same listing again during the transfer
+            // This should fail due to reentrancy guard
+            try market.purchaseListing{value: 0}(
+                0, // will fail anyway, but tests reentrancy protection
+                0,
+                address(0),
+                0,
+                address(0),
+                0,
+                0,
+                0,
+                address(0)
+            ) {
+                revert("malicious1155: reentrancy succeeded");
+            } catch { /* expected to fail */ }
+        }
+
+        // Complete the transfer
+        _bal[id][from] -= qty;
+        _bal[id][to] += qty;
+
+        // Call receiver hook if `to` is a contract
+        if (to.code.length > 0) {
+            try IERC1155ReceiverLike(to).onERC1155Received(msg.sender, from, id, qty, "") returns (bytes4 response) {
+                require(response == IERC1155ReceiverLike.onERC1155Received.selector, "malicious1155: rejected");
+            } catch {
+                revert("malicious1155: receiver reverted");
+            }
+        }
+    }
+}
+
 // --- Dummy upgrade facets for testing diamond cut operations ---
 contract DummyUpgradeFacetV1 {
     function dummyFunction() external pure returns (uint256) {

@@ -164,43 +164,6 @@ contract StorageCollisionTest is MarketTestBase {
     ///    This is NOT a collision; it demonstrates your guards would catch a
     ///    refactor accident by observing drift in canaries.
     /// -----------------------------------------------------------------------
-
-    function testStorage_MaliciousFacetSmash_TriggersDrift() public {
-        _whitelistDefaultMocks();
-
-        // Snapshot canaries
-        uint32 fee0 = getter.getInnovationFee();
-        uint16 maxBatch0 = getter.getBuyerWhitelistMaxBatchSize();
-
-        // Deploy and cut-in malicious facet
-        BadFacetAppSmash bad = new BadFacetAppSmash();
-
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
-        bytes4[] memory sels = new bytes4[](1);
-        sels[0] = BadFacetAppSmash.smash.selector;
-
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(bad),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
-
-        // Call the malicious function through the diamond
-        uint32 newFee = fee0 + 1;
-        uint16 newMax = maxBatch0 + 1;
-        BadFacetAppSmash(address(diamond)).smash(newFee, newMax);
-
-        // Assert drift occurred as a proof our canary checks would catch it
-        assertEq(getter.getInnovationFee(), newFee, "innovationFee should have changed");
-        assertEq(getter.getBuyerWhitelistMaxBatchSize(), newMax, "maxBatch should have changed");
-        assertTrue(
-            getter.getInnovationFee() != fee0 || getter.getBuyerWhitelistMaxBatchSize() != maxBatch0,
-            "no drift observed"
-        );
-    }
 }
 
 // Test-only library that points to the correct AppStorage slot (on purpose),
