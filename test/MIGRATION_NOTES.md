@@ -49,6 +49,20 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 
 ## Lessons Learned
 
+### Batch 4 - ERC1155 Tests
+- **Non-custodial payment model**: Replaced `getProceeds()` and `withdrawProceeds()` with balance snapshots (before/after)
+- **Event signature updates**: `ListingPurchased` has `currency` parameter between `price` and `feeRate`
+- **testExcessPaymentCreditAndWithdraw renamed**: Now `testExactPaymentRequired` - atomic payments, no overpay mechanism
+- **Balance assertions pattern**: `assertEq(seller.balance - sellerBalBefore, expectedAmount)` instead of proceeds checks
+
+### Batch 5 - Edge Cases & Validation
+- **RoyaltyPaid event**: Takes 4 params (listingId, receiver, tokenAddress, amount) - removed tokenId parameter
+- **ListingCreated event**: Added `currency` parameter between `price` and `feeRate`
+- **testWithdrawHappyPathWithRoyaltyAndOwner renamed**: Now `testRoyaltyPaymentWithOwnerFee` - uses balance snapshots, no withdrawals
+- **Multi-purchase tests**: Track balance changes per purchase separately (no cumulative proceeds mapping)
+- **testNoOpUpdateKeepsValues**: Use `beforeL.currency` in updateListing call
+- **Diamond balance**: Assert `address(diamond).balance == 0` after purchases (non-custodial = no accumulation)
+
 ### Process
 1. **Check if already migrated**: Some tests have `address(0)` currency params already
 2. **Compile specific file**: Use `get_errors([filePath])` - don't compile all tests
@@ -62,7 +76,9 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 10. **Mock facet naming**: Use `DummyUpgradeFacetV1/V2` from MarketTestBase, not `VersionFacetV1/V2` (which don't exist)
 11. **Fork tests with minimal interfaces**: Import `Listing` struct from `LibAppStorage.sol` - GetterFacet actually returns `Listing memory` not destructured values. Add `isCurrencyAllowed(address)` to IGetterFacet interface. Add ETH whitelisting in setUp using low-level call to CurrencyWhitelistFacet's `addAllowedCurrency(address(0))`
 12. **Balance/proceeds tests fundamentally different**: Remove overpay logic (exact ETH required), remove `getProceeds()` calls, replace with balance snapshots before/after purchase. Test that diamond balance is UNCHANGED after purchase (non-custodial = no accumulation), verify seller/owner receive atomic payments directly
-13. **Storage collision/invariant tests**: Add currency params everywhere (createListing, updateListing, purchaseListing), replace `getProceeds()` with balance diffs, remove `withdrawProceeds()` from invariant handlers. Storage canary checks (innovationFee, maxBatch, whitelistedCollections) remain unchanged - they validate storage slots don't drift during marketplace operations
+12. **Storage collision/invariant tests**: Add currency params everywhere (createListing, updateListing, purchaseListing), replace `getProceeds()` with balance diffs, remove `withdrawProceeds()` from invariant handlers. Storage canary checks (innovationFee, maxBatch, whitelistedCollections) remain unchanged - they validate storage slots don't drift during marketplace operations
+13. **updateListing signature change**: Added `newErc1155Quantity` parameter between `newDesiredErc1155Quantity` and `newBuyerWhitelistEnabled`. For ERC721 updates, pass 0. Event `ListingUpdated` has `currency` between `price` and `feeRate`
+14. **createListing parameter order**: After `currency`, must pass `address(0)` for `desiredTokenAddress` (not `0`). Common error: passing integer 0 instead of address(0) causes "11 arguments given but 12 expected"
 
 ### New Errors to Handle
 ```solidity
@@ -194,11 +210,11 @@ function helperCreateListing(...) internal {
 
 **important notes**: do not try to compile IdeationMarketDiamondTest.t.sol since until all these batches are dealt with we WILL have compilation issues anyway.
 
-### Batch 1-2 Completion Summary
+### Batch 1-3 Completion Summary
 - ✅ Updated diamond facet count: 7 → 9
-- ✅ Commented out 10 obsolete withdrawal/reentrancy tests
-- ✅ Migrated testCreateListingERC721 & testPurchaseListingERC721 (bonus from Batch 3)
+- ✅ Commented out 10 obsolete withdrawal/reentrancy tests  
 - ✅ Infrastructure & whitelist tests verified (no changes needed)
+- ✅ Basic listing & purchase tests migrated (7 tests)
 
 ### Batch Breakdown:
 
@@ -212,10 +228,10 @@ function helperCreateListing(...) internal {
 - **Changes**: None - helper already has currency param
 - **Result**: All whitelist tests work without marketplace changes
 
-**Batch 3: Basic Listing & Purchase (lines 231-430, ~10 tests)** ⚠️ COMPLEX
+**Batch 3: Basic Listing & Purchase (lines 231-430, 7 tests)** ✅ COMPLETE
 - Create, purchase, update, cancel ERC721
-- **Changes**: Add currency params to all calls
-- **Estimate**: 1 prompt
+- **Changes**: Fixed updateListing signature (added newErc1155Quantity param), fixed ListingUpdated event (added currency), fixed createListing in testCleanListing_WhileStillApproved_ERC721_Reverts (missing desiredTokenAddress param)
+- **Result**: All 7 tests compile successfully
 
 **Batch 4: ERC1155 Tests (lines 431-850, ~15 tests)** ⚠️ COMPLEX
 - ERC1155 quantity rules, partial buys, fee math
@@ -258,18 +274,18 @@ After each batch completion:
 5. 🔄 User confirms → proceed to next batch
 
 ### Progress Tracking:
-- [ ] Batch 1-2: Infrastructure & Whitelists (13 tests) - Lines 1-230
-- [ ] Batch 3: Basic Listing & Purchase (10 tests) - Lines 231-430
-- [ ] Batch 4: ERC1155 Tests (15 tests) - Lines 431-850
-- [ ] Batch 5: Edge Cases (25 tests) - Lines 851-1500
+- [x] Batch 1-2: Infrastructure & Whitelists (13 tests) - Lines 1-230
+- [x] Batch 3: Basic Listing & Purchase (7 tests) - Lines 231-430
+- [x] Batch 4: ERC1155 Tests (15 tests) - Lines 431-850
+- [x] Batch 5: Edge Cases (25 tests) - Lines 851-1500
 - [ ] Batch 6: Advanced Features (35 tests) - Lines 1501-2500
 - [ ] Batch 7: Events & Integration (30 tests) - Lines 2501-3900
 - [ ] Batch 8: Attack Vectors (30 tests) - Lines 3901-5000
 - [ ] Batch 9: Receiver Hooks (25 tests) - Lines 5001-6185
 
-**Current Batch**: None started
-**Tests Migrated**: 0/~200
-**Lines Migrated**: 0/6185
+**Current Batch**: Batch 5 complete
+**Tests Migrated**: 60/~200
+**Lines Migrated**: 1500/5728
 
 
 ### Test Type Insights
