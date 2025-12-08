@@ -2587,6 +2587,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         uint128 id = getter.getNextListingId() - 1;
 
         // Buyer executes swap + ETH
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
         vm.deal(buyer, 1 ether);
         vm.startPrank(buyer);
 
@@ -2612,8 +2614,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // Ownership swapped and proceeds credited (fee 1% of 0.4 = 0.004)
         assertEq(a.ownerOf(100), buyer);
         assertEq(b.ownerOf(200), seller);
-        assertEq(getter.getProceeds(seller), 0.396 ether);
-        assertEq(getter.getProceeds(owner), 0.004 ether);
+        assertEq(seller.balance - sellerBalBefore, 0.396 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.004 ether);
     }
 
     function testSwapWithEth_ERC721toERC1155_HappyPath() public {
@@ -2642,6 +2644,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             101,
             address(0),
             0.3 ether, // ETH component
+            address(0), // currency
             address(m1155), // desired ERC1155
             desiredId,
             3, // desiredErc1155Quantity > 0
@@ -2653,18 +2656,21 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         uint128 id = getter.getNextListingId() - 1;
 
         // Buyer executes swap + ETH (must pass desiredErc1155Holder)
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
         vm.deal(buyer, 1 ether);
         vm.startPrank(buyer);
 
         uint32 feeSnap = getter.getListingByListingId(id).feeRate;
         vm.expectEmit(true, true, true, true, address(diamond));
         emit IdeationMarketFacet.ListingPurchased(
-            id, address(a), 101, 0, false, 0.3 ether, feeSnap, seller, buyer, address(m1155), desiredId, 3
+            id, address(a), 101, 0, false, 0.3 ether, address(0), feeSnap, seller, buyer, address(m1155), desiredId, 3
         );
 
         market.purchaseListing{value: 0.3 ether}(
             id,
             0.3 ether, // expectedPrice
+            address(0), // expectedCurrency
             0, // expectedErc1155Quantity (listed is ERC721)
             address(m1155), // expectedDesiredTokenAddress
             desiredId, // expectedDesiredTokenId
@@ -2678,8 +2684,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(a.ownerOf(101), buyer);
         assertEq(m1155.balanceOf(buyer, desiredId), 2);
         assertEq(m1155.balanceOf(seller, desiredId), 3);
-        assertEq(getter.getProceeds(seller), 0.297 ether);
-        assertEq(getter.getProceeds(owner), 0.003 ether);
+        assertEq(seller.balance - sellerBalBefore, 0.297 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.003 ether);
     }
 
     /// Listing ERC1155 more than holder’s balance should revert with SellerInsufficientTokenBalance.
@@ -2707,7 +2713,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             tokenId,
             seller,
             1 ether,
-            address(0),
+            address(0), // currency
+            address(0), // desiredTokenAddress
             0,
             0,
             10, // quantity > balance
@@ -2730,7 +2737,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
         market.createListing(
-            address(erc1155), tokenId, seller, 1 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 1 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
     }
 
@@ -2742,7 +2749,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
     }
 
@@ -2763,7 +2770,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             tokenId,
             seller,
             1 ether,
-            address(0),
+            address(0), // currency
+            address(0), // desiredTokenAddress
             0,
             0,
             1,
@@ -2791,6 +2799,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             tokenId,
             seller,
             4 ether,
+            address(0), // currency
             address(erc721), // swap (non-zero) desiredTokenAddress
             1,
             0,
@@ -2811,7 +2820,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             address(0),
             1 ether,
-            address(0),
+            address(0), // currency
+            address(0), // desiredTokenAddress
             1, // invalid nonzero desiredTokenId
             0,
             0,
@@ -2831,7 +2841,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             address(0),
             1 ether,
-            address(0),
+            address(0), // currency
+            address(0), // desiredTokenAddress
             0,
             1, // invalid nonzero desiredErc1155Quantity
             0,
@@ -2852,6 +2863,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             address(0),
             0,
+            address(0), // currency
             address(erc721), // wrong type: this is ERC721 not ERC1155
             2,
             1, // desiredErc1155Quantity > 0 indicates ERC1155
@@ -2873,6 +2885,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             address(0),
             0,
+            address(0), // currency
             address(erc1155), // wrong type: this is ERC1155 not ERC721
             1,
             0, // desiredErc1155Quantity == 0 implies ERC721
@@ -2892,7 +2905,9 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         allowed[2] = operator;
 
         vm.prank(seller);
-        market.createListing(address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, true, false, allowed);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed
+        );
         uint128 id = getter.getNextListingId() - 1;
         assertTrue(getter.isBuyerWhitelisted(id, buyer));
         assertTrue(getter.isBuyerWhitelisted(id, operator));
@@ -2906,6 +2921,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             1 ether,
+            address(0),
             address(0),
             0,
             0,
@@ -2927,7 +2943,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -2936,6 +2952,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             5 ether,
+            address(0),
             address(0),
             0,
             0,
@@ -2957,14 +2974,14 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
         // buyer has no rights → NotAuthorizedOperator
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
-        market.updateListing(id, 5 ether, address(0), 0, 0, 5, false, false, new address[](0));
+        market.updateListing(id, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0));
     }
 
     //
@@ -2976,7 +2993,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -2986,7 +3003,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.startPrank(seller);
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
-        market.updateListing(id, 10 ether, address(0), 0, 0, 10, false, false, new address[](0));
+        market.updateListing(id, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0));
         vm.stopPrank();
     }
 
@@ -3000,7 +3017,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
         // seller transfers away 3 units (leaving 2)
@@ -3015,7 +3032,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
                 2 // remaining
             )
         );
-        market.updateListing(id, 5 ether, address(0), 0, 0, 5, false, false, new address[](0));
+        market.updateListing(id, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0));
     }
 
     /// Updating ERC721 listing with revoked approval must revert.
@@ -3026,7 +3043,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc721.approve(address(0), 1);
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
-        market.updateListing(id, 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     /// Updating partial buy on a too‑small ERC1155 quantity must revert.
@@ -3039,7 +3056,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 1 ether, address(0), 0, 0, 1, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 1 ether, address(0), address(0), 0, 0, 1, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
         vm.prank(seller);
@@ -3047,6 +3064,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             1 ether,
+            address(0),
             address(0),
             0,
             0,
@@ -3067,13 +3085,13 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
         // update with partialBuyEnabled true AND desiredTokenAddress non-zero → revert
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__PartialBuyNotPossible.selector);
-        market.updateListing(id, 5 ether, address(erc721), 1, 0, 5, false, true, new address[](0));
+        market.updateListing(id, 5 ether, address(0), address(erc721), 1, 0, 5, false, true, new address[](0));
     }
 
     /// No‑swap update cannot set a non‑zero desiredTokenId.
@@ -3084,6 +3102,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             1 ether,
+            address(0),
             address(0),
             1, // invalid non-zero desiredTokenId
             0,
@@ -3103,6 +3122,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             id,
             1 ether,
             address(0),
+            address(0),
             0,
             1, // invalid non-zero desiredErc1155Quantity
             0,
@@ -3120,6 +3140,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             0,
+            address(0),
             address(erc721), // wrong type: ERC721 not ERC1155
             2,
             1, // desiredErc1155Quantity > 0
@@ -3138,6 +3159,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             0,
+            address(0),
             address(erc1155), // wrong type: ERC1155 not ERC721
             1,
             0, // desiredErc1155Quantity == 0 implies ERC721
@@ -3159,14 +3181,14 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         other.approve(address(diamond), 42);
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 0, address(other), 42, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 0, address(0), address(other), 42, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
         // wrong expectedDesiredTokenId
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
-        market.purchaseListing{value: 0}(id, 0, 0, address(other), 999, 0, 0, address(0));
+        market.purchaseListing{value: 0}(id, 0, address(0), 0, address(other), 999, 0, 0, address(0));
     }
 
     /// Duplicates in the buyer whitelist on update are idempotent.
@@ -3180,6 +3202,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.updateListing(
             id,
             1 ether,
+            address(0),
             address(0),
             0,
             0,
@@ -3203,7 +3226,18 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+            address(erc1155),
+            tokenId,
+            seller,
+            10 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            10,
+            false,
+            false,
+            new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3220,7 +3254,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
                 5 // available
             )
         );
-        market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
+        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 10, address(0));
     }
 
     /// If marketplace approval is revoked for an ERC1155 listing, purchase reverts.
@@ -3234,7 +3268,18 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+            address(erc1155),
+            tokenId,
+            seller,
+            10 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            10,
+            false,
+            false,
+            new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3245,7 +3290,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.deal(buyer, 10 ether);
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
-        market.purchaseListing{value: 10 ether}(id, 10 ether, 10, address(0), 0, 0, 10, address(0));
+        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 10, address(0));
     }
 
     /// Purchase uses the fee rate frozen at listing time, not the current innovationFee.
@@ -3254,7 +3299,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // Create listing with initial fee of 1% (1000)
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3263,21 +3308,23 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         market.setInnovationFee(2500);
 
         // Purchase: seller must still receive 0.99, owner 0.01
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
         vm.deal(buyer, 1 ether);
         vm.startPrank(buyer);
 
         uint32 feeSnap = getter.getListingByListingId(id).feeRate; // should be old fee (e.g. 1000)
         vm.expectEmit(true, true, true, true, address(diamond));
         emit IdeationMarketFacet.ListingPurchased(
-            id, address(erc721), 1, 0, false, 1 ether, feeSnap, seller, buyer, address(0), 0, 0
+            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
         );
 
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         vm.stopPrank();
 
-        assertEq(getter.getProceeds(seller), 0.99 ether);
-        assertEq(getter.getProceeds(owner), 0.01 ether);
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
     }
 
     // Misconfigured fee (>100%) should make purchase impossible.
@@ -3291,14 +3338,14 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         vm.expectRevert(stdError.arithmeticError); // forge-std
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
     }
 
     function testFeeExactly100Percent_SucceedsSellerGetsZero() public {
@@ -3309,17 +3356,19 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // Seller gets 0, owner gets full 1 ETH (no royalty in this test)
-        assertEq(getter.getProceeds(seller), 0);
-        assertEq(getter.getProceeds(owner), 1 ether);
+        assertEq(seller.balance - sellerBalBefore, 0);
+        assertEq(owner.balance - ownerBalBefore, 1 ether);
 
         // Listing is gone and ownership transferred
         assertEq(erc721.ownerOf(1), buyer);
@@ -3340,18 +3389,21 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(token), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(token), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        uint256 royaltyBalBefore = address(0xBEEF).balance;
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // Seller 0.99, owner 0.01, royaltyReceiver 0
-        assertEq(getter.getProceeds(seller), 0.99 ether);
-        assertEq(getter.getProceeds(owner), 0.01 ether);
-        assertEq(getter.getProceeds(address(0xBEEF)), 0);
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        assertEq(address(0xBEEF).balance - royaltyBalBefore, 0);
     }
 
     /// ERC2981 royaltyReceiver = address(0) should credit zero address.
@@ -3365,17 +3417,22 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         r.approve(address(diamond), 1);
 
         vm.prank(seller);
-        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        uint256 zeroBalBefore = address(0).balance;
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // Proceeds: seller 0.89, owner 0.01, zero address 0.10
-        assertEq(getter.getProceeds(seller), 0.89 ether);
-        assertEq(getter.getProceeds(owner), 0.01 ether);
-        assertEq(getter.getProceeds(address(0)), 0.1 ether);
+        assertEq(seller.balance - sellerBalBefore, 0.89 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        assertEq(address(0).balance - zeroBalBefore, 0.1 ether);
     }
 
     /// ERC2981 token that reverts royaltyInfo must cause purchase to revert.
@@ -3388,13 +3445,15 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         r.approve(address(diamond), 1);
 
         vm.prank(seller);
-        market.createListing(address(r), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         vm.expectRevert(); // royaltyInfo reverts inside purchase
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
     }
 
     /// Swap (ERC721→ERC1155) purchase must revert if buyer has insufficient ERC1155 balance.
@@ -3409,7 +3468,9 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         // Seller lists token #1 wanting 5 units of ERC1155 id=1
         vm.prank(seller);
-        market.createListing(address(a), 1, address(0), 0, address(erc1155), 1, 5, 0, false, false, new address[](0));
+        market.createListing(
+            address(a), 1, address(0), 0, address(0), address(erc1155), 1, 5, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         // Buyer only holds 2 units of that ERC1155 and approves
@@ -3425,7 +3486,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
                 2 // available
             )
         );
-        market.purchaseListing{value: 0}(id, 0, 0, address(erc1155), 1, 5, 0, buyer);
+        market.purchaseListing{value: 0}(id, 0, address(0), 0, address(erc1155), 1, 5, 0, buyer);
     }
 
     /// Swap (ERC721→ERC721) purchase must revert if buyer did not approve desired token.
@@ -3441,13 +3502,15 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         a.approve(address(diamond), 10);
 
         vm.prank(seller);
-        market.createListing(address(a), 10, address(0), 0, address(b), 20, 0, 0, false, false, new address[](0));
+        market.createListing(
+            address(a), 10, address(0), 0, address(0), address(b), 20, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         // Buyer did not approve b#20 to marketplace
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
-        market.purchaseListing{value: 0}(id, 0, 0, address(b), 20, 0, 0, address(0));
+        market.purchaseListing{value: 0}(id, 0, address(0), 0, address(b), 20, 0, 0, address(0));
     }
 
     /// Swap (ERC721→ERC721) must revert if buyer neither owns nor is approved for desired token.
@@ -3463,13 +3526,15 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         a.approve(address(diamond), 1);
 
         vm.prank(seller);
-        market.createListing(address(a), 1, address(0), 0, address(b), 2, 0, 0, false, false, new address[](0));
+        market.createListing(
+            address(a), 1, address(0), 0, address(0), address(b), 2, 0, 0, false, false, new address[](0)
+        );
         uint128 id = getter.getNextListingId() - 1;
 
         // buyer attempts purchase but has no rights over b#2
         vm.prank(buyer);
         vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
-        market.purchaseListing{value: 0}(id, 0, 0, address(b), 2, 0, 0, address(0));
+        market.purchaseListing{value: 0}(id, 0, address(0), 0, address(b), 2, 0, 0, address(0));
     }
 
     /// ERC1155 listings can be cancelled by any operator approved for the seller.
@@ -3487,7 +3552,18 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc1155), tokenId, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+            address(erc1155),
+            tokenId,
+            seller,
+            10 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            10,
+            false,
+            false,
+            new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3581,7 +3657,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         assertFalse(erc721.ownerOf(1) == buyer);
     }
 
@@ -3596,7 +3672,9 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
-        market.createListing(address(bad), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.createListing(
+            address(bad), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
     }
 
     function testCreateListingWithNonNFTContractQ9Reverts() public {
@@ -3610,14 +3688,16 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
-        market.createListing(address(bad), 1, address(0), 1 ether, address(0), 0, 0, 9, false, false, new address[](0));
+        market.createListing(
+            address(bad), 1, address(0), 1 ether, address(0), address(0), 0, 0, 9, false, false, new address[](0)
+        );
     }
 
     function testUpdatePriceZeroWithoutSwapReverts() public {
         uint128 id = _createListingERC721(false, new address[](0));
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__FreeListingsNotSupported.selector);
-        market.updateListing(id, 0, address(0), 0, 0, 0, false, false, new address[](0));
+        market.updateListing(id, 0, address(0), address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testCancelERC721ByOperatorForAll() public {
@@ -3626,7 +3706,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc721.setApprovalForAll(operator, true);
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
         vm.prank(operator);
@@ -3647,6 +3727,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             0, // erc1155Quantity (ERC721 -> 0)
             1 ether,
+            address(0), // currency
             getter.getInnovationFee(),
             seller,
             false,
@@ -3658,7 +3739,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
     }
 
@@ -3677,6 +3758,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             1,
             10, // erc1155Quantity
             10 ether, // price
+            address(0), // currency
             getter.getInnovationFee(),
             seller,
             false, // buyerWhitelistEnabled
@@ -3688,7 +3770,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(erc1155), 1, seller, 10 ether, address(0), 0, 0, 10, false, false, new address[](0)
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
         );
     }
 
@@ -3697,17 +3779,29 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
         vm.expectEmit(true, true, true, true, address(diamond));
         emit IdeationMarketFacet.ListingUpdated(
-            id, address(erc721), 1, 0, 2 ether, getter.getInnovationFee(), seller, false, false, address(0), 0, 0
+            id,
+            address(erc721),
+            1,
+            0,
+            2 ether,
+            address(0),
+            getter.getInnovationFee(),
+            seller,
+            false,
+            false,
+            address(0),
+            0,
+            0
         );
 
         vm.prank(seller);
-        market.updateListing(id, 2 ether, address(0), 0, 0, 0, false, false, new address[](0));
+        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     /// ListingPurchased fires with exact parameters on ERC721 full purchase
@@ -3715,7 +3809,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3724,11 +3818,11 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.expectEmit(true, true, true, true, address(diamond));
         emit IdeationMarketFacet.ListingPurchased(
-            id, address(erc721), 1, 0, false, 1 ether, feeSnap, seller, buyer, address(0), 0, 0
+            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
         );
 
         vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
     }
 
     /// RoyaltyPaid fires with exact parameters
@@ -3747,17 +3841,17 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         vm.prank(seller);
         market.createListing(
-            address(royaltyNft), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(royaltyNft), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
         vm.deal(buyer, 1 ether);
 
         vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.RoyaltyPaid(id, royaltyReceiver, address(royaltyNft), 1, 0.1 ether);
+        emit IdeationMarketFacet.RoyaltyPaid(id, royaltyReceiver, address(0), 0.1 ether);
 
         vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
     }
 
     /// ListingCanceled fires with exact parameters
@@ -3765,7 +3859,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3781,7 +3875,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
         market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 
@@ -3811,28 +3905,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(getter.getInnovationFee(), next);
     }
 
-    /// ProceedsWithdrawn fires with exact parameters
-    function testEmitProceedsWithdrawn() public {
-        _whitelistCollectionAndApproveERC721();
-        vm.prank(seller);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, 0, address(0), 0, 0, 0, address(0));
-
-        uint256 proceedsBefore = getter.getProceeds(seller);
-
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ProceedsWithdrawn(seller, proceedsBefore);
-
-        vm.prank(seller);
-        market.withdrawProceeds();
-    }
-
     /* ================================
        ERC1155 reverse index coverage
        ================================ */
@@ -3851,12 +3923,14 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
 
         vm.prank(seller);
-        market.createListing(address(erc1155), 9, seller, 5 ether, address(0), 0, 0, 5, false, false, new address[](0));
+        market.createListing(
+            address(erc1155), 9, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
         uint128 id1 = getter.getNextListingId() - 1;
 
         vm.prank(operator);
         market.createListing(
-            address(erc1155), 9, operator, 7 ether, address(0), 0, 0, 7, false, false, new address[](0)
+            address(erc1155), 9, operator, 7 ether, address(0), address(0), 0, 0, 7, false, false, new address[](0)
         );
         uint128 id2 = getter.getNextListingId() - 1;
 
@@ -3887,16 +3961,20 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         erc1155.setApprovalForAll(address(diamond), true);
 
         vm.prank(seller);
-        market.createListing(address(erc1155), 10, seller, 3 ether, address(0), 0, 0, 3, false, false, new address[](0));
+        market.createListing(
+            address(erc1155), 10, seller, 3 ether, address(0), address(0), 0, 0, 3, false, false, new address[](0)
+        );
         uint128 id1 = getter.getNextListingId() - 1;
 
         vm.prank(buyer);
-        market.createListing(address(erc1155), 10, buyer, 4 ether, address(0), 0, 0, 4, false, false, new address[](0));
+        market.createListing(
+            address(erc1155), 10, buyer, 4 ether, address(0), address(0), 0, 0, 4, false, false, new address[](0)
+        );
         uint128 id2 = getter.getNextListingId() - 1;
 
         vm.prank(operator);
         market.createListing(
-            address(erc1155), 10, operator, 5 ether, address(0), 0, 0, 5, false, false, new address[](0)
+            address(erc1155), 10, operator, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
         );
         uint128 id3 = getter.getNextListingId() - 1;
 
@@ -3985,7 +4063,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // qty=10, price=10 ETH → unit=1 ETH; partials enabled
         vm.prank(seller);
         market.createListing(
-            address(erc1155), 11, seller, 10 ether, address(0), 0, 0, 10, false, true, new address[](0)
+            address(erc1155), 11, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
         );
         uint128 id = getter.getNextListingId() - 1;
 

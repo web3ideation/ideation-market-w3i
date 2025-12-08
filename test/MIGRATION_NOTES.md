@@ -76,6 +76,19 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 - **Whitelist edge cases**: All updateListing calls now have 3 new required parameters
 - **Fixed compilation typo**: nt128 → uint128 in testRoyaltyEdge_HighFeePlusRoyaltyExceedsProceeds
 
+### Batch 7 - Events & Integration (Lines 2501-3900) ✅ COMPLETE
+- **Event signatures updated**: All listing events (ListingCreated, ListingUpdated, ListingPurchased) now have `currency` parameter between `price` and `feeRate`
+- **RoyaltyPaid event**: Removed tokenId parameter - now takes 4 params (listingId, receiver, tokenAddress, amount)
+- **getProceeds replacement**: Replaced in 6 tests with balance snapshots (testSwapWithEth_ERC721toERC721_HappyPath, testSwapWithEth_ERC721toERC1155_HappyPath, testPurchaseFeeSnapshotOldFee, testFeeExactly100Percent_SucceedsSellerGetsZero, testERC2981ZeroRoyalty, testRoyaltyReceiverZeroAddress)
+- **Swap tests**: All swap tests now have correct currency parameter in createListing (price-only swaps need address(0) currency)
+- **Fee snapshot tests**: Verify listing's feeRate is frozen at creation time, not current innovationFee
+- **Royalty tests**: ERC2981 zero royalty, zero address receiver, reverting royaltyInfo all work correctly
+- **testEmitProceedsWithdrawn**: Commented out - obsolete in non-custodial model
+- **Event emission tests**: All events now emit with correct parameter order (currency between price and feeRate)
+- **Reverse index tests**: ERC1155 multi-listing and compaction tests all have correct parameters
+- **Validation tests**: Type mismatch tests (ERC721/ERC1155 confusion) all compile correctly
+- **Missing parameters fixed**: ~50+ createListing calls missing currency/desiredTokenAddress, ~30+ purchaseListing calls missing expectedCurrency
+
 ### Process
 1. **Check if already migrated**: Some tests have `address(0)` currency params already
 2. **Compile specific file**: Use `get_errors([filePath])` - don't compile all tests
@@ -292,13 +305,13 @@ After each batch completion:
 - [x] Batch 4: ERC1155 Tests (15 tests) - Lines 431-850
 - [x] Batch 5: Edge Cases (25 tests) - Lines 851-1500
 - [x] Batch 6: Advanced Features (35 tests) - Lines 1501-2500 ✅ COMPLETE
-- [ ] Batch 7: Events & Integration (30 tests) - Lines 2501-3900
+- [x] Batch 7: Events & Integration (30 tests) - Lines 2501-3900 ✅ COMPLETE
 - [ ] Batch 8: Attack Vectors (30 tests) - Lines 3901-5000
 - [ ] Batch 9: Receiver Hooks (25 tests) - Lines 5001-6185
 
-**Current Batch**: Batch 6 complete
-**Tests Migrated**: 95/~200
-**Lines Migrated**: 2500/5728
+**Current Batch**: Batch 7 complete
+**Tests Migrated**: 125/~200
+**Lines Migrated**: 3900/5728
 
 
 ### Test Type Insights
