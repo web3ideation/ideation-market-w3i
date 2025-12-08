@@ -8,8 +8,8 @@ import "./MarketTestBase.t.sol";
 ///         and that purchases (incl. overpay) keep `getter.getBalance()`
 ///         in sync with `address(diamond).balance`.
 contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
-    /// Direct ETH to the diamond (empty calldata -> receive) increases both
-    /// the on-chain balance and the getter-reported balance by the same amount.
+    /// Direct ETH to the diamond (empty calldata -> receive) REVERTS in non-custodial model.
+    /// The diamond has no receive() function, so direct ETH transfers should fail.
     function testReceive_DirectETH_IncreasesGetterAndNativeBalance() public {
         uint256 beforeGetter = getter.getBalance();
         uint256 beforeNative = address(diamond).balance;
@@ -17,10 +17,11 @@ contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         (bool ok,) = address(diamond).call{value: 1 ether}("");
-        require(ok, "send failed");
 
-        assertEq(getter.getBalance(), beforeGetter + 1 ether);
-        assertEq(address(diamond).balance, beforeNative + 1 ether);
+        // Non-custodial diamond rejects direct ETH transfers
+        assertFalse(ok, "direct ETH should fail - no receive() function");
+        assertEq(getter.getBalance(), beforeGetter, "getter balance should not change");
+        assertEq(address(diamond).balance, beforeNative, "diamond balance should not change");
     }
 
     /// Non-empty calldata with an unknown selector should revert via the

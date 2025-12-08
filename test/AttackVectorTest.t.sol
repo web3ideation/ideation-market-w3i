@@ -830,15 +830,16 @@ contract MaliciousInitTryAdmin {
 
 /// @notice Malicious facet that directly writes to AppStorage (storage collision test)
 contract BadFacetAppSmash {
-    // Same layout as LibAppStorage.AppStorage for first two fields
+    // Same layout as LibAppStorage.AppStorage for first three fields
     struct LocalAppStorage {
+        uint128 listingIdCounter;
         uint32 innovationFee;
         uint16 buyerWhitelistMaxBatchSize;
     }
 
     function smash(uint32 newFee, uint16 newMax) external {
         LocalAppStorage storage s;
-        bytes32 position = keccak256("diamond.standard.ideation.market");
+        bytes32 position = keccak256("diamond.standard.app.storage");
         assembly {
             s.slot := position
         }

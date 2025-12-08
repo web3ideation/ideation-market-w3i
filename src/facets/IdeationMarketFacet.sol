@@ -468,9 +468,13 @@ contract IdeationMarketFacet {
         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
             (royaltyReceiver, royaltyAmount) =
                 IERC2981(listedItem.tokenAddress).royaltyInfo(listedItem.tokenId, purchasePrice);
-            if (royaltyAmount > 0) {
+            // Only deduct royalty if receiver is valid (not address(0)) and amount > 0
+            if (royaltyReceiver != address(0) && royaltyAmount > 0) {
                 if (remainingProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
                 remainingProceeds -= royaltyAmount;
+            } else if (royaltyReceiver == address(0)) {
+                // Skip royalty payment if receiver is address(0)
+                royaltyAmount = 0;
             }
         }
 

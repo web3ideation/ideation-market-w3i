@@ -37,8 +37,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     function testDiamondLoupeFacets() public view {
         // The diamond should have the cut facet plus six additional facets = 7
         IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
-        // After deployment the diamond has the diamondCut facet plus eight added facets
-        assertEq(facetInfo.length, 9); // Updated: Added PauseFacet and VersionFacet
+        // After deployment the diamond has the diamondCut facet plus nine added facets (including CurrencyWhitelistFacet)
+        assertEq(facetInfo.length, 10); // Updated: Added PauseFacet, VersionFacet, and CurrencyWhitelistFacet
 
         // Verify that the diamondCut selector maps to the original cut facet
         address cutAddr = loupe.facetAddress(IDiamondCutFacet.diamondCut.selector);
@@ -933,7 +933,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.deal(buyer, 2 ether);
         vm.startPrank(buyer);
         vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.RoyaltyPaid(id, royaltyReceiver, address(royaltyNft), 0.1 ether);
+        emit IdeationMarketFacet.RoyaltyPaid(id, royaltyReceiver, address(0), 0.1 ether); // currency is address(0) for ETH
 
         market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
@@ -2226,7 +2226,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // Seller lists A#100 wanting B#200 (swap only, price=0)
         vm.prank(seller);
         market.createListing(
-            address(a), 100, address(0), 0, address(0), address(b), 0, 0, 0, false, false, new address[](0)
+            address(a), 100, address(0), 0, address(0), address(b), 200, 0, 0, false, false, new address[](0)
         );
         uint128 swapId = getter.getNextListingId() - 1;
 
@@ -3406,7 +3406,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(address(0xBEEF).balance - royaltyBalBefore, 0);
     }
 
-    /// ERC2981 royaltyReceiver = address(0) should credit zero address.
+    /// ERC2981 royaltyReceiver = address(0) should not deduct royalties.
     function testRoyaltyReceiverZeroAddress() public {
         MockERC721Royalty r = new MockERC721Royalty();
         r.mint(seller, 1);
@@ -3424,15 +3424,15 @@ contract IdeationMarketDiamondTest is MarketTestBase {
 
         uint256 sellerBalBefore = seller.balance;
         uint256 ownerBalBefore = owner.balance;
-        uint256 zeroBalBefore = address(0).balance;
         vm.deal(buyer, 1 ether);
         vm.prank(buyer);
         market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
-        // Proceeds: seller 0.89, owner 0.01, zero address 0.10
-        assertEq(seller.balance - sellerBalBefore, 0.89 ether);
+        // When royalty receiver is address(0), royalty is NOT deducted (skipped entirely)
+        // Seller gets: 1 ETH - 0.01 fee = 0.99 ether (royalty not applied)
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
         assertEq(owner.balance - ownerBalBefore, 0.01 ether);
-        assertEq(address(0).balance - zeroBalBefore, 0.1 ether);
+        assertEq(address(diamond).balance, 0); // Non-custodial: no balance held
     }
 
     /// ERC2981 token that reverts royaltyInfo must cause purchase to revert.
@@ -4976,8 +4976,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(tokenB.balanceOf(buyer, idB), 10 - qtyB);
         assertEq(tokenB.balanceOf(seller, idB), qtyB);
 
-        // Contract should now hold the price until proceeds withdrawal.
-        assertEq(address(diamond).balance, price);
+        // Non-custodial: atomic payments, diamond holds no balance
+        assertEq(address(diamond).balance, 0);
     }
 
     /// Buyer is ONLY an authorized operator for the desired 1155(B) holder (not the holder).
