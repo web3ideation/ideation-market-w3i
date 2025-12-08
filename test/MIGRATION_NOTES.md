@@ -63,6 +63,19 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 - **testNoOpUpdateKeepsValues**: Use `beforeL.currency` in updateListing call
 - **Diamond balance**: Assert `address(diamond).balance == 0` after purchases (non-custodial = no accumulation)
 
+### Batch 6 - Advanced Features (Lines 1501-2500) ✅ COMPLETE
+- **createListing signature**: Has 12 params, NOT 14. NO royalty parameters (royaltyRecipient/royaltyRate). Royalty is auto-detected via ERC2981.
+- **Parameter order**: `price` comes BEFORE `currency` in createListing
+- **updateListing signature**: Added `newCurrency`, `newDesiredTokenAddress`, `newErc1155Quantity` parameters
+- **purchaseListing signature**: Added `expectedCurrency` parameter  
+- **getProceeds removal**: All replaced with balance snapshots (testERC1155HolderDifferentFromSellerHappyPath, testERC721OperatorListsAndPurchaseSucceeds_AfterFix, testERC1155MultiStepPartialsMaintainPriceProportions)
+- **withdrawProceeds.selector**: Removed from testLoupeSelectorsPerFacet
+- **getProceeds.selector**: Removed from testLoupeSelectorsPerFacet
+- **Multi-purchase balance tracking**: Track balance changes per purchase separately (testERC1155MultiStepPartialsMaintainPriceProportions uses 4 separate snapshots)
+- **Operator/holder tests**: Fixed erc1155Holder parameter in all createListing calls (address(seller) for holder-different-from-seller tests)
+- **Whitelist edge cases**: All updateListing calls now have 3 new required parameters
+- **Fixed compilation typo**: nt128 → uint128 in testRoyaltyEdge_HighFeePlusRoyaltyExceedsProceeds
+
 ### Process
 1. **Check if already migrated**: Some tests have `address(0)` currency params already
 2. **Compile specific file**: Use `get_errors([filePath])` - don't compile all tests
@@ -278,14 +291,14 @@ After each batch completion:
 - [x] Batch 3: Basic Listing & Purchase (7 tests) - Lines 231-430
 - [x] Batch 4: ERC1155 Tests (15 tests) - Lines 431-850
 - [x] Batch 5: Edge Cases (25 tests) - Lines 851-1500
-- [ ] Batch 6: Advanced Features (35 tests) - Lines 1501-2500
+- [x] Batch 6: Advanced Features (35 tests) - Lines 1501-2500 ✅ COMPLETE
 - [ ] Batch 7: Events & Integration (30 tests) - Lines 2501-3900
 - [ ] Batch 8: Attack Vectors (30 tests) - Lines 3901-5000
 - [ ] Batch 9: Receiver Hooks (25 tests) - Lines 5001-6185
 
-**Current Batch**: Batch 5 complete
-**Tests Migrated**: 60/~200
-**Lines Migrated**: 1500/5728
+**Current Batch**: Batch 6 complete
+**Tests Migrated**: 95/~200
+**Lines Migrated**: 2500/5728
 
 
 ### Test Type Insights
