@@ -89,6 +89,25 @@ assertEq(seller.balance - balBefore, expectedProceeds);
 - **Validation tests**: Type mismatch tests (ERC721/ERC1155 confusion) all compile correctly
 - **Missing parameters fixed**: ~50+ createListing calls missing currency/desiredTokenAddress, ~30+ purchaseListing calls missing expectedCurrency
 
+### Batch 8 - Attack Vectors & Security (Lines 3901-5000) ✅ COMPLETE
+- **Overpay tests removed**: testERC1155_PartialBuy_OverpayCreditsBuyer, testSwapWithEth_OverpayCreditsBuyer, testPureSwap_AccidentalEthCreditedToBuyer commented out - non-custodial model requires EXACT msg.value for ETH payments (no overpay, no proceeds mapping)
+- **Accounting invariant rewritten**: testInvariant_ContractBalanceEqualsSumOfProceeds_AfterOps → testInvariant_DiamondBalanceAlwaysZero_NonCustodial - verifies diamond balance is ALWAYS 0 after purchases (atomic payments directly to recipients)
+- **Pure swap payment semantics**: price=0 swap now requires msg.value=0 (sending ETH with price=0 would revert with WrongPaymentCurrency)
+- **Balance snapshot pattern**: testSwap_ERC1155toERC721_HappyPath fixed to verify `address(diamond).balance == 0` instead of getProceeds checks
+- **No compilation errors**: All reverse index tests (ERC1155 multi-listing, compaction, ghost prevention), whitelist enforcement tests, swap cleanup tests, burn/cancel tests compile correctly with currency parameters already in place
+- **Burn tests**: ERC721/ERC1155 burn + cleanListing/cancelListing tests work unchanged (focus on ownership/approval validation, not payments)
+
+### Batch 9 - Receiver Hooks & Final Tests (Lines 5001-5954) ✅ COMPLETE
+- **Clean listing tests**: Balance drift + approval intact tests (testCleanListingERC1155_BalanceDrift_ApprovalIntact_Cancels) verify automatic cleanup when seller balance < listed quantity
+- **ERC1155 swap tests**: Pure swaps and swap+ETH variations (testSwapERC1155toERC1155_PureSwap_HappyPath, testSwapERC1155toERC1155_WithEth_AndBuyerIsOperatorForDesired) all replaced getProceeds with balance snapshots
+- **Burnable token tests**: Dedicated BurnableERC721/BurnableERC1155 mocks test burn scenarios (testCleanListingCancelsAfterERC721Burn, testCancelListingAfterERC1155Burn_ByContractOwner)
+- **Receiver hook tests**: SwallowingERC721Receiver/SwallowingERC1155Receiver verify marketplace doesn't mask validation errors, StrictERC721/StrictERC1155 test contract buyers without receiver interfaces
+- **Whitelist scale test**: testWhitelistScale_PurchaseUnaffectedByLargeList adds 2400 whitelist addresses to verify gas optimization
+- **RoyaltyPaid event signature**: Takes 4 params (listingId, receiver, tokenAddress, amount) - removed tokenId parameter (already fixed in earlier batch)
+- **ListingUpdated event**: Added currency parameter between price and feeRate (testUpdate_AddDesiredToEthListing_Succeeds, testUpdate_AddEthToSwapListing_Succeeds)
+- **updateListing signature**: Added newCurrency (after newPrice) and newErc1155Quantity (after newDesiredErc1155Quantity) parameters in all update tests
+- **Final tests beyond Batch 9**: testFirstListingIdIsOne, testRoyaltyPurchase_EmitsPurchasedThenRoyalty, testUpdate_SwapSameNFTReverts all migrated with currency params
+
 ### Process
 1. **Check if already migrated**: Some tests have `address(0)` currency params already
 2. **Compile specific file**: Use `get_errors([filePath])` - don't compile all tests
@@ -199,7 +218,7 @@ function helperCreateListing(...) internal {
 
 ## Migration Status
 
-### ✅ Completed
+### ✅ ALL COMPLETE - Migration Finished!
 - **MarketTestBase.t.sol** - Foundation with CurrencyWhitelistFacet setup
 - **BuyerWhitelistFacetTest.t.sol** - Already migrated, no changes needed
 - **CollectionWhitelistFacetEdgeTest.t.sol** - No changes needed
@@ -215,24 +234,31 @@ function helperCreateListing(...) internal {
 - **ReceiveAndGetterBalanceTest.t.sol** - Migrated: added currency param to createListing/purchaseListing, replaced overpay test with atomic payment test verifying zero diamond balance after purchase
 - **StorageCollisionTest.t.sol** - Migrated: added currency params to all createListing/updateListing/purchaseListing calls, replaced getProceeds with balance snapshots, removed withdrawProceeds from handlers, all storage collision canary tests intact
 
-### 🔄 In Progress
-- None
-
-### ✅ Completed (Continued)
+### ✅ All Test Files Complete
 - **PauseFacetTest.t.sol** - Migrated: Extended MarketTestBase, added currency params, fixed error imports, added selector routing verification (29 tests)
 - **VersionFacetTest.t.sol** - Migrated: Extended MarketTestBase, added currency params, fixed selector references, added selector routing verification, fixed unused variable warnings (11 tests)
 
-### 📝 Pending
-- **IdeationMarketDiamondTest.t.sol** - 6185 lines, ~200 tests - NEEDS BATCHED MIGRATION (see plan below)
+- **IdeationMarketDiamondTest.t.sol** - ✅ COMPLETE - All 207 tests migrated (5954 lines)
 
 ---
 
-## IdeationMarketDiamondTest.t.sol Migration Plan
+## 🎉 MIGRATION COMPLETE!
 
-**Status**: 🟢 Batch 1-2 COMPLETE (13/200 tests)  
-**File Size**: 6185 lines, ~200 test functions  
+**Total Files Migrated**: 14 test files  
+**Total Tests**: 207+ tests (IdeationMarketDiamondTest.t.sol alone)  
+**Compilation Status**: ✅ SUCCESS - "Compiler run successful!"  
+**Test Verification**: ✅ Sample tests passing  
+
+All test files have been successfully migrated to the multi-currency + non-custodial payment model!
+
+---
+
+## IdeationMarketDiamondTest.t.sol Migration Summary
+
+**Final Status**: ✅ ALL 9 BATCHES COMPLETE  
+**File Size**: 5954 lines, 207 test functions  
 **Strategy**: Batched migration in 9 sequential batches  
-**Estimated Prompts**: 9-10 agent runs
+**Actual Prompts Used**: 9 agent runs (as estimated)
 
 **important notes**: do not try to compile IdeationMarketDiamondTest.t.sol since until all these batches are dealt with we WILL have compilation issues anyway.
 
@@ -242,7 +268,7 @@ function helperCreateListing(...) internal {
 - ✅ Infrastructure & whitelist tests verified (no changes needed)
 - ✅ Basic listing & purchase tests migrated (7 tests)
 
-### Batch Breakdown:
+### Batch Breakdown (ALL COMPLETE):
 
 **Batch 1: Diamond Infrastructure (lines 1-110, ~8 tests)** ✅ COMPLETE
 - Diamond initialization, loupe, interfaces, ownership
@@ -306,12 +332,12 @@ After each batch completion:
 - [x] Batch 5: Edge Cases (25 tests) - Lines 851-1500
 - [x] Batch 6: Advanced Features (35 tests) - Lines 1501-2500 ✅ COMPLETE
 - [x] Batch 7: Events & Integration (30 tests) - Lines 2501-3900 ✅ COMPLETE
-- [ ] Batch 8: Attack Vectors (30 tests) - Lines 3901-5000
-- [ ] Batch 9: Receiver Hooks (25 tests) - Lines 5001-6185
+- [x] Batch 8: Attack Vectors (30 tests) - Lines 3901-5000 ✅ COMPLETE
+- [x] Batch 9: Receiver Hooks (27 tests) - Lines 5001-5954 ✅ COMPLETE
 
-**Current Batch**: Batch 7 complete
-**Tests Migrated**: 125/~200
-**Lines Migrated**: 3900/5728
+**Status**: ALL BATCHES COMPLETE - IdeationMarketDiamondTest.t.sol FULLY MIGRATED
+**Tests Migrated**: 182/207 (all remaining tests already had currency params)
+**Lines Migrated**: 5954/5954 (100%)
 
 
 ### Test Type Insights
