@@ -31,7 +31,7 @@ interface IGetterFacet {
 
 contract DiamondHealth is Test {
     // live diamond (Sepolia)
-    address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79; // :contentReference[oaicite:9]{index=9}
+    address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79;
 
     bytes4 constant IID_ERC165 = 0x01ffc9a7;
     bytes4 constant IID_ERC173 = 0x7f5828d0; // ownership
@@ -68,9 +68,9 @@ contract DiamondHealth is Test {
     }
 
     function test_ContractOwnerMatchesDeploymentLog() public view {
-        // GetterFacet exposes getContractOwner (seen on Louper). :contentReference[oaicite:10]{index=10}
+        // GetterFacet exposes getContractOwner (seen on Louper).
         IGetterFacet getter = IGetterFacet(DIAMOND);
         address owner = getter.getContractOwner();
-        assertEq(owner, 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D, "owner mismatch with deploy log"); // :contentReference[oaicite:11]{index=11}
+        assertEq(owner, 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D, "owner mismatch with deploy log");
     }
 }

@@ -527,22 +527,6 @@ contract InitWriteFee {
     }
 }
 
-contract MaliciousInitTryAdmin {
-    // Tries to call onlyOwner functions from initializer context; must NOT succeed
-    function initTryAdmin(address newOwner, uint32 newFee) external {
-        // Attempt transferOwnership (IERC173 view)
-        try IERC173(address(this)).transferOwnership(newOwner) {
-            revert("transferOwnership should revert");
-        } catch { /* expected */ }
-
-        // Attempt setInnovationFee (onlyOwner)
-        try IdeationMarketFacet(address(this)).setInnovationFee(newFee) {
-            revert("setInnovationFee should revert");
-        } catch { /* expected */ }
-        // Note: we *do not* revert here; diamondCut should succeed with no state changes.
-    }
-}
-
 // --- Helpers for upgrade state tests ---
 
 // Writes a marker using the *correct* AppStorage, then verifies it via the Diamond's getter.

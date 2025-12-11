@@ -164,6 +164,40 @@ contract StorageCollisionTest is MarketTestBase {
     ///    This is NOT a collision; it demonstrates your guards would catch a
     ///    refactor accident by observing drift in canaries.
     /// -----------------------------------------------------------------------
+    function testStorage_MaliciousFacetCorruptsCanaries() public {
+        // Snapshot canaries
+        uint32 fee0 = getter.getInnovationFee();
+        uint16 maxBatch0 = getter.getBuyerWhitelistMaxBatchSize();
+
+        // Deploy malicious facet that directly writes to AppStorage
+        BadFacetAppSmash bad = new BadFacetAppSmash();
+
+        // Prepare diamondCut to add malicious facet
+        bytes4[] memory selectors = new bytes4[](1);
+        selectors[0] = BadFacetAppSmash.smash.selector;
+
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        cuts[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(bad),
+            action: IDiamondCutFacet.FacetCutAction.Add,
+            functionSelectors: selectors
+        });
+
+        // Execute cut (as owner)
+        vm.prank(owner);
+        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+
+        // Call malicious smash function through diamond
+        (bool ok,) =
+            address(diamond).call(abi.encodeWithSelector(BadFacetAppSmash.smash.selector, uint32(99999), uint16(9999)));
+        assertTrue(ok, "smash call should succeed");
+
+        // Verify canaries WERE corrupted (proving guards would detect drift)
+        assertNotEq(getter.getInnovationFee(), fee0, "smash should have corrupted innovationFee");
+        assertNotEq(getter.getBuyerWhitelistMaxBatchSize(), maxBatch0, "smash should have corrupted maxBatch");
+        assertEq(getter.getInnovationFee(), 99999, "innovationFee should be 99999 after smash");
+        assertEq(getter.getBuyerWhitelistMaxBatchSize(), 9999, "maxBatch should be 9999 after smash");
+    }
 }
 
 // Test-only library that points to the correct AppStorage slot (on purpose),

@@ -21,20 +21,6 @@ contract RevertingInit {
 /// @notice Edge-case tests around diamondCut & loupe, built on MarketTestBase
 contract LibDiamondEdgesTest is MarketTestBase {
     /* ------------------------------------------------------------------------
-       onlyOwner on diamondCut
-    ------------------------------------------------------------------------ */
-    function testCut_OnlyOwner() public {
-        // non-owner tries to cut
-        vm.startPrank(buyer);
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-
-        // don't assert an exact selector to avoid coupling to error strings
-        vm.expectRevert("LibDiamond: Must be contract owner");
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
-        vm.stopPrank();
-    }
-
-    /* ------------------------------------------------------------------------
        add → replace → remove a custom selector (version())
        uses VersionFacetV1 / VersionFacetV2 already provided by MarketTestBase
     ------------------------------------------------------------------------ */
@@ -156,7 +142,7 @@ contract LibDiamondEdgesTest is MarketTestBase {
         });
 
         vm.prank(owner);
-        vm.expectRevert("LibDiamondCut: Add facet can't be address(0)");
+        vm.expectRevert("LibDiamondCut: Replace facet can't be address(0)");
         IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
     }
 

@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import {Listing} from "../src/libraries/LibAppStorage.sol";
+import {Listing} from "../../src/libraries/LibAppStorage.sol";
 
 // ---- Interfaces (same as tests) ----
 interface IERC721 {

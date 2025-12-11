@@ -10,7 +10,7 @@ import "./MarketTestBase.t.sol";
 contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
     /// Direct ETH to the diamond (empty calldata -> receive) REVERTS in non-custodial model.
     /// The diamond has no receive() function, so direct ETH transfers should fail.
-    function testReceive_DirectETH_IncreasesGetterAndNativeBalance() public {
+    function testReceive_DirectETH_RevertsAndBalanceUnchanged() public {
         uint256 beforeGetter = getter.getBalance();
         uint256 beforeNative = address(diamond).balance;
 

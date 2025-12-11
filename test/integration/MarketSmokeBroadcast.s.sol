@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
-import {Listing} from "../src/libraries/LibAppStorage.sol";
+import {Listing} from "../../src/libraries/LibAppStorage.sol";
 
 // same interfaces as in the test file
 interface IERC721 {
@@ -56,7 +56,7 @@ interface IIdeationMarketFacet {
 }
 
 contract MarketSmokeBroadcast is Script {
-    // live addresses (same as tests) :contentReference[oaicite:12]{index=12}
+    // live addresses on Sepolia testnet
     address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79;
     address constant TOKEN721 = 0x41655AE49482de69eEC8F6875c34A8Ada01965e2;
 
@@ -91,7 +91,7 @@ contract MarketSmokeBroadcast is Script {
             console.log("ETH whitelisted as currency");
         }
 
-        // whitelist 721 if needed (owner is ACCOUNT1 per your deploy log) :contentReference[oaicite:13]{index=13}
+        // whitelist 721 if needed (owner is ACCOUNT1)
         if (!getter.isCollectionWhitelisted(TOKEN721)) {
             vm.startBroadcast(pk1);
             cwl.addWhitelistedCollection(TOKEN721);

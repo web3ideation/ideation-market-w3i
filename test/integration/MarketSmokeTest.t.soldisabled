@@ -6,7 +6,7 @@ import {Listing} from "../../src/libraries/LibAppStorage.sol";
 
 // ---- Minimal interfaces (matching your live diamond on Louper) ----
 // Louper shows these function names/selectors on your diamond at
-// 0x8cE90712463c87a6d62941D67C3507D090Ea9d79. :contentReference[oaicite:1]{index=1}
+// 0x8cE90712463c87a6d62941D67C3507D090Ea9d79.
 interface IERC721 {
     function ownerOf(uint256 id) external view returns (address);
     function approve(address to, uint256 id) external;
@@ -94,7 +94,7 @@ contract Mock1155 {
 }
 
 contract MarketSmoke is Test {
-    // ---- Live addresses (from your README + deployment log) ---- :contentReference[oaicite:2]{index=2}
+    // ---- Live addresses (from your README + deployment log) ---- 
     address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79;
     address constant TOKEN721 = 0x41655AE49482de69eEC8F6875c34A8Ada01965e2;
 
@@ -148,7 +148,7 @@ contract MarketSmoke is Test {
 
         // whitelist the 721 collection if not yet
         if (!getter.isCollectionWhitelisted(TOKEN721)) {
-            vm.startPrank(ACCOUNT1); // diamond owner (per README deploy log) :contentReference[oaicite:3]{index=3}
+            vm.startPrank(ACCOUNT1); // diamond owner (per README deploy log)
             cwl.addWhitelistedCollection(TOKEN721);
             vm.stopPrank();
         }
