@@ -60,36 +60,8 @@ contract ERC20MarketplaceTest is MarketTestBase {
     // ----------------------------------------------------------
     // Group 1: Purchases & Payment Flow (ERC20 specific)
     // ----------------------------------------------------------
-
-    function testPurchaseERC721WithERC20TransfersFunds() public {
-        uint128 listingId = _createERC721ListingInERC20(address(tokenA), 5 ether, 1);
-
-        tokenA.mint(buyer, 5 ether);
-        vm.prank(buyer);
-        tokenA.approve(address(diamond), 5 ether);
-
-        uint256 ownerStart = tokenA.balanceOf(owner);
-        uint256 sellerStart = tokenA.balanceOf(seller);
-        uint256 buyerStart = tokenA.balanceOf(buyer);
-
-        vm.prank(buyer);
-        market.purchaseListing(listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
-
-        uint256 ownerEnd = tokenA.balanceOf(owner);
-        uint256 sellerEnd = tokenA.balanceOf(seller);
-        uint256 buyerEnd = tokenA.balanceOf(buyer);
-
-        uint256 fee = (5 ether * uint256(INNOVATION_FEE)) / 100000;
-        uint256 sellerProceeds = 5 ether - fee;
-
-        assertEq(ownerEnd - ownerStart, fee);
-        assertEq(sellerEnd - sellerStart, sellerProceeds);
-        assertEq(buyerStart - buyerEnd, 5 ether);
-        assertEq(tokenA.balanceOf(address(diamond)), 0);
-
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
-        getter.getListingByListingId(listingId);
-    }
+    // NOTE: Full payment distribution testing is in ERC20PaymentDistributionTest
+    // This file focuses on ERC20-specific marketplace behavior
 
     function testPurchaseERC1155WithERC20FullQuantity() public {
         uint128 listingId = _createERC1155ListingInERC20(address(tokenB), 10 ether, 5);
