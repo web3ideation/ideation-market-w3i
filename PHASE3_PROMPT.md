@@ -1,231 +1,284 @@
-# Phase 3: Advanced ERC20 Scenarios - Comprehensive Prompt
+# Phase 3: ERC20 Payment Distribution - Comprehensive Prompt
 
 ## Context & Requirements
 
-You are implementing an advanced ERC20 test suite to validate complex marketplace interactions with ERC20 currencies. This is **Phase 3 of 4** for ERC20 testing, building on Phase 1 (CurrencyWhitelistFacet) and Phase 2 (ERC20 Core Flows).
+You are implementing a comprehensive test suite for **ERC20 payment distribution** to verify the atomic non-custodial push payment system with fees and royalties. This is **Phase 3 of 4** for ERC20 testing, building on Phase 1 (CurrencyWhitelistFacet) and Phase 2 (ERC20 Core Flows).
 
 ### Critical Background Knowledge
 
-1. **ERC2981 Royalty Integration**
-   - NFT collections can implement `IERC2981.royaltyInfo(tokenId, salePrice)`.
-   - Returns `(receiver, amount)` — royalty is deducted from seller's proceeds.
-   - If `receiver == address(0)` or `amount == 0`, royalty is skipped.
-   - Royalty is paid BEFORE seller (payment order: owner fee → royalty → seller).
-   - **Critical invariant**: `royaltyAmount <= remainingProceeds` (checked during purchase).
-
-2. **Partial Buy for ERC1155**
-   - ERC1155 listings can enable `partialBuyEnabled = true`.
-   - Buyer specifies `erc1155PurchaseQuantity <= erc1155Quantity`.
-   - Price is pro-rata: `unitPrice = price / quantity; purchasePrice = unitPrice * buyQuantity`.
-   - After partial buy, listing remains with reduced quantity and price.
-   - All payments (fee, royalty, seller proceeds) scale with `purchasePrice` (not full `price`).
-
-3. **NFT Swaps with ERC20 Payment**
-   - Buyer can provide a desired NFT (ERC721 or ERC1155) as part of purchase.
-   - `desiredTokenAddress`, `desiredTokenId`, `desiredErc1155Quantity` define the swap target.
-   - Marketplace transfers: seller's NFT → buyer, buyer's desired NFT → seller.
-   - Payment still flows: buyer → owner fee, royalty, seller proceeds (in ERC20).
-   - Swap NFTs are transferred AFTER listed NFT is moved (CEI pattern).
-
-4. **Multi-Currency Payment Mixing (Advanced)**
-   - A seller can list multiple items in different currencies simultaneously.
-   - Buyer can purchase different listings (different currencies) in sequence.
-   - Each purchase uses its own currency; diamond balance per currency must stay 0.
-   - Fee and royalty deductions are currency-specific (not mixed).
-
-5. **Payment Math with Royalty & Partial Buy**
-   ```
-   purchasePrice = erc1155PurchaseQuantity > 0 ? (price / quantity) * buyQuantity : price
-   innovationFee = (purchasePrice * feeRate) / 100000
-   remainingProceeds = purchasePrice - innovationFee
+1. **Payment Distribution Architecture (_distributePayments, IdeationMarketFacet.sol:1027-1105)**
+   ```solidity
+   // Payment Order (both ETH and ERC20):
+   // 1. Marketplace owner receives innovation fee (FIRST - most trusted)
+   // 2. Royalty receiver receives royalty (SECOND - if ERC2981 and amount > 0)
+   // 3. Seller receives proceeds (LAST - least trusted)
    
-   if (hasRoyalty && receiver != address(0)) {
-       if (royaltyAmount > remainingProceeds) revert RoyaltyExceedsProceeds
-       remainingProceeds -= royaltyAmount
+   // For ERC20:
+   _safeTransferFrom(currency, buyer, marketplaceOwner, innovationFee);
+   if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+       _safeTransferFrom(currency, buyer, royaltyReceiver, royaltyAmount);
    }
-   
-   sellerProceeds = remainingProceeds
+   _safeTransferFrom(currency, buyer, seller, sellerProceeds);
    ```
+
+2. **Fee Calculation**
+   - Fee denominator: **100,000** (e.g., 1,000 = 1%)
+   - Fee snapshots per listing: `listing.feeRate` captured at creation/update
+   - Innovation fee: `(purchasePrice * feeRate) / 100000`
+   - Remaining proceeds: `purchasePrice - innovationFee`
+   - Seller proceeds: `remainingProceeds - royaltyAmount` (if ERC2981 applicable)
+
+3. **Royalty Handling (ERC2981)**
+   - Contract checks: `supportsInterface(IERC2981.interfaceId)`
+   - Royalty info: `royaltyInfo(tokenId, salePrice)` returns `(receiver, amount)`
+   - Royalty deducted from **seller proceeds**, not buyer payment
+   - Edge cases:
+     - `receiver == address(0)` → skip royalty payment (set amount = 0)
+     - `royaltyAmount > remainingProceeds` → revert with `IdeationMarket__RoyaltyFeeExceedsProceeds`
+     - `royaltyAmount == 0` → skip payment, no revert
+
+4. **Non-Custodial Invariant**
+   - Diamond **NEVER** holds ERC20 tokens
+   - All transfers: `transferFrom(buyer, recipient, amount)` directly
+   - After every purchase: `diamond.balanceOf(token) == 0`
+
+5. **_safeTransferFrom (line 1079-1105)**
+   - Handles non-standard ERC20 tokens:
+     - USDT/XAUt (no return value)
+     - Tokens that return false instead of reverting
+   - Low-level call to avoid ABI decoding issues
+   - Checks: `success && (returndata.length == 0 || abi.decode(returndata, (bool)))`
+   - Reverts with: `IdeationMarket__ERC20TransferFailed(token, to)`
 
 ### Test File Structure
 
-**File:** `test/ERC20AdvancedTest.t.sol` (new file)
+**File:** `test/ERC20PaymentDistributionTest.t.sol`
 
 **Must:**
-- Extend `MarketTestBase` for standard setup.
-- Create or import `MockERC721Royalty` and `MockERC1155Royalty` contracts:
-  - Implement ERC2981 interface: `royaltyInfo(uint256 tokenId, uint256 salePrice) returns (address receiver, uint256 amount)`
-  - Allow setting royalty rate and receiver via test helper functions.
-  - Support standard ERC721/ERC1155 operations (mint, approve, transferFrom).
-- Reuse `MockERC20` from Phase 1 & 2 or define inline.
-- Deploy royalty-enabled NFT collections in `setUp()`.
-- Use existing facet references from `MarketTestBase`: `market`, `collections`, `getter`, `currencies`.
+- Extend `MarketTestBase` (reuse diamond, facets, mock NFTs)
+- Create enhanced `MockERC20` with configurable behavior:
+  - Standard compliant (returns bool)
+  - Non-standard (no return value like USDT)
+  - Failing token (returns false)
+  - Various decimals (6, 18, 30)
+- Create `MockERC721Royalty` extending `MockERC721` with ERC2981 support
+- Use facet handles: `market`, `collections`, `currencies`, `getter`, `ownership`
 
-### Required Tests (12-15 total)
+### Required Tests (8-10 total)
 
-#### **Group 1: Royalty Payment with ERC20 (3-4 tests)**
+#### Group 1: Basic Payment Distribution (3 tests)
 
-1. **testERC20RoyaltyPaymentERC721**
-   - Create ERC721 listing with royalty (10% to royalty receiver) in ERC20.
-   - Purchase; assert:
-     - Owner receives fee = `price * feeRate / 100000`
-     - Royalty receiver receives 10% of purchase price
-     - Seller receives remainder = `price - fee - royalty`
+1. **testMarketplaceFeeDistributionWithERC20**
+   - Create ERC721 listing in ERC20 with price 100 tokens
+   - Buyer approves marketplace and purchases
+   - Capture owner balance before/after
+   - Calculate expected fee: `(100 * INNOVATION_FEE) / 100000`
+   - Assert: `ownerBalanceAfter - ownerBalanceBefore == expectedFee`
+   - Assert: Diamond ERC20 balance = 0
+
+2. **testSellerProceedsWithERC20**
+   - Create listing with price 500 tokens
+   - Calculate expected proceeds: `500 - (500 * INNOVATION_FEE) / 100000`
+   - Purchase and verify seller receives exact proceeds
+   - Assert: `sellerBalanceAfter - sellerBalanceBefore == expectedProceeds`
+   - Assert: Diamond ERC20 balance = 0
+
+3. **testCompletePaymentFlowWithERC20**
+   - Create listing with price 1000 tokens
+   - Capture balances: buyer, seller, owner BEFORE
+   - Purchase listing
+   - Verify:
+     - Buyer spent exactly 1000 tokens
+     - Owner received fee
+     - Seller received proceeds (1000 - fee)
+     - `ownerFee + sellerProceeds == 1000` (no dust)
      - Diamond balance = 0
-     - Listing removed
+   - Assert listing deleted after purchase
 
-2. **testERC20RoyaltyPaymentERC1155FullQuantity**
-   - Create ERC1155 listing (qty=5, price=10 ether) with 5% royalty in ERC20.
-   - Purchase full quantity; assert royalty deducted from seller proceeds.
-   - **Verify**: `sellerProceeds = 10 ether - fee - royalty`
+#### Group 2: Royalty Distribution (3 tests)
 
-3. **testERC20RoyaltyHighRate**
-   - Create listing with high royalty (50% of sale price).
-   - Purchase; assert royalty paid correctly and seller gets remainder.
-   - **Edge case**: Ensure royalty doesn't exceed proceeds (should still work if < proceeds).
+4. **testRoyaltyPaymentWithERC20**
+   - Deploy `MockERC721Royalty` with 10% royalty (10,000 basis points)
+   - Mint token to seller, set royalty receiver
+   - Create listing with price 1000 tokens
+   - Calculate:
+     - Innovation fee: `(1000 * INNOVATION_FEE) / 100000`
+     - Remaining: `1000 - innovationFee`
+     - Royalty: `1000 * 10000 / 100000 = 100`
+     - Seller proceeds: `remaining - royalty`
+   - Purchase and verify all three recipients receive correct amounts
+   - Assert: `ownerFee + royalty + sellerProceeds == 1000`
 
-4. **(Optional) testERC20RoyaltyExceedsProceeds**
-   - Create listing with very high royalty (99% of sale price).
-   - Purchase should revert with `IdeationMarket__RoyaltyFeeExceedsProceeds`.
-   - **Note**: May be difficult to construct; skip if royalty is capped in contract.
+5. **testZeroRoyaltyDoesNotRevert**
+   - Deploy ERC721 with ERC2981 support but `royaltyAmount = 0`
+   - Verify purchase succeeds
+   - Verify only owner and seller receive payments (royalty receiver gets 0)
+   - Diamond balance = 0
 
-#### **Group 2: Partial Buy ERC1155 with ERC20 (3 tests)**
+6. **testRoyaltyExceedsProceedsReverts**
+   - Set marketplace fee very high (e.g., 95%)
+   - Set royalty to 10%
+   - Create listing: innovation fee leaves < 10% for seller
+   - Purchase should revert with `IdeationMarket__RoyaltyFeeExceedsProceeds`
 
-5. **testERC20PartialBuyERC1155ScaledPayments**
-   - Create ERC1155 listing: qty=10, price=100 ether, `partialBuyEnabled=true` in ERC20.
-   - Partial purchase: buyQuantity=5 (50%).
-   - Assert purchasePrice = 50 ether.
-   - Assert fee, royalty, seller proceeds all calculated on 50 ether (not 100 ether).
-   - Assert listing remains with qty=5, price=50 ether.
+#### Group 3: Edge Cases & Precision (2-3 tests)
 
-6. **testERC20PartialBuyThenFullBuyERC1155**
-   - Create ERC1155 listing: qty=10, price=100 ether, partial enabled in ERC20.
-   - First buyer purchases 4 units → listing now qty=6, price=60 ether.
-   - Second buyer purchases remaining 6 units.
-   - Assert both purchases have correct scaled fees and seller proceeds.
-   - Assert diamond balance = 0 throughout.
+7. **testTinyAmountsDistributionExact**
+   - Create listing with price = 100 tokens (smallest practical amount)
+   - Calculate fee with rounding: `(100 * INNOVATION_FEE) / 100000`
+   - Verify distribution is exact (no dust lost/gained)
+   - Assert: `ownerFee + sellerProceeds == 100`
 
-7. **testERC20PartialBuyRoyaltyScaled**
-   - Create ERC1155 with royalty (10%) and partial buy enabled in ERC20.
-   - Partial purchase (50% of qty) with scaled fee and royalty.
-   - Assert both fee and royalty are calculated on pro-rata purchasePrice.
+8. **testHundredPercentFeeEdgeCase**
+   - Temporarily set marketplace fee to 100,000 (100%)
+   - Create listing
+   - Purchase: owner gets 100%, seller gets 0
+   - Assert: `sellerProceeds == 0`, `ownerFee == price`
+   - Restore original fee for cleanup
 
-#### **Group 3: NFT Swaps with ERC20 Payment (2-3 tests)**
+9. **(Optional) testMultipleDecimalsTokensDistribution**
+   - Deploy 3 tokens: 6, 18, 30 decimals
+   - Create listings in each
+   - Purchase all three
+   - Verify payment math is exact for all decimal counts
+   - Diamond balance = 0 for all tokens
 
-8. **testERC20SwapERC721ToERC721**
-   - Seller lists NFT A, wants NFT B in return, price in ERC20.
-   - Buyer holds NFT B and approves it.
-   - Purchase: NFT A → buyer, NFT B → seller, ERC20 → owner/royalty/seller.
-   - Assert:
-     - Owner receives fee in ERC20
-     - Seller receives proceeds in ERC20 AND NFT B
-     - Buyer receives NFT A (no ERC20 sent from buyer to seller; only to owner/royalty)
-     - Diamond ERC20 balance = 0
+#### Group 4: Payment Failure Handling (2 tests)
 
-9. **testERC20SwapERC1155ToERC721**
-   - Seller lists ERC1155 (qty=5), wants specific ERC721 as swap.
-   - Buyer purchases partial (qty=2) with swap.
-   - Assert:
-     - Buyer receives 2 units of ERC1155
-     - Seller receives desired ERC721
-     - Payment: fee and proceeds to owner/royalty/seller in ERC20
-     - Listing reduces to qty=3, price adjusted
+10. **testPaymentDistributionAtomicity**
+    - Create mock token that fails on 3rd transfer (seller payment)
+    - Purchase should revert completely (no partial payments)
+    - Verify: owner and royalty receiver did NOT receive tokens (tx reverted)
+    - This tests CEI pattern and atomicity
 
-10. **(Optional) testERC20SwapWithRoyalty**
-    - NFT A has 5% royalty and is being swapped for NFT B.
-    - Purchase with swap in ERC20; assert royalty still deducted from seller proceeds.
+11. **testNonStandardERC20PaymentDistribution**
+    - Deploy `MockERC20NoReturn` (USDT-like, no return value)
+    - Add to allowlist, create listing
+    - Purchase successfully
+    - Verify `_safeTransferFrom` handles no-return-value tokens
+    - All recipients receive correct amounts
 
-#### **Group 4: Multi-Currency Payment Sequences (2-3 tests)**
+### Helper Functions & Mocks
 
-11. **testMultipleERC20ListingsDifferentCurrencies**
-    - Seller creates 2 listings:
-      - Listing 1: NFT A, price 10 tokenA
-      - Listing 2: NFT B, price 20 tokenB
-    - Buyer purchases both in sequence (separate txs).
-    - Assert:
-      - Owner receives fee in tokenA and tokenB (independent)
-      - Seller receives proceeds in tokenA and tokenB
-      - Buyer spends 10 tokenA + 20 tokenB
-      - `diamond.balanceOf(tokenA) == 0` AND `diamond.balanceOf(tokenB) == 0`
+#### MockERC721Royalty
+```solidity
+contract MockERC721Royalty is MockERC721 {
+    address public royaltyReceiver;
+    uint96 public royaltyBasisPoints; // out of 100,000
+    
+    function supportsInterface(bytes4 interfaceId) 
+        public pure override returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId 
+            || super.supportsInterface(interfaceId);
+    }
+    
+    function royaltyInfo(uint256, uint256 salePrice) 
+        external view returns (address, uint256) {
+        uint256 royaltyAmount = (salePrice * royaltyBasisPoints) / 100000;
+        return (royaltyReceiver, royaltyAmount);
+    }
+    
+    function setRoyalty(address receiver, uint96 bps) external {
+        royaltyReceiver = receiver;
+        royaltyBasisPoints = bps;
+    }
+}
+```
 
-12. **testMultipleBuyersMultipleCurrencies**
-    - Two sellers create listings in different currencies.
-    - Two buyers purchase from different sellers simultaneously (in same block or sequential).
-    - Assert currency independence: fees/proceeds per currency are correct.
-    - Assert non-custodial invariant for both currencies.
+#### MockERC20NoReturn
+```solidity
+contract MockERC20NoReturn {
+    // Same as MockERC20 but transferFrom doesn't return bool (USDT-like)
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+    
+    function transferFrom(address from, address to, uint256 amount) external {
+        require(allowance[from][msg.sender] >= amount, "insufficient allowance");
+        require(balanceOf[from] >= amount, "insufficient balance");
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+        // NO RETURN VALUE
+    }
+}
+```
 
-13. **(Optional) testPartialBuyMultipleCurrencies**
-    - Seller lists ERC1155 in tokenA with partial buy enabled.
-    - Multiple buyers each do partial buys in tokenA.
-    - Assert all partial buy scaling works correctly and currency balance stays 0.
+#### Helper Functions
+```solidity
+function _createRoyaltyListing(
+    MockERC721Royalty nft,
+    uint256 tokenId,
+    address currency,
+    uint256 price,
+    address royaltyReceiver,
+    uint96 royaltyBps
+) internal returns (uint128 listingId) {
+    // Setup: whitelist, set royalty, approve, create listing
+}
 
-#### **Group 5: Edge Cases & State Consistency (2 tests)**
-
-14. **testERC20RoyaltyZeroAmountEdgeCase**
-    - Listing with `royaltyInfo()` returning `(receiver, 0)`.
-    - Purchase should skip royalty payment (even if receiver is non-zero).
-    - Seller receives full proceeds (minus fee).
-
-15. **testERC20PartialBuyRemainingQuantityInvalidation**
-    - Create ERC1155 with partial buy enabled in ERC20.
-    - Buyer1 purchases leaving insufficient quantity for a swap requirement.
-    - Buyer2 attempts purchase with swap that would fail due to insufficient qty.
-    - Assert appropriate revert behavior.
+function _calculateExpectedDistribution(uint256 price, uint96 royaltyBps) 
+    internal view returns (uint256 fee, uint256 royalty, uint256 sellerProceeds) {
+    // Helper to calculate expected distribution
+}
+```
 
 ### Common Pitfalls to Avoid
 
-- **Royalty Math**: Royalty is deducted from `remainingProceeds` (after fee), not from `purchasePrice`.
-- **Partial Buy Scaling**: `purchasePrice = (price / quantity) * buyQuantity`. Ensure division happens before multiplication to avoid rounding.
-- **Swap Order**: NFT swaps happen AFTER listed NFT is transferred (CEI pattern). Validate in contract flow.
-- **Currency Independence**: Different ERC20 currencies should NOT interfere with each other's balances or fee calculations.
-- **Royalty + Partial Buy**: Both apply independently; both scale with `purchasePrice`.
-- **Diamond Balance**: Must be 0 for EVERY currency at the end of EVERY test involving that currency.
-- **Royalty Receiver Validation**: If `royaltyInfo()` returns `address(0)`, skip payment (contract handles this).
+❌ **Don't forget** to whitelist collection AND allowlist currency before listing
+❌ **Don't use** integer division without considering rounding (test with exact values)
+❌ **Don't assume** royalty receiver is always valid (could be address(0))
+❌ **Don't skip** asserting diamond balance = 0 after EVERY purchase
+❌ **Don't forget** buyer needs to approve marketplace for full purchase amount
+❌ **Don't test** only happy paths (test royalty edge cases: 0, 100%, exceeds proceeds)
+❌ **Don't ignore** non-standard ERC20 behavior (no return value)
+
+### Calculation Reference
+
+For a purchase of **1000 tokens** with:
+- Innovation fee: 1% (1,000 basis points)
+- Royalty: 10% (10,000 basis points)
+
+```
+purchasePrice = 1000
+innovationFee = (1000 * 1000) / 100000 = 10
+remainingProceeds = 1000 - 10 = 990
+royaltyAmount = (1000 * 10000) / 100000 = 100
+sellerProceeds = 990 - 100 = 890
+
+Verify: 10 + 100 + 890 = 1000 ✅
+```
 
 ### Success Criteria
 
-- 12-15 passing tests covering:
-  - Royalty deduction with ERC20 (3-4 tests)
-  - Partial buy with ERC20 and scaled payments (3 tests)
-  - NFT swaps with ERC20 payment (2-3 tests)
-  - Multi-currency independence (2-3 tests)
-  - Edge cases (2 tests)
-- All assertions validate actual balance changes, not just reverts.
-- Non-custodial invariant (`diamond.balanceOf(currency) == 0`) verified in every test.
-- Royalty, fee, and seller proceeds math explicitly checked with expected values.
-- Partial buy quantity and price scaling validated.
+✅ All 8-10 tests pass
+✅ Marketplace fee distribution verified with exact math
+✅ Seller proceeds calculation correct (after fee AND royalty deduction)
+✅ Royalty payment verified (when applicable)
+✅ Edge cases covered: 0 royalty, 100% fee, royalty > proceeds
+✅ Non-custodial invariant maintained: diamond balance = 0
+✅ Non-standard ERC20 handling tested
+✅ Payment atomicity verified (all or nothing)
+✅ Multiple decimal precisions tested (optional)
 
 ### Final Checklist Before Submitting
 
 - [ ] Extends `MarketTestBase`
-- [ ] MockERC721Royalty and MockERC1155Royalty deployed and configured
-- [ ] MockERC20 instances deployed (2-3 for multi-currency tests)
-- [ ] Collections whitelisted before listings
-- [ ] Currencies allowlisted before ERC20 listings
-- [ ] Royalty tests assert owner fee, royalty receiver, seller proceeds separately
-- [ ] Royalty deduction verified (seller proceeds = price - fee - royalty)
-- [ ] Partial buy tests verify pro-rata pricing: `(price / qty) * buyQty`
-- [ ] Partial buy tests check fee/royalty scaled correctly
-- [ ] Swap tests verify NFT transfers AND ERC20 payment flow
-- [ ] Multi-currency tests assert independent fee/proceeds per currency
-- [ ] Diamond balance = 0 for all currencies in all tests
-- [ ] Edge case: royalty = 0 handled correctly
-- [ ] Edge case: royalty > remaining proceeds reverted or handled
-- [ ] All balance assertions use explicit expected values (no magic numbers)
-- [ ] `forge test --match-contract ERC20AdvancedTest -vv` passes
+- [ ] `MockERC721Royalty` with ERC2981 support implemented
+- [ ] `MockERC20NoReturn` for non-standard token testing
+- [ ] All 8+ tests implemented
+- [ ] Fee calculation verified with explicit math
+- [ ] Royalty deduction verified from seller proceeds
+- [ ] Edge cases tested: 0 royalty, 100% fee, exceeds proceeds
+- [ ] Diamond balance = 0 asserted in all purchase tests
+- [ ] Payment order validated: owner → royalty → seller
+- [ ] Atomicity tested (failure reverts all payments)
+- [ ] Non-standard token (no return value) tested
+- [ ] `forge test --match-contract ERC20PaymentDistributionTest -vv` passes
 
-### Test Execution Expectations
+---
 
-- **Gas**: Royalty-enabled listings and swaps will use 10-20% more gas than basic purchases.
-- **Setup**: Expect longer test setup due to MockERC721Royalty/ERC1155Royalty initialization.
-- **Time**: Full suite should execute in <100ms.
-- **Confidence**: Phase 3 tests should achieve 95%+ detection rate for royalty/partial-buy/swap bugs.
+## Your Task
 
-### Notes
+Create `test/ERC20PaymentDistributionTest.t.sol` implementing all 8-10 tests above. Focus on **exact balance assertions** with explicit fee/royalty math. Verify the non-custodial invariant (diamond balance = 0) in every purchase test. Test edge cases thoroughly: zero royalty, 100% fee, royalty exceeding proceeds. Don't skip the atomicity and non-standard ERC20 tests.
 
-- Phase 3 is **optional but recommended** for production-grade ERC20 support.
-- If royalty tests prove complex, start with simpler cases (10% fixed royalty) before edge cases.
-- Partial buy tests leverage existing ERC1155 infrastructure; focus on ERC20 + quantity math.
-- Swap tests are heavyweight but critical for marketplace integrity; validate both token transfers AND payment flow.
-- Multi-currency tests ensure ERC20 is truly modular (not hardcoded to single currency).
-
+**Key Principle:** Every test should capture balances BEFORE purchase, calculate expected distribution based on fee/royalty math, execute purchase, and assert AFTER balances match expected values. The sum of all payments must equal the purchase price (no dust).

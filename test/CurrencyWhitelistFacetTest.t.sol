@@ -97,7 +97,7 @@ contract CurrencyWhitelistFacetTest is MarketTestBase {
     // Group 3: Initialization State
     // ----------------------------------------------------------
 
-    function testETHIsInitializedInAllowlist() public {
+    function testETHIsInitializedInAllowlist() public view {
         assertTrue(getter.isCurrencyAllowed(address(0)));
     }
 
