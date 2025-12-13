@@ -182,27 +182,6 @@ contract CurrencyWhitelistFacetTest is MarketTestBase {
     // Group 5: Listing Creation with Currency Validation
     // ----------------------------------------------------------
 
-    function testCreateListingWithNonAllowedCurrencyReverts() public {
-        _whitelistCollectionAndApproveERC721();
-        vm.startPrank(seller);
-        vm.expectRevert(IdeationMarket__CurrencyNotAllowed.selector);
-        market.createListing(
-            address(erc721),
-            1,
-            address(0),
-            1 ether,
-            address(tokenA),
-            address(0),
-            0,
-            0,
-            0,
-            false,
-            false,
-            new address[](0)
-        );
-        vm.stopPrank();
-    }
-
     function testCannotCreateListingAfterCurrencyRemoved() public {
         _addCurrency(address(tokenA));
         _removeCurrency(address(tokenA));
@@ -233,16 +212,29 @@ contract CurrencyWhitelistFacetTest is MarketTestBase {
 
     function testRemoveCurrencyDoesNotAffectExistingListings() public {
         _addCurrency(address(tokenA));
-        uint128 listingId = _createERC721ListingWithCurrency(address(tokenA), 1 ether, 1);
+        uint128 listingId = _createERC721ListingWithCurrency(address(tokenA), 5 ether, 1);
 
         _removeCurrency(address(tokenA));
 
-        tokenA.mint(buyer, 1 ether);
+        tokenA.mint(buyer, 5 ether);
         vm.prank(buyer);
-        tokenA.approve(address(diamond), 1 ether);
+        tokenA.approve(address(diamond), 5 ether);
+
+        uint256 ownerStart = tokenA.balanceOf(owner);
+        uint256 sellerStart = tokenA.balanceOf(seller);
 
         vm.prank(buyer);
-        market.purchaseListing(listingId, 1 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
+        market.purchaseListing(listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
+
+        uint256 ownerEnd = tokenA.balanceOf(owner);
+        uint256 sellerEnd = tokenA.balanceOf(seller);
+
+        uint256 fee = (5 ether * uint256(INNOVATION_FEE)) / 100000;
+        uint256 sellerProceeds = 5 ether - fee;
+
+        assertEq(ownerEnd - ownerStart, fee, "Owner fee not paid correctly");
+        assertEq(sellerEnd - sellerStart, sellerProceeds, "Seller proceeds not paid correctly");
+        assertEq(tokenA.balanceOf(address(diamond)), 0, "Diamond should not hold ERC20");
 
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
         getter.getListingByListingId(listingId);
