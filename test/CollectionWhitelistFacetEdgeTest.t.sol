@@ -9,25 +9,6 @@ import "./MarketTestBase.t.sol";
 ///      MarketTestBase's default whitelisted mocks.
 contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
     /* --------------------------------------------------------------------- */
-    /* helpers                                                               */
-    /* --------------------------------------------------------------------- */
-
-    function _new721() internal returns (MockERC721 m) {
-        m = new MockERC721();
-    }
-
-    function _new1155() internal returns (MockERC1155 m) {
-        m = new MockERC1155();
-    }
-
-    function _contains(address[] memory arr, address needle) internal pure returns (bool) {
-        for (uint256 i = 0; i < arr.length; i++) {
-            if (arr[i] == needle) return true;
-        }
-        return false;
-    }
-
-    /* --------------------------------------------------------------------- */
     /* single add/remove                                                      */
     /* --------------------------------------------------------------------- */
 

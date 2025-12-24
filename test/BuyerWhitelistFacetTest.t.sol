@@ -4,38 +4,6 @@ pragma solidity ^0.8.28;
 import "./MarketTestBase.t.sol";
 
 contract BuyerWhitelistFacetTest is MarketTestBase {
-    // internal helper listERC1155WithOperatorAndWhitelistEnabled
-    function listERC1155WithOperatorAndWhitelistEnabled(uint256 tokenId, uint256 quantity, uint256 price)
-        internal
-        returns (uint128 listingId)
-    {
-        // Snapshot the next id that will be assigned
-        listingId = uint128(getter.getNextListingId());
-
-        // approvals
-        vm.startPrank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        erc1155.setApprovalForAll(operator, true);
-        vm.stopPrank();
-
-        // list
-        vm.prank(operator);
-        market.createListing(
-            address(erc1155),
-            tokenId,
-            seller, // erc1155Holder
-            price,
-            address(0), // currency (ETH)
-            address(0), // desiredTokenAddress (no swap)
-            0, // desiredTokenId
-            0, // desiredErc1155Quantity
-            quantity, // erc1155Quantity
-            true, // buyerWhitelistEnabled
-            false, // partialBuyEnabled
-            new address[](0) // allowedBuyers
-        );
-    }
-
     function testBuyerWhitelist_AddNonexistentListingReverts() public {
         address[] memory addrs = new address[](1);
         addrs[0] = vm.addr(0xABCD);

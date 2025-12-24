@@ -2003,13 +2003,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(loupe.facetAddress(GetterFacet.getPendingOwner.selector), getterAddr);
     }
 
-    function _hasSel(bytes4[] memory arr, bytes4 sel) internal pure returns (bool) {
-        for (uint256 i; i < arr.length; i++) {
-            if (arr[i] == sel) return true;
-        }
-        return false;
-    }
-
     function testSupportsInterfaceNegative() public view {
         assertFalse(IERC165(address(diamond)).supportsInterface(0x12345678));
     }

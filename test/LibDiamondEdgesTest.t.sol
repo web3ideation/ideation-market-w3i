@@ -3,18 +3,6 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-/* ---------- helpers ---------- */
-
-/// Custom error we expect from the reverting initializer
-error RevertingInit__Boom();
-
-/// Minimal initializer that always reverts (to test rollback)
-contract RevertingInit {
-    function init() external pure {
-        revert RevertingInit__Boom();
-    }
-}
-
 /* ---------- tests ---------- */
 
 /// @title LibDiamondEdgesTest
@@ -392,28 +380,5 @@ contract LibDiamondEdgesTest is MarketTestBase {
 
     function testLoupe_FacetAddressUnknownSelectorIsZero() public view {
         assertEq(loupe.facetAddress(bytes4(0xDEADBEEF)), address(0));
-    }
-}
-
-// helper contracts
-contract SwapFacetA {
-    function a() external pure returns (uint256) {
-        return 1;
-    }
-}
-
-contract SwapFacetB {
-    function b() external pure returns (uint256) {
-        return 2;
-    }
-}
-
-contract MultiSelFacet {
-    function f1() external pure returns (uint256) {
-        return 1;
-    }
-
-    function f2() external pure returns (uint256) {
-        return 2;
     }
 }

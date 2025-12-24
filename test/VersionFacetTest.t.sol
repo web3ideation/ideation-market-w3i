@@ -200,22 +200,4 @@ contract VersionFacetTest is MarketTestBase {
 
         vm.stopPrank();
     }
-
-    // Helper to compute implementation ID (simplified version)
-    function computeImplementationId(address diamondAddr, IDiamondLoupeFacet.Facet[] memory facets)
-        internal
-        view
-        returns (bytes32)
-    {
-        uint256 facetCount = facets.length;
-        address[] memory addresses = new address[](facetCount);
-        bytes4[][] memory selectors = new bytes4[][](facetCount);
-
-        for (uint256 i = 0; i < facetCount; i++) {
-            addresses[i] = facets[i].facetAddress;
-            selectors[i] = facets[i].functionSelectors;
-        }
-
-        return keccak256(abi.encode(block.chainid, diamondAddr, addresses, selectors));
-    }
 }

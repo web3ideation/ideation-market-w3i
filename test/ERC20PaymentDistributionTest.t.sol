@@ -120,7 +120,7 @@ contract ERC20PaymentDistributionTest is MarketTestBase {
 
     function testRoyaltyPaymentWithERC20() public {
         // Setup: 10% royalty (10,000 basis points)
-        uint128 listingId = _createRoyaltyListing(address(tokenA), 1000 ether, royaltyReceiver, 10000);
+        uint128 listingId = _createRoyaltyListing(royaltyNFT, address(tokenA), 1000 ether, royaltyReceiver, 10000);
 
         tokenA.mint(buyer, 1000 ether);
         vm.prank(buyer);
@@ -156,7 +156,7 @@ contract ERC20PaymentDistributionTest is MarketTestBase {
 
     function testZeroRoyaltyDoesNotRevert() public {
         // Setup: 0% royalty
-        uint128 listingId = _createRoyaltyListing(address(tokenA), 500 ether, royaltyReceiver, 0);
+        uint128 listingId = _createRoyaltyListing(royaltyNFT, address(tokenA), 500 ether, royaltyReceiver, 0);
 
         tokenA.mint(buyer, 500 ether);
         vm.prank(buyer);
@@ -185,7 +185,7 @@ contract ERC20PaymentDistributionTest is MarketTestBase {
         // Create listing with very high royalty (99.5%) that will exceed proceeds after 1% fee
         // With 1% fee: remaining = 1000 ether - 10 ether = 990 ether
         // With 99.5% royalty: royalty = 995 ether > 990 ether remaining → should revert
-        uint128 listingId = _createRoyaltyListing(address(tokenA), 1000 ether, royaltyReceiver, 99500);
+        uint128 listingId = _createRoyaltyListing(royaltyNFT, address(tokenA), 1000 ether, royaltyReceiver, 99500);
 
         tokenA.mint(buyer, 1000 ether);
         vm.prank(buyer);
@@ -392,169 +392,5 @@ contract ERC20PaymentDistributionTest is MarketTestBase {
         assertEq(ownerEnd - ownerStart, fee, "Owner fee incorrect");
         assertEq(sellerEnd - sellerStart, sellerProceeds, "Seller proceeds incorrect");
         assertEq(usdtLike.balanceOf(address(diamond)), 0, "Diamond holds non-standard ERC20");
-    }
-
-    // ----------------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------------
-
-    function _createERC721Listing(address currency, uint256 price) internal returns (uint128 listingId) {
-        // Only whitelist if not already whitelisted
-        if (!getter.isCollectionWhitelisted(address(erc721))) {
-            vm.startPrank(owner);
-            collections.addWhitelistedCollection(address(erc721));
-            vm.stopPrank();
-        }
-
-        vm.startPrank(seller);
-        erc721.approve(address(diamond), 1);
-        market.createListing(
-            address(erc721), 1, address(0), price, currency, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-
-        listingId = getter.getNextListingId() - 1;
-    }
-
-    function _createERC721ListingWithToken(address currency, uint256 price, uint256 tokenId)
-        internal
-        returns (uint128 listingId)
-    {
-        // Only whitelist if not already whitelisted
-        if (!getter.isCollectionWhitelisted(address(erc721))) {
-            vm.startPrank(owner);
-            collections.addWhitelistedCollection(address(erc721));
-            vm.stopPrank();
-        }
-
-        // Mint the NFT to seller
-        erc721.mint(seller, tokenId);
-
-        vm.startPrank(seller);
-        erc721.approve(address(diamond), tokenId);
-        market.createListing(
-            address(erc721), tokenId, address(0), price, currency, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-
-        listingId = getter.getNextListingId() - 1;
-    }
-
-    function _createRoyaltyListing(address currency, uint256 price, address _royaltyReceiver, uint256 royaltyBps)
-        internal
-        returns (uint128 listingId)
-    {
-        // Only whitelist if not already whitelisted
-        if (!getter.isCollectionWhitelisted(address(royaltyNFT))) {
-            vm.startPrank(owner);
-            collections.addWhitelistedCollection(address(royaltyNFT));
-            vm.stopPrank();
-        }
-
-        // Setup royalty before minting
-        royaltyNFT.setRoyalty(_royaltyReceiver, royaltyBps);
-        royaltyNFT.mint(seller, 1);
-
-        vm.startPrank(seller);
-        royaltyNFT.approve(address(diamond), 1);
-        market.createListing(
-            address(royaltyNFT), 1, address(0), price, currency, address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-
-        listingId = getter.getNextListingId() - 1;
-    }
-}
-
-// ----------------------------------------------------------
-// Mock Contracts
-// ----------------------------------------------------------
-
-contract MockERC20Ext {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
-        name = _name;
-        symbol = _symbol;
-        decimals = _decimals;
-    }
-
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
-    }
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        return true;
-    }
-
-    function transfer(address to, uint256 amount) external returns (bool) {
-        _transfer(msg.sender, to, amount);
-        return true;
-    }
-
-    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        uint256 allowed = allowance[from][msg.sender];
-        require(allowed >= amount, "allowance");
-        allowance[from][msg.sender] = allowed - amount;
-        _transfer(from, to, amount);
-        return true;
-    }
-
-    function _transfer(address from, address to, uint256 amount) internal {
-        require(balanceOf[from] >= amount, "balance");
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(from, to, amount);
-    }
-}
-
-contract MockERC20NoReturn {
-    string public name;
-    string public symbol;
-    uint8 public decimals;
-
-    mapping(address => uint256) public balanceOf;
-    mapping(address => mapping(address => uint256)) public allowance;
-
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
-
-    constructor(string memory _name, string memory _symbol, uint8 _decimals) {
-        name = _name;
-        symbol = _symbol;
-        decimals = _decimals;
-    }
-
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-        emit Transfer(address(0), to, amount);
-    }
-
-    function approve(address spender, uint256 amount) external {
-        allowance[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
-        // NO RETURN VALUE (USDT-like)
-    }
-
-    function transferFrom(address from, address to, uint256 amount) external {
-        uint256 allowed = allowance[from][msg.sender];
-        require(allowed >= amount, "insufficient allowance");
-        require(balanceOf[from] >= amount, "insufficient balance");
-        allowance[from][msg.sender] = allowed - amount;
-        balanceOf[from] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(from, to, amount);
-        // NO RETURN VALUE (USDT-like)
     }
 }
