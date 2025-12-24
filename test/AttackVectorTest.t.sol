@@ -49,6 +49,98 @@ contract AttackVectorTest is MarketTestBase {
     // REENTRANCY ATTACKS
     // =========================================================================
 
+    /// @notice Seller-side reentrancy attempt during ETH payout must be blocked.
+    /// @dev Attack vector: seller is a contract; its receive() tries to purchase another listing.
+    /// Expected: reentrant purchaseListing call fails (nonReentrant), original purchase succeeds.
+    function testReentrancy_SellerReceive_CannotReenterPurchase() public {
+        StrictERC721 s = new StrictERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        // Listing B (target of reentry): normal seller lists tokenId=2
+        s.mint(seller, 2);
+        vm.prank(seller);
+        s.approve(address(diamond), 2);
+
+        uint256 priceB = 0.5 ether;
+        vm.prank(seller);
+        market.createListing(
+            address(s), 2, address(0), priceB, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingB = getter.getNextListingId() - 1;
+
+        // Listing A: seller is a contract that will try to reenter during payout
+        SellerReenterOnReceive sellerContract = new SellerReenterOnReceive(address(market));
+        s.mint(address(sellerContract), 1);
+
+        uint256 priceA = 1 ether;
+        uint128 listingA = sellerContract.approveAndListERC721(address(diamond), address(s), 1, priceA);
+
+        // Configure the reentry attempt to buy listingB.
+        sellerContract.setReentryTarget(listingB, priceB);
+
+        // Prefund the seller contract so it can attempt a full-price reentrant purchase.
+        vm.deal(address(sellerContract), 10 ether);
+
+        // Snapshot balances
+        uint256 sellerContractBalBefore = address(sellerContract).balance;
+        uint256 ownerBalBefore = owner.balance;
+
+        // Buyer purchases listingA; during payout sellerContract.receive() attempts reentrancy.
+        vm.deal(buyer, priceA);
+        vm.prank(buyer);
+        market.purchaseListing{value: priceA}(listingA, priceA, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Reentry attempt happened and failed (must not succeed)
+        assertTrue(sellerContract.attempted(), "seller did not attempt reentry");
+        assertTrue(sellerContract.reentryFailed(), "reentry did not fail as expected");
+
+        // ListingA consumed; buyer owns tokenId=1
+        assertEq(s.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingA));
+        getter.getListingByListingId(listingA);
+
+        // ListingB should still exist (reentrant purchase did NOT go through)
+        Listing memory lb = getter.getListingByListingId(listingB);
+        assertEq(lb.price, priceB);
+        assertEq(s.ownerOf(2), seller);
+
+        // Seller contract got paid proceeds; owner got fee
+        uint256 fee = (priceA * getter.getInnovationFee()) / 100_000;
+        assertEq(owner.balance - ownerBalBefore, fee, "owner fee mismatch");
+        assertEq(address(sellerContract).balance - sellerContractBalBefore, priceA - fee, "seller proceeds mismatch");
+    }
+
+    /// @notice If seller cannot receive ETH, purchase must revert atomically (no partial state changes).
+    function testSellerReceive_Reverts_PurchaseRevertsAtomically() public {
+        StrictERC721 s = new StrictERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(s));
+
+        SellerRevertOnReceive badSeller = new SellerRevertOnReceive(address(market));
+        s.mint(address(badSeller), 1);
+
+        uint256 price = 1 ether;
+        uint128 listingId = badSeller.approveAndListERC721(address(diamond), address(s), 1, price);
+        uint256 ownerBalBefore = owner.balance;
+
+        vm.deal(buyer, price);
+        uint256 buyerBalBefore = buyer.balance;
+        vm.prank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__EthTransferFailed.selector, address(badSeller)));
+        market.purchaseListing{value: price}(listingId, price, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Listing should remain (tx reverted)
+        Listing memory L = getter.getListingByListingId(listingId);
+        assertEq(L.price, price);
+        assertEq(s.ownerOf(1), address(badSeller));
+
+        // No ETH moved to owner
+        assertEq(owner.balance, ownerBalBefore);
+        // Buyer ETH unchanged (value is refunded on revert; forge default gas price is 0)
+        assertEq(buyer.balance, buyerBalBefore);
+    }
+
     /// @notice CRITICAL: Tests that purchaseListing cannot be reentered from ERC721 receiver hook
     /// @dev Attack vector: onERC721Received tries to call purchaseListing again
     /// Expected: Reentrancy guard blocks the second call, only one purchase succeeds
@@ -811,6 +903,80 @@ contract AttackVectorTest is MarketTestBase {
             getter.getInnovationFee() != fee0 || getter.getBuyerWhitelistMaxBatchSize() != maxBatch0,
             "storage should have drifted"
         );
+    }
+}
+
+/// @dev Seller contract that attempts to reenter the marketplace during ETH payout.
+contract SellerReenterOnReceive {
+    IdeationMarketFacet public market;
+    bool public attempted;
+    bool public reentryFailed;
+    uint128 public targetListingId;
+    uint256 public targetPrice;
+
+    constructor(address _market) {
+        market = IdeationMarketFacet(_market);
+    }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC721Received.selector;
+    }
+
+    receive() external payable {
+        if (attempted) return;
+        attempted = true;
+
+        try market.purchaseListing{value: targetPrice}(
+            targetListingId, targetPrice, address(0), 0, address(0), 0, 0, 0, address(0)
+        ) {
+            revert("seller receive reentrancy succeeded");
+        } catch {
+            reentryFailed = true;
+        }
+    }
+
+    function setReentryTarget(uint128 _listingId, uint256 _price) external {
+        targetListingId = _listingId;
+        targetPrice = _price;
+    }
+
+    function approveAndListERC721(address diamond, address token, uint256 tokenId, uint256 price)
+        external
+        returns (uint128 listingId)
+    {
+        StrictERC721(token).approve(diamond, tokenId);
+        market.createListing(
+            token, tokenId, address(0), price, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        listingId = GetterFacet(diamond).getNextListingId() - 1;
+    }
+}
+
+/// @dev Seller contract that reverts on receiving ETH.
+contract SellerRevertOnReceive {
+    IdeationMarketFacet public market;
+
+    constructor(address _market) {
+        market = IdeationMarketFacet(_market);
+    }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return this.onERC721Received.selector;
+    }
+
+    receive() external payable {
+        revert("seller cannot receive ETH");
+    }
+
+    function approveAndListERC721(address diamond, address token, uint256 tokenId, uint256 price)
+        external
+        returns (uint128 listingId)
+    {
+        StrictERC721(token).approve(diamond, tokenId);
+        market.createListing(
+            token, tokenId, address(0), price, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        listingId = GetterFacet(diamond).getNextListingId() - 1;
     }
 }
 
