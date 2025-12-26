@@ -6,31 +6,86 @@ import "forge-std/console.sol";
 
 import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
+import {IERC173} from "../src/interfaces/IERC173.sol";
 import {VersionFacet} from "../src/facets/VersionFacet.sol";
 import {GetterFacet} from "../src/facets/GetterFacet.sol";
+import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 
 /// @title UpgradeDiamond
 /// @notice Template script for performing diamond upgrades with automatic versioning.
 /// @dev This is a reusable template. Copy and modify the performUpgrade() function for your specific upgrade.
 /// Environment variables required:
-/// - DIAMOND_ADDRESS: Address of the diamond to upgrade
 /// - VERSION_STRING: New version string (e.g., "1.1.0", "2.0.0")
+/// - DEV_PRIVATE_KEY: Private key of the diamond owner (must match `owner()`)
+/// - If the Diamond owner is a multisig, use 2-Step PREPARE_MULTISIG below.
+///
+/// Optional environment variables:
+/// - PREPARE_MULTISIG: If "true", the script deploys the new facet and prints the multisig `diamondCut` calldata
+///   instead of executing the cut (useful when the diamond owner is a multisig).
+/// - PRINT_SETVERSION: If "true", the script computes `implementationId` from current on-chain state and prints the
+///   multisig calldata for `VersionFacet.setVersion(VERSION_STRING, implementationId)` (no broadcast required).
 ///
 /// Example usage:
-/// DIAMOND_ADDRESS=0x... VERSION_STRING="1.1.0" forge script scripts/UpgradeDiamond.s.sol:UpgradeDiamond --rpc-url <URL> --broadcast
+/// VERSION_STRING="1.1.0" DEV_PRIVATE_KEY=... forge script scripts/UpgradeDiamond.s.sol:UpgradeDiamond --rpc-url <URL> --broadcast
 contract UpgradeDiamond is Script {
+    // Sepolia deployment (EIP-2535 diamond)
+    address internal constant SEPOLIA_DIAMOND_ADDRESS = 0xF422A7779D2feB884CcC1773b88d98494A946604;
+
     address public diamondAddress;
     string public versionString;
 
     function run() external {
-        // Load configuration from environment
-        diamondAddress = vm.envAddress("DIAMOND_ADDRESS");
+        bool prepareMultisig = vm.envOr("PREPARE_MULTISIG", false);
+        bool printSetVersion = vm.envOr("PRINT_SETVERSION", false);
+
+        require(
+            !(prepareMultisig && printSetVersion),
+            "UpgradeDiamond: PREPARE_MULTISIG and PRINT_SETVERSION are mutually exclusive"
+        );
+
+        // Load configuration
+        diamondAddress = SEPOLIA_DIAMOND_ADDRESS;
         versionString = vm.envString("VERSION_STRING");
+
+        if (printSetVersion) {
+            console.log("Printing multisig calldata for setVersion (no broadcast)");
+            console.log("Diamond:", diamondAddress);
+            console.log("Target version:", versionString);
+            console.log("Chain ID:", block.chainid);
+
+            address diamondOwner = IERC173(diamondAddress).owner();
+            console.log("Diamond owner:", diamondOwner);
+
+            printSetVersionCalldata();
+            return;
+        }
+
+        uint256 upgraderPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
+        vm.startBroadcast(upgraderPrivateKey);
+
+        address upgrader = vm.addr(upgraderPrivateKey);
 
         console.log("Upgrading diamond at:", diamondAddress);
         console.log("Target version:", versionString);
+        console.log("Chain ID:", block.chainid);
+        console.log("Upgrader:", upgrader);
 
-        vm.startBroadcast();
+        // Fail fast if the broadcast key is not the diamond owner
+        address diamondOwner = IERC173(diamondAddress).owner();
+        console.log("Diamond owner:", diamondOwner);
+
+        if (prepareMultisig) {
+            console.log(
+                "\nPREPARE_MULTISIG=true: deploying facet and printing multisig calldata (no on-chain cut performed by this script)"
+            );
+            require(diamondOwner != address(0), "UpgradeDiamond: diamond owner is zero address");
+            performUpgradePrepareMultisig();
+            vm.stopBroadcast();
+            console.log("\n=== Prepare Complete ===");
+            return;
+        }
+
+        require(diamondOwner == upgrader, "UpgradeDiamond: DEV_PRIVATE_KEY is not the diamond owner");
 
         // Perform the upgrade (deploy facets and execute diamond cut)
         performUpgrade();
@@ -58,32 +113,118 @@ contract UpgradeDiamond is Script {
         console.log("\n=== Upgrade Complete ===");
     }
 
+    function printSetVersionCalldata() internal view {
+        bytes32 implementationId = computeImplementationId(diamondAddress);
+        bytes memory setVersionCalldata =
+            abi.encodeWithSelector(VersionFacet.setVersion.selector, versionString, implementationId);
+
+        console.log("\n=== Multisig Transaction ===");
+        console.log("To (diamond):", diamondAddress);
+        console.log("Value:", uint256(0));
+        console.log("Data (setVersion):");
+        console.logBytes(setVersionCalldata);
+        console.log("\nComputed implementationId:");
+        console.logBytes32(implementationId);
+        console.log(
+            "\nNote: run this AFTER the multisig has executed diamondCut, otherwise the implementationId will be for the pre-upgrade state."
+        );
+    }
+
     /// @notice Performs the actual upgrade by deploying facets and executing the diamond cut.
-    /// @dev Override this function with your specific upgrade logic.
-    /// This is a template - uncomment and modify for your actual upgrade.
+    /// @dev Upgrades the core marketplace logic by replacing the selectors that were installed for
+    /// `IdeationMarketFacet` at deployment time.
     function performUpgrade() internal {
-        // EXAMPLE: Deploy a new facet
-        // YourNewFacet newFacet = new YourNewFacet();
-        // console.log("Deployed YourNewFacet:", address(newFacet));
+        // Deploy new facet
+        IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
+        console.log("Deployed ideationMarketFacet contract at address:", address(ideationMarketFacet));
 
-        // EXAMPLE: Prepare the diamond cut
-        // IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
-        // bytes4[] memory selectors = new bytes4[](2);
-        // selectors[0] = YourNewFacet.someFunction.selector;
-        // selectors[1] = YourNewFacet.anotherFunction.selector;
-        //
-        // cuts[0] = IDiamondCutFacet.FacetCut({
-        //     facetAddress: address(newFacet),
-        //     action: IDiamondCutFacet.FacetCutAction.Add, // or Replace, Remove
-        //     functionSelectors: selectors
-        // });
+        // Selectors to replace (must match deployment-time selector list)
+        bytes4[] memory marketSelectors = new bytes4[](6);
+        marketSelectors[0] = IdeationMarketFacet.createListing.selector;
+        marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
+        marketSelectors[2] = IdeationMarketFacet.cancelListing.selector;
+        marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
+        marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
+        marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
 
-        // EXAMPLE: Execute the diamond cut (with optional initializer)
-        // IDiamondCutFacet(diamondAddress).diamondCut(cuts, address(0), "");
-        // console.log("Diamond cut executed");
+        // Preflight: ensure the selectors exist on the target diamond (fail fast)
+        IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamondAddress);
+        for (uint256 i = 0; i < marketSelectors.length; i++) {
+            bytes4 selector = marketSelectors[i];
+            address currentFacet = loupe.facetAddress(selector);
+            console.log("Current facet for selector:");
+            console.logBytes4(selector);
+            console.log(currentFacet);
+            require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
+        }
 
-        // TODO: Replace this with your actual upgrade logic
-        console.log("WARNING: This is a template. Implement performUpgrade() with your upgrade logic.");
+        // Prepare the cut
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        cuts[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(ideationMarketFacet),
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: marketSelectors
+        });
+
+        // Execute
+        IDiamondCutFacet(diamondAddress).diamondCut(cuts, address(0), "");
+        console.log("Diamond cut executed (IdeationMarketFacet selectors replaced)");
+
+        // Post-check: ensure routing updated
+        for (uint256 i = 0; i < marketSelectors.length; i++) {
+            bytes4 selector = marketSelectors[i];
+            address routedFacet = loupe.facetAddress(selector);
+            require(routedFacet == address(ideationMarketFacet), "UpgradeDiamond: selector not routed to new facet");
+        }
+    }
+
+    /// @notice Deploys the new facet and prints the calldata for a multisig owner to execute.
+    /// @dev This intentionally does not call `diamondCut` or `setVersion`.
+    function performUpgradePrepareMultisig() internal {
+        // Deploy new facet
+        IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
+        console.log("Deployed ideationMarketFacet contract at address:", address(ideationMarketFacet));
+
+        bytes4[] memory marketSelectors = new bytes4[](6);
+        marketSelectors[0] = IdeationMarketFacet.createListing.selector;
+        marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
+        marketSelectors[2] = IdeationMarketFacet.cancelListing.selector;
+        marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
+        marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
+        marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
+
+        // Preflight: ensure selectors exist on diamond
+        IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamondAddress);
+        for (uint256 i = 0; i < marketSelectors.length; i++) {
+            bytes4 selector = marketSelectors[i];
+            address currentFacet = loupe.facetAddress(selector);
+            console.log("Current facet for selector:");
+            console.logBytes4(selector);
+            console.log(currentFacet);
+            require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
+        }
+
+        // Build the cut and encode calldata
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        cuts[0] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(ideationMarketFacet),
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: marketSelectors
+        });
+
+        bytes memory diamondCutCalldata =
+            abi.encodeWithSelector(IDiamondCutFacet.diamondCut.selector, cuts, address(0), bytes(""));
+
+        console.log("\n=== Multisig Transaction ===");
+        console.log("To (diamond):", diamondAddress);
+        console.log("Value:", uint256(0));
+        console.log("Data (diamondCut):");
+        console.logBytes(diamondCutCalldata);
+
+        console.log("\nNote: setVersion must be executed separately after the cut.");
+        console.log(
+            "After multisig executes diamondCut, run this script again WITHOUT PREPARE_MULTISIG to compute implementationId and setVersion (or add a separate multisig tx calling VersionFacet.setVersion)."
+        );
     }
 
     /// @notice Computes the implementationId for a diamond.
