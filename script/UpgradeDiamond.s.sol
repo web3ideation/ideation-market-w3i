@@ -13,20 +13,39 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 
 /// @title UpgradeDiamond
 /// @notice Template script for performing diamond upgrades with automatic versioning.
-/// @dev This is a reusable template. Copy and modify the performUpgrade() function for your specific upgrade.
-/// Environment variables required:
+/// @dev This is a reusable template. Copy and modify the `performUpgrade()` selector list for your specific upgrade.
+///
+/// Required environment variables:
 /// - VERSION_STRING: New version string (e.g., "1.1.0", "2.0.0")
-/// - DEV_PRIVATE_KEY: Private key of the diamond owner (must match `owner()`)
-/// - If the Diamond owner is a multisig, use 2-Step PREPARE_MULTISIG below.
 ///
 /// Optional environment variables:
-/// - PREPARE_MULTISIG: If "true", the script deploys the new facet and prints the multisig `diamondCut` calldata
-///   instead of executing the cut (useful when the diamond owner is a multisig).
-/// - PRINT_SETVERSION: If "true", the script computes `implementationId` from current on-chain state and prints the
-///   multisig calldata for `VersionFacet.setVersion(VERSION_STRING, implementationId)` (no broadcast required).
+/// - DEV_PRIVATE_KEY: EOA key used to deploy the new facet.
+///   - For direct upgrades (EOA-owner diamonds), this key must also be the diamond `owner()`.
+///   - For multisig-owned diamonds, this key can be any funded dev EOA.
+/// - PREPARE_MULTISIG: If "true", deploys the new facet and prints Safe-ready `diamondCut` calldata.
+/// - PRINT_SETVERSION: If "true", prints Safe-ready `setVersion(VERSION_STRING, implementationId)` calldata.
 ///
-/// Example usage:
-/// VERSION_STRING="1.1.0" DEV_PRIVATE_KEY=... forge script scripts/UpgradeDiamond.s.sol:UpgradeDiamond --rpc-url <URL> --broadcast
+/// Operational gotchas:
+/// - PREPARE_MULTISIG requires `--broadcast` to produce a real on-chain facet address. Without broadcast the
+///   deployment is only simulated and the printed calldata will not work in the Safe.
+/// - PRINT_SETVERSION must be run AFTER the multisig executed `diamondCut`, otherwise the computed
+///   `implementationId` will correspond to the pre-upgrade diamond state.
+///
+/// Commands (3 modes):
+/// 1) Direct upgrade (diamond owner is an EOA):
+///    VERSION_STRING="1.0.1" DEV_PRIVATE_KEY=$DEV_PRIVATE_KEY \
+///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
+///      --rpc-url $SEPOLIA_RPC_URL --broadcast --private-key $DEV_PRIVATE_KEY -vvvv
+///
+/// 2) Multisig step 1 (deploy facet + print `diamondCut` calldata for the Safe):
+///    VERSION_STRING="1.0.1" PREPARE_MULTISIG=true DEV_PRIVATE_KEY=$DEV_PRIVATE_KEY \
+///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
+///      --rpc-url $SEPOLIA_RPC_URL --broadcast --private-key $DEV_PRIVATE_KEY -vvvv
+///
+/// 3) Multisig step 2 (print `setVersion` calldata for the Safe; no broadcast):
+///    VERSION_STRING="1.0.1" PRINT_SETVERSION=true \
+///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
+///      --rpc-url $SEPOLIA_RPC_URL -vvvv
 contract UpgradeDiamond is Script {
     // Sepolia deployment (EIP-2535 diamond)
     address internal constant SEPOLIA_DIAMOND_ADDRESS = 0xF422A7779D2feB884CcC1773b88d98494A946604;
@@ -47,32 +66,37 @@ contract UpgradeDiamond is Script {
         diamondAddress = SEPOLIA_DIAMOND_ADDRESS;
         versionString = vm.envString("VERSION_STRING");
 
+        address diamondOwner = IERC173(diamondAddress).owner();
+        console.log("Diamond owner:", diamondOwner);
+
         if (printSetVersion) {
             console.log("Printing multisig calldata for setVersion (no broadcast)");
             console.log("Diamond:", diamondAddress);
             console.log("Target version:", versionString);
             console.log("Chain ID:", block.chainid);
 
-            address diamondOwner = IERC173(diamondAddress).owner();
             console.log("Diamond owner:", diamondOwner);
 
             printSetVersionCalldata();
             return;
         }
 
+        // For PREPARE_MULTISIG and the direct-upgrade path we need a key to deploy the new facet.
         uint256 upgraderPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
-        vm.startBroadcast(upgraderPrivateKey);
-
         address upgrader = vm.addr(upgraderPrivateKey);
+
+        // Fail fast: only the diamond owner can execute the cut in the direct-upgrade path.
+        // (In PREPARE_MULTISIG mode we intentionally allow a non-owner to deploy the facet and print calldata.)
+        if (!prepareMultisig) {
+            require(diamondOwner == upgrader, "UpgradeDiamond: DEV_PRIVATE_KEY is not the diamond owner");
+        }
+
+        vm.startBroadcast(upgraderPrivateKey);
 
         console.log("Upgrading diamond at:", diamondAddress);
         console.log("Target version:", versionString);
         console.log("Chain ID:", block.chainid);
         console.log("Upgrader:", upgrader);
-
-        // Fail fast if the broadcast key is not the diamond owner
-        address diamondOwner = IERC173(diamondAddress).owner();
-        console.log("Diamond owner:", diamondOwner);
 
         if (prepareMultisig) {
             console.log(
@@ -84,8 +108,6 @@ contract UpgradeDiamond is Script {
             console.log("\n=== Prepare Complete ===");
             return;
         }
-
-        require(diamondOwner == upgrader, "UpgradeDiamond: DEV_PRIVATE_KEY is not the diamond owner");
 
         // Perform the upgrade (deploy facets and execute diamond cut)
         performUpgrade();
