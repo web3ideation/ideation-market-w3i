@@ -181,11 +181,12 @@ library LibDiamond {
     }
 
     /// @notice Removes selectors (facet address param must be zero by convention).
-    /// @dev Reverts if `_facetAddress != address(0)`; no-op if selector didn’t exist.
+    /// @dev Reverts if `_facetAddress != address(0)`.
+    /// Also reverts if any selector doesn't exist (i.e., is not currently registered in the diamond).
     function removeFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
         DiamondStorage storage ds = diamondStorage();
-        // if function does not exist then do nothing and return
+        // per EIP-2535 convention, `_facetAddress` must be address(0) for removals
         require(_facetAddress == address(0), "LibDiamondCut: Remove facet address must be address(0)");
 
         uint256 selLen = _functionSelectors.length;

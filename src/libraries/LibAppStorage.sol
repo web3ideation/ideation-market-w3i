@@ -54,7 +54,7 @@ struct AppStorage {
     /// @notice Reverse index: NFT (contract,id) → active listing ids.
     mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds;
     /// @notice Allowed currencies for listings (curated list to prevent scam tokens).
-    /// @dev address(0) = ETH is always allowed.
+    /// @dev address(0) represents ETH; whether it is allowed depends on initialization/admin configuration.
     mapping(address currency => bool allowed) allowedCurrencies;
     /// @notice Iterable list of allowed currencies.
     address[] allowedCurrenciesArray;

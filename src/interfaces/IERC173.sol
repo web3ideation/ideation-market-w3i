@@ -13,7 +13,8 @@ interface IERC173 {
     function owner() external view returns (address owner_);
 
     /// @notice Set the address of the new owner of the contract
-    /// @dev Set _newOwner to address(0) to renounce any ownership.
+    /// @dev Some implementations treat `_newOwner = address(0)` as ownership renunciation.
+    /// Others (e.g., two-step ownership) may not support renouncing via this function.
     /// @param _newOwner The address of the new owner of the contract
     function transferOwnership(address _newOwner) external;
 }

@@ -15,7 +15,9 @@ contract OwnershipFacet is IERC173 {
 
     /// @notice Owner nominates a new owner
     /// @dev Sets `pendingContractOwner`. The nominee must call `acceptOwnership` to finalize.
-    /// @param newOwner The address nominated to become the new owner (can be zero, but then acceptance will fail).
+    /// @param newOwner The address nominated to become the new owner.
+    /// @dev Setting `newOwner` to address(0) does not renounce ownership in this two-step model; it only makes
+    /// `acceptOwnership()` impossible until a nonzero nominee is set.
     function transferOwnership(address newOwner) external override {
         LibDiamond.enforceIsContractOwner();
         LibDiamond.diamondStorage().pendingContractOwner = newOwner;
