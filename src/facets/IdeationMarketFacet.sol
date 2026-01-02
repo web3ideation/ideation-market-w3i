@@ -39,6 +39,7 @@ error IdeationMarket__CurrencyNotAllowed();
 error IdeationMarket__WrongPaymentCurrency();
 error IdeationMarket__EthTransferFailed(address receiver);
 error IdeationMarket__ERC20TransferFailed(address token, address receiver);
+error IdeationMarket__ERC20TokenAddressIsNotAContract(address token);
 error IdeationMarket__ContractPaused();
 
 /// @title IdeationMarketFacet
@@ -1054,6 +1055,8 @@ contract IdeationMarketFacet {
     /// @param to Address to transfer to.
     /// @param amount Amount to transfer.
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+        if (token.code.length == 0) revert IdeationMarket__ERC20TokenAddressIsNotAContract(token);
+
         // Build the calldata for ERC20.transferFrom(address,address,uint256)
         // Function selector: bytes4(keccak256("transferFrom(address,address,uint256)")) = 0x23b872dd
         bytes memory data = abi.encodeWithSelector(0x23b872dd, from, to, amount);

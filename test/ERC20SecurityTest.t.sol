@@ -4,6 +4,7 @@ pragma solidity ^0.8.28;
 import "./MarketTestBase.t.sol";
 import {
     IdeationMarket__ERC20TransferFailed,
+    IdeationMarket__ERC20TokenAddressIsNotAContract,
     IdeationMarket__ListingTermsChanged,
     IdeationMarket__WrongPaymentCurrency
 } from "../src/facets/IdeationMarketFacet.sol";
@@ -196,6 +197,16 @@ contract ERC20SecurityTest is MarketTestBase {
     // ----------------------------------------------------------
     // Group 2: Approval & Balance Edge Cases
     // ----------------------------------------------------------
+
+    function testEOACurrencyAddressRevertsWithTokenNotContract() public {
+        address eoaCurrency = makeAddr("eoaCurrency");
+        uint128 listingId = _createMaliciousTokenListing(eoaCurrency, 1000 ether, 1);
+
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__ERC20TokenAddressIsNotAContract.selector, eoaCurrency));
+        market.purchaseListing(listingId, 1000 ether, eoaCurrency, 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
 
     function testInsufficientBuyerBalanceReverts() public {
         uint128 listingId = _createMaliciousTokenListing(address(token18Dec), 1000 ether, 1);
