@@ -51,8 +51,10 @@ struct AppStorage {
     // 9 bytes padding for future tiny vars
     /// @notice Primary listing registry by id.
     mapping(uint128 listingId => Listing listing) listings;
-    /// @notice Reverse index: NFT (contract,id) → active listing ids.
-    mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds;
+    /// @notice ERC-721 uniqueness guard: (token contract, tokenId) -> active listingId.
+    /// @dev Only used for ERC-721 listings (where `Listing.erc1155Quantity == 0`).
+    /// A value of 0 means there is no active listing for that token.
+    mapping(address tokenContract => mapping(uint256 tokenId => uint128 listingId)) activeListingIdByERC721;
     /// @notice Allowed currencies for listings (curated list to prevent scam tokens).
     /// @dev address(0) represents ETH; whether it is allowed depends on initialization/admin configuration.
     mapping(address currency => bool allowed) allowedCurrencies;

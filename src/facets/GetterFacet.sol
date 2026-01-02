@@ -5,58 +5,15 @@ import "../libraries/LibAppStorage.sol";
 import "../libraries/LibDiamond.sol";
 
 error Getter__ListingNotFound(uint128 listingId);
-error Getter__NoActiveListings(address tokenAddress, uint256 tokenId);
 
 /// @title GetterFacet
 /// @notice Read-only queries for listings, proceeds, owner/config, and whitelist state.
 /// @dev All functions are `view` and read from `LibAppStorage` / `LibDiamond` storage.
 contract GetterFacet {
-    /// @notice Returns all active listings for a given NFT (ERC-721 or ERC-1155).
-    /// @param tokenAddress The address of the NFT contract.
-    /// @param tokenId The tokenId within that contract.
-    /// @return listings An array of Listing structs that are still active.
-    /// @dev Reverts `Getter__NoActiveListings` if none found. Only listings with `seller != address(0)` are returned.
-    function getListingsByNFT(address tokenAddress, uint256 tokenId)
-        external
-        view
-        returns (Listing[] memory listings)
-    {
-        AppStorage storage s = LibAppStorage.appStorage();
-        uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
-        uint256 totalIds = listingArray.length;
-
-        // First pass: count how many listings are still active (seller != address(0))
-        uint256 activeCount = 0;
-        for (uint256 i = 0; i < totalIds;) {
-            if (s.listings[listingArray[i]].seller != address(0)) {
-                activeCount++;
-            }
-            unchecked {
-                i++;
-            }
-        }
-
-        if (activeCount == 0) {
-            revert Getter__NoActiveListings(tokenAddress, tokenId);
-        }
-
-        // Allocate a memory array of exactly activeCount size
-        listings = new Listing[](activeCount);
-
-        // Second pass: fill that array with active listings
-        uint256 arrayIndex = 0;
-        for (uint256 i = 0; i < totalIds;) {
-            Listing storage current = s.listings[listingArray[i]];
-            if (current.seller != address(0)) {
-                listings[arrayIndex] = current;
-                arrayIndex++;
-            }
-            unchecked {
-                i++;
-            }
-        }
-
-        return listings;
+    /// @notice Returns the active listing id for an ERC-721 token.
+    /// @dev Returns 0 if there is no active listing.
+    function getActiveListingIdByERC721(address tokenAddress, uint256 tokenId) external view returns (uint128) {
+        return LibAppStorage.appStorage().activeListingIdByERC721[tokenAddress][tokenId];
     }
 
     /// @notice Returns the Listing struct for a given listingId.

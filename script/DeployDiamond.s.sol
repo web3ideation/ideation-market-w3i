@@ -26,9 +26,10 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 /// @title DeployDiamond (Foundry script)
 /// @notice Deploys the IdeationMarket Diamond and all facets, then initializes state via `DiamondInit.init`.
 /// @dev Run with Foundry (e.g., `forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url <URL> --broadcast`).
-/// Uses `vm.startBroadcast()`; the current tx signer becomes the initial diamond owner.
-/// The script performs a diamondCut to add 6 facet groups (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter)
-/// on top of the initially deployed DiamondCut facet, then asserts there are exactly 7 facet addresses.
+/// Uses `vm.startBroadcast()`; the tx signer becomes the initial diamond owner.
+/// The script performs a diamondCut to add facet groups (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter,
+/// Currency WL, Version, Pause) on top of the initially deployed DiamondCut facet, then asserts there are exactly
+/// 10 facet addresses.
 /// @custom:security The script references `tx.origin` **only** in this off-chain deployment context to set the owner.
 /// Do not reuse this pattern inside on-chain contracts.
 contract DeployDiamond is Script {
@@ -45,7 +46,8 @@ contract DeployDiamond is Script {
     string versionString;
 
     /// @notice Deploys facets, the diamond, performs the diamond cut, and initializes storage.
-    /// @dev Reverts if post-cut facet count isn’t 7 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Cut).
+    /// @dev Reverts if post-cut facet count isn’t 10 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter,
+    /// Currency WL, Version, Pause, Cut).
     /// Emits Foundry `console.log` outputs with deployed addresses for traceability.
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
@@ -122,7 +124,7 @@ contract DeployDiamond is Script {
         versionSelectors[0] = VersionFacet.setVersion.selector;
 
         bytes4[] memory getterSelectors = new bytes4[](18);
-        getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
+        getterSelectors[0] = GetterFacet.getActiveListingIdByERC721.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getBalance.selector;
         getterSelectors[3] = GetterFacet.getInnovationFee.selector;

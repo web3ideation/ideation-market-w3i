@@ -154,11 +154,14 @@ contract UpgradeDiamond is Script {
 
     /// @notice Performs the actual upgrade by deploying facets and executing the diamond cut.
     /// @dev Upgrades the core marketplace logic by replacing the selectors that were installed for
-    /// `IdeationMarketFacet` at deployment time.
+    /// `IdeationMarketFacet` and `GetterFacet` at deployment time.
     function performUpgrade() internal {
         // Deploy new facet
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
         console.log("Deployed ideationMarketFacet contract at address:", address(ideationMarketFacet));
+
+        GetterFacet getterFacet = new GetterFacet();
+        console.log("Deployed getterFacet contract at address:", address(getterFacet));
 
         // Selectors to replace (must match deployment-time selector list)
         bytes4[] memory marketSelectors = new bytes4[](6);
@@ -168,6 +171,26 @@ contract UpgradeDiamond is Script {
         marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
         marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
         marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
+
+        bytes4[] memory getterSelectors = new bytes4[](18);
+        getterSelectors[0] = GetterFacet.getActiveListingIdByERC721.selector;
+        getterSelectors[1] = GetterFacet.getListingByListingId.selector;
+        getterSelectors[2] = GetterFacet.getBalance.selector;
+        getterSelectors[3] = GetterFacet.getInnovationFee.selector;
+        getterSelectors[4] = GetterFacet.getNextListingId.selector;
+        getterSelectors[5] = GetterFacet.isCollectionWhitelisted.selector;
+        getterSelectors[6] = GetterFacet.getWhitelistedCollections.selector;
+        getterSelectors[7] = GetterFacet.getContractOwner.selector;
+        getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
+        getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[10] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[11] = GetterFacet.isCurrencyAllowed.selector;
+        getterSelectors[12] = GetterFacet.getAllowedCurrencies.selector;
+        getterSelectors[13] = GetterFacet.getVersion.selector;
+        getterSelectors[14] = GetterFacet.getPreviousVersion.selector;
+        getterSelectors[15] = GetterFacet.getVersionString.selector;
+        getterSelectors[16] = GetterFacet.getImplementationId.selector;
+        getterSelectors[17] = GetterFacet.isPaused.selector;
 
         // Preflight: ensure the selectors exist on the target diamond (fail fast)
         IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamondAddress);
@@ -180,17 +203,32 @@ contract UpgradeDiamond is Script {
             require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
         }
 
+        for (uint256 i = 0; i < getterSelectors.length; i++) {
+            bytes4 selector = getterSelectors[i];
+            address currentFacet = loupe.facetAddress(selector);
+            console.log("Current facet for selector:");
+            console.logBytes4(selector);
+            console.log(currentFacet);
+            require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
+        }
+
         // Prepare the cut
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(ideationMarketFacet),
             action: IDiamondCutFacet.FacetCutAction.Replace,
             functionSelectors: marketSelectors
         });
 
+        cuts[1] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(getterFacet),
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: getterSelectors
+        });
+
         // Execute
         IDiamondCutFacet(diamondAddress).diamondCut(cuts, address(0), "");
-        console.log("Diamond cut executed (IdeationMarketFacet selectors replaced)");
+        console.log("Diamond cut executed (IdeationMarketFacet and GetterFacet selectors updated)");
 
         // Post-check: ensure routing updated
         for (uint256 i = 0; i < marketSelectors.length; i++) {
@@ -207,6 +245,9 @@ contract UpgradeDiamond is Script {
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
         console.log("Deployed ideationMarketFacet contract at address:", address(ideationMarketFacet));
 
+        GetterFacet getterFacet = new GetterFacet();
+        console.log("Deployed getterFacet contract at address:", address(getterFacet));
+
         bytes4[] memory marketSelectors = new bytes4[](6);
         marketSelectors[0] = IdeationMarketFacet.createListing.selector;
         marketSelectors[1] = IdeationMarketFacet.purchaseListing.selector;
@@ -214,6 +255,26 @@ contract UpgradeDiamond is Script {
         marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
         marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
         marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
+
+        bytes4[] memory getterSelectors = new bytes4[](18);
+        getterSelectors[0] = GetterFacet.getActiveListingIdByERC721.selector;
+        getterSelectors[1] = GetterFacet.getListingByListingId.selector;
+        getterSelectors[2] = GetterFacet.getBalance.selector;
+        getterSelectors[3] = GetterFacet.getInnovationFee.selector;
+        getterSelectors[4] = GetterFacet.getNextListingId.selector;
+        getterSelectors[5] = GetterFacet.isCollectionWhitelisted.selector;
+        getterSelectors[6] = GetterFacet.getWhitelistedCollections.selector;
+        getterSelectors[7] = GetterFacet.getContractOwner.selector;
+        getterSelectors[8] = GetterFacet.isBuyerWhitelisted.selector;
+        getterSelectors[9] = GetterFacet.getBuyerWhitelistMaxBatchSize.selector;
+        getterSelectors[10] = GetterFacet.getPendingOwner.selector;
+        getterSelectors[11] = GetterFacet.isCurrencyAllowed.selector;
+        getterSelectors[12] = GetterFacet.getAllowedCurrencies.selector;
+        getterSelectors[13] = GetterFacet.getVersion.selector;
+        getterSelectors[14] = GetterFacet.getPreviousVersion.selector;
+        getterSelectors[15] = GetterFacet.getVersionString.selector;
+        getterSelectors[16] = GetterFacet.getImplementationId.selector;
+        getterSelectors[17] = GetterFacet.isPaused.selector;
 
         // Preflight: ensure selectors exist on diamond
         IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamondAddress);
@@ -226,12 +287,27 @@ contract UpgradeDiamond is Script {
             require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
         }
 
+        for (uint256 i = 0; i < getterSelectors.length; i++) {
+            bytes4 selector = getterSelectors[i];
+            address currentFacet = loupe.facetAddress(selector);
+            console.log("Current facet for selector:");
+            console.logBytes4(selector);
+            console.log(currentFacet);
+            require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
+        }
+
         // Build the cut and encode calldata
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
         cuts[0] = IDiamondCutFacet.FacetCut({
             facetAddress: address(ideationMarketFacet),
             action: IDiamondCutFacet.FacetCutAction.Replace,
             functionSelectors: marketSelectors
+        });
+
+        cuts[1] = IDiamondCutFacet.FacetCut({
+            facetAddress: address(getterFacet),
+            action: IDiamondCutFacet.FacetCutAction.Replace,
+            functionSelectors: getterSelectors
         });
 
         bytes memory diamondCutCalldata =

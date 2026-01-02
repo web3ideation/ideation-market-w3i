@@ -264,7 +264,7 @@ contract IdeationMarketFacet {
         _validatePartialBuySetup(partialBuyEnabled, erc1155Quantity, price, desiredTokenAddress);
 
         // Prevent relisting an already-listed ERC721 NFT
-        if (erc1155Quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
+        if (erc1155Quantity == 0 && s.activeListingIdByERC721[tokenAddress][tokenId] != 0) {
             revert IdeationMarket__AlreadyListed();
         }
 
@@ -300,7 +300,9 @@ contract IdeationMarketFacet {
             desiredErc1155Quantity: desiredErc1155Quantity
         });
 
-        s.tokenToListingIds[tokenAddress][tokenId].push(newListingId);
+        if (erc1155Quantity == 0) {
+            s.activeListingIdByERC721[tokenAddress][tokenId] = newListingId;
+        }
 
         _applyBuyerWhitelist(newListingId, buyerWhitelistEnabled, allowedBuyers);
 
@@ -338,8 +340,8 @@ contract IdeationMarketFacet {
     /// For ETH listings: requires exact msg.value (no overpayment allowed). For ERC-20 listings: uses buyer's approval to transfer directly to recipients.
     /// Payments distributed atomically after NFT transfer: marketplace owner (innovation fee) → royalty receiver (if any, from curated collections) → seller (proceeds).
     /// For swap listings, buyer's desired NFT is transferred to the seller before receiving the listed NFT.
-    /// Deprecated listings by the swap seller for that token are cleaned (swap-and-pop) if they can no longer be fulfilled.
-    /// If a whitelisted token is removed from the collection whitelist after being listed, the listing becomes unpurchasable and must be cleaned up using the cleanListing function. This cleanup process is handled by an offchain bot.
+    /// If a listing becomes unfulfillable (e.g., seller no longer owns/approved; swap terms cannot be met; collection de-whitelisted after listing),
+    /// it is expected to be cleaned up via `cleanListing` (typically by an off-chain bot/indexer).
     function purchaseListing(
         uint128 listingId,
         uint256 expectedPrice,
@@ -457,9 +459,6 @@ contract IdeationMarketFacet {
 
         // in case it's a swap listing, send that desired token (the frontend approves the marketplace for that action beforehand)
         if (listedItem.desiredTokenAddress != address(0)) {
-            address desiredOwner = address(0); // initializing this for cleanup
-            address obsoleteSeller = address(0); // initializing this for cleanup
-            uint256 remainingERC1155Balance = 0; // initializing this for cleanup
             if (listedItem.desiredErc1155Quantity > 0) {
                 // For ERC1155: Check that buyer holds enough token.
                 IERC1155 desiredToken = IERC1155(listedItem.desiredTokenAddress);
@@ -486,12 +485,9 @@ contract IdeationMarketFacet {
                     listedItem.desiredErc1155Quantity,
                     ""
                 );
-
-                obsoleteSeller = desiredErc1155Holder; // for cleanup
-                remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
             } else {
                 IERC721 desiredToken = IERC721(listedItem.desiredTokenAddress);
-                desiredOwner = desiredToken.ownerOf(listedItem.desiredTokenId);
+                address desiredOwner = desiredToken.ownerOf(listedItem.desiredTokenId);
                 // For ERC721: Check ownership.
                 if (
                     msg.sender != desiredOwner && msg.sender != desiredToken.getApproved(listedItem.desiredTokenId)
@@ -505,36 +501,6 @@ contract IdeationMarketFacet {
 
                 // Perform the safe swap transfer buyer to seller.
                 desiredToken.safeTransferFrom(desiredOwner, listedItem.seller, listedItem.desiredTokenId);
-
-                obsoleteSeller = desiredOwner; // for cleanup
-            }
-
-            // in case the desiredToken is listed already, delete that now deprecated listing to cleanup
-            uint128[] storage deprecatedListingArray =
-                s.tokenToListingIds[listedItem.desiredTokenAddress][listedItem.desiredTokenId];
-
-            for (uint256 i = deprecatedListingArray.length; i != 0;) {
-                unchecked {
-                    i--;
-                }
-                uint128 depId = deprecatedListingArray[i];
-                Listing storage dep = s.listings[depId];
-                // If the seller of that listing is the same as the obsoleteSeller (the one who just sold his token to the current buyer)
-                // and in case of an ERC1155 listing, if the obsoleteSeller does not hold enough token anymore to cover the
-                // desiredErc1155Quantity of that listing, that listing needs to get removed. If it is an erc721 listing,
-                // it's enough that the obsoleteSeller is the seller of that listing, to remove that listing.
-                if (
-                    dep.seller == obsoleteSeller
-                        && (listedItem.desiredErc1155Quantity == 0 || dep.erc1155Quantity > remainingERC1155Balance)
-                ) {
-                    // remove the obsolete listing
-                    delete s.listings[depId];
-                    emit ListingCanceled(
-                        depId, listedItem.desiredTokenAddress, listedItem.desiredTokenId, obsoleteSeller, address(this)
-                    );
-                    deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
-                    deprecatedListingArray.pop();
-                }
             }
         }
 
@@ -542,7 +508,9 @@ contract IdeationMarketFacet {
         bool partialBuy = false;
         if (erc1155PurchaseQuantity == listedItem.erc1155Quantity) {
             // fully bought → remove
-            _deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            _deleteListingAndCleanup(
+                s, listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.erc1155Quantity
+            );
         } else {
             // partially bought → reduce remaining
             s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
@@ -601,7 +569,9 @@ contract IdeationMarketFacet {
         address diamondOwner = LibDiamond.contractOwner();
         if (msg.sender == diamondOwner) {
             // delete Listing
-            _deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            _deleteListingAndCleanup(
+                s, listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.erc1155Quantity
+            );
             emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
             return;
         }
@@ -648,7 +618,9 @@ contract IdeationMarketFacet {
 
         if (isAuthorized) {
             // delete Listing
-            _deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            _deleteListingAndCleanup(
+                s, listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.erc1155Quantity
+            );
             emit ListingCanceled(listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender);
             return;
         }
@@ -866,7 +838,9 @@ contract IdeationMarketFacet {
         } while (false);
 
         if (invalid) {
-            _deleteListingAndCleanup(s, listingId, listedItem.tokenAddress, listedItem.tokenId);
+            _deleteListingAndCleanup(
+                s, listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.erc1155Quantity
+            );
             emit ListingCanceledDueToInvalidListing(
                 listingId, listedItem.tokenAddress, listedItem.tokenId, listedItem.seller, msg.sender
             );
@@ -991,22 +965,18 @@ contract IdeationMarketFacet {
         }
     }
 
-    /// @notice Deletes a listing and removes its id from the reverse index for (tokenAddress, tokenId).
-    /// @dev Uses swap-and-pop on `tokenToListingIds[tokenAddress][tokenId]` to keep the array compact.
-    function _deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
-        internal
-    {
+    /// @notice Deletes a listing and clears the ERC-721 active listing id, if applicable.
+    function _deleteListingAndCleanup(
+        AppStorage storage s,
+        uint128 listingId,
+        address tokenAddress,
+        uint256 tokenId,
+        uint256 erc1155Quantity
+    ) internal {
         delete s.listings[listingId];
 
-        uint128[] storage listingArray = s.tokenToListingIds[tokenAddress][tokenId];
-        for (uint256 i = listingArray.length; i != 0;) {
-            unchecked {
-                i--;
-            }
-            if (listingArray[i] == listingId) {
-                listingArray[i] = listingArray[listingArray.length - 1];
-                listingArray.pop();
-            }
+        if (erc1155Quantity == 0) {
+            delete s.activeListingIdByERC721[tokenAddress][tokenId];
         }
     }
 

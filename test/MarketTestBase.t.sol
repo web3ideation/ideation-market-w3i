@@ -176,7 +176,7 @@ abstract contract MarketTestBase is Test {
 
         // Getter selectors (add all view functions exposed by GetterFacet)
         bytes4[] memory getterSelectors = new bytes4[](18);
-        getterSelectors[0] = GetterFacet.getListingsByNFT.selector;
+        getterSelectors[0] = GetterFacet.getActiveListingIdByERC721.selector;
         getterSelectors[1] = GetterFacet.getListingByListingId.selector;
         getterSelectors[2] = GetterFacet.getBalance.selector;
         getterSelectors[3] = GetterFacet.getInnovationFee.selector;

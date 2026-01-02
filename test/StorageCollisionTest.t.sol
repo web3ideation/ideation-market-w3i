@@ -51,10 +51,9 @@ contract StorageCollisionTest is MarketTestBase {
         vm.prank(seller);
         market.updateListing(listingId, 1 ether, address(0), address(0), 0, 0, 0, true, false, allow2);
 
-        // assert reverse index unchanged before purchase
-        Listing[] memory ids = getter.getListingsByNFT(address(erc721), 1);
-        assertEq(ids.length, 1, "reverse index length drifted");
-        assertEq(ids[0].listingId, listingId, "reverse index id drifted");
+        // assert ERC-721 active listing guard unchanged before purchase
+        uint128 activeId = getter.getActiveListingIdByERC721(address(erc721), 1);
+        assertEq(activeId, listingId, "active listing id drifted");
 
         // --- Purchase by whitelisted buyer; should not touch canaries ---
         address diamondOwner = getter.getContractOwner();

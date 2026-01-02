@@ -265,10 +265,9 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(l.erc1155Quantity, 0);
         assertFalse(l.buyerWhitelistEnabled);
         assertFalse(l.partialBuyEnabled);
-        // getListingsByNFT returns one active listing
-        Listing[] memory listings = getter.getListingsByNFT(address(erc721), 1);
-        assertEq(listings.length, 1);
-        assertEq(listings[0].listingId, id);
+        // ERC-721 active listing id is set
+        uint128 activeId = getter.getActiveListingIdByERC721(address(erc721), 1);
+        assertEq(activeId, id);
     }
 
     function testCreateListingERC721Reverts() public {
@@ -865,7 +864,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(address(diamond).balance, 0);
     }
 
-    function testGetterNoActiveListingsReverts() public {
+    function testActiveListingIdClearsAfterCancel() public {
         _whitelistCollectionAndApproveERC721();
 
         // Create & cancel listing
@@ -877,9 +876,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         vm.prank(seller);
         market.cancelListing(id);
 
-        // No active listings → revert
-        vm.expectRevert(abi.encodeWithSelector(Getter__NoActiveListings.selector, address(erc721), 1));
-        getter.getListingsByNFT(address(erc721), 1);
+        // No active listing
+        assertEq(getter.getActiveListingIdByERC721(address(erc721), 1), 0);
     }
 
     function testUpdateAfterCollectionDeWhitelistingCancels() public {
@@ -1991,7 +1989,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // ===== Getter facet =====
         address getterAddr = loupe.facetAddress(GetterFacet.getNextListingId.selector);
         assertTrue(getterAddr != address(0));
-        assertEq(loupe.facetAddress(GetterFacet.getListingsByNFT.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getActiveListingIdByERC721.selector), getterAddr);
         assertEq(loupe.facetAddress(GetterFacet.getListingByListingId.selector), getterAddr);
         assertEq(loupe.facetAddress(GetterFacet.getBalance.selector), getterAddr);
         assertEq(loupe.facetAddress(GetterFacet.getInnovationFee.selector), getterAddr);
@@ -2187,7 +2185,7 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(ownerBalBefore2 - ownerBalBefore1 + (owner.balance - ownerBalBefore2), 0.05 ether);
     }
 
-    /// Swap (ERC-721 <-> ERC-721): happy path, requires buyer's token approval to marketplace + cleanup of buyer's pre-existing listing.
+    /// Swap (ERC-721 <-> ERC-721): happy path, requires buyer's token approval to marketplace + failing stale purchase.
     function testSwapERC721ToERC721_WithCleanupOfObsoleteListing() public {
         // Fresh ERC721 collections
         MockERC721 a = new MockERC721();
@@ -2241,9 +2239,20 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(a.ownerOf(100), buyer);
         assertEq(b.ownerOf(200), seller);
 
-        // Buyer's obsolete listing for B#200 must be removed
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, buyersBListingId));
-        getter.getListingByListingId(buyersBListingId);
+        // No on-chain auto-cleanup: buyer's old listing remains, but is now invalid (buyer no longer owns B#200).
+        Listing memory stale = getter.getListingByListingId(buyersBListingId);
+        assertEq(stale.seller, buyer);
+        assertEq(stale.tokenAddress, address(b));
+        assertEq(stale.tokenId, 200);
+
+        // Attempting to buy the stale listing reverts because the seller is no longer the token owner.
+        address otherBuyer = vm.addr(0xB0B);
+        vm.deal(otherBuyer, 2 ether);
+        vm.prank(otherBuyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerNotTokenOwner.selector, buyersBListingId));
+        market.purchaseListing{value: 1 ether}(
+            buyersBListingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0)
+        );
     }
 
     function testSwapERC721ToERC1155_OperatorNoMarketApprovalReverts_ThenSucceeds() public {
@@ -3897,152 +3906,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         // sanity check
         assertEq(getter.getInnovationFee(), next);
     }
-
-    /* ================================
-       ERC1155 reverse index coverage
-       ================================ */
-
-    function testERC1155_MultiListings_SameAndDifferentSellers_AppearInReverseIndex() public {
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-
-        // Same (token,id), different holders → two listings
-        erc1155.mint(seller, 9, 5);
-        erc1155.mint(operator, 9, 7);
-
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(operator);
-        erc1155.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), 9, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
-        );
-        uint128 id1 = getter.getNextListingId() - 1;
-
-        vm.prank(operator);
-        market.createListing(
-            address(erc1155), 9, operator, 7 ether, address(0), address(0), 0, 0, 7, false, false, new address[](0)
-        );
-        uint128 id2 = getter.getNextListingId() - 1;
-
-        Listing[] memory arr = getter.getListingsByNFT(address(erc1155), 9);
-        assertEq(arr.length, 2);
-        bool seen1;
-        bool seen2;
-        for (uint256 i; i < arr.length; i++) {
-            if (arr[i].listingId == id1) seen1 = true;
-            if (arr[i].listingId == id2) seen2 = true;
-        }
-        assertTrue(seen1 && seen2);
-    }
-
-    function testERC1155_ReverseIndex_MiddleDelete_Compaction() public {
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-
-        erc1155.mint(seller, 10, 3);
-        erc1155.mint(buyer, 10, 4);
-        erc1155.mint(operator, 10, 5);
-
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(buyer);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(operator);
-        erc1155.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), 10, seller, 3 ether, address(0), address(0), 0, 0, 3, false, false, new address[](0)
-        );
-        uint128 id1 = getter.getNextListingId() - 1;
-
-        vm.prank(buyer);
-        market.createListing(
-            address(erc1155), 10, buyer, 4 ether, address(0), address(0), 0, 0, 4, false, false, new address[](0)
-        );
-        uint128 id2 = getter.getNextListingId() - 1;
-
-        vm.prank(operator);
-        market.createListing(
-            address(erc1155), 10, operator, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
-        );
-        uint128 id3 = getter.getNextListingId() - 1;
-
-        // Delete the middle listing and ensure the others remain returned
-        vm.prank(buyer);
-        market.cancelListing(id2);
-
-        Listing[] memory arr = getter.getListingsByNFT(address(erc1155), 10);
-        assertEq(arr.length, 2);
-        bool seen1;
-        bool seen3;
-        for (uint256 i; i < arr.length; i++) {
-            if (arr[i].listingId == id1) seen1 = true;
-            if (arr[i].listingId == id3) seen3 = true;
-        }
-        assertTrue(seen1 && seen3);
-    }
-
-    function testERC1155_ReverseIndex_LastDelete_ThenReAdd_NoGhosts() public {
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-
-        uint256 tid = 123;
-        // Mint to two different sellers (seller, operator)
-        erc1155.mint(seller, tid, 5);
-        erc1155.mint(operator, tid, 7);
-
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(operator);
-        erc1155.setApprovalForAll(address(diamond), true);
-
-        // Listing #1 by seller
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), tid, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
-        );
-        uint128 id1 = getter.getNextListingId() - 1;
-
-        // Listing #2 by operator (this is the "last" entry we will delete)
-        vm.prank(operator);
-        market.createListing(
-            address(erc1155), tid, operator, 7 ether, address(0), address(0), 0, 0, 7, false, false, new address[](0)
-        );
-        uint128 id2 = getter.getNextListingId() - 1;
-
-        // Delete the last one (id2)
-        vm.prank(operator);
-        market.cancelListing(id2);
-
-        // Now a third actor (buyer) creates a fresh listing for same (contract,id)
-        erc1155.mint(buyer, tid, 3);
-        vm.prank(buyer);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(buyer);
-        market.createListing(
-            address(erc1155), tid, buyer, 3 ether, address(0), address(0), 0, 0, 3, false, false, new address[](0)
-        );
-        uint128 id3 = getter.getNextListingId() - 1;
-
-        // Reverse index should return exactly id1 and id3 (no ghost id2)
-        Listing[] memory arr = getter.getListingsByNFT(address(erc1155), tid);
-        assertEq(arr.length, 2);
-
-        bool seen1;
-        bool seen3;
-        for (uint256 i; i < arr.length; i++) {
-            if (arr[i].listingId == id1) seen1 = true;
-            if (arr[i].listingId == id3) seen3 = true;
-            // also ensure we don't see id2
-            assertTrue(arr[i].listingId != id2);
-        }
-        assertTrue(seen1 && seen3);
-    }
-
     /* ======================================
        ERC1155 partial-buy payment edge cases
        ====================================== */
@@ -4842,12 +4705,21 @@ contract IdeationMarketDiamondTest is MarketTestBase {
             swapListingId, 0, address(0), 0, address(erc1155), id1155, uint256(QS), 0, buyer
         );
 
-        // The buyer's ERC1155 listing should have been deleted by the swap cleanup
+        // No on-chain auto-cleanup: listing remains but is invalid because buyer's balance is now below the listed quantity.
+        Listing memory stale = getter.getListingByListingId(buyerListingId);
+        assertEq(stale.erc1155Quantity, QL);
+        assertEq(erc1155.balanceOf(buyer, id1155), QL - 1);
+
+        // Off-chain maintenance bots (or anyone) can clean invalid listings.
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(
+            buyerListingId, address(erc1155), id1155, buyer, operator
+        );
+        vm.prank(operator);
+        market.cleanListing(buyerListingId);
+
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, buyerListingId));
         getter.getListingByListingId(buyerListingId);
-
-        // Remaining balance is QL-1 as constructed
-        assertEq(erc1155.balanceOf(buyer, id1155), QL - 1);
     }
 
     /* ========== 1155 ↔ 1155 swaps ========== */
