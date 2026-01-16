@@ -181,6 +181,72 @@ contract ERC20PaymentDistributionTest is MarketTestBase {
         assertEq(tokenA.balanceOf(address(diamond)), 0, "Diamond holds ERC20");
     }
 
+    function testRoyaltyReceiverZeroAddressSkipsRoyalty_ERC20() public {
+        // Edge case: ERC2981 royaltyInfo returns (address(0), nonzero).
+        // Expected behavior: skip royalties entirely (no deduction and no transfer).
+        uint128 listingId = _createRoyaltyListing(royaltyNFT, address(tokenA), 1000 ether, address(0), 10000);
+
+        tokenA.mint(buyer, 1000 ether);
+        vm.prank(buyer);
+        tokenA.approve(address(diamond), 1000 ether);
+
+        uint256 buyerStart = tokenA.balanceOf(buyer);
+        uint256 ownerStart = tokenA.balanceOf(owner);
+        uint256 sellerStart = tokenA.balanceOf(seller);
+        uint256 zeroStart = tokenA.balanceOf(address(0));
+
+        vm.prank(buyer);
+        market.purchaseListing(listingId, 1000 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
+
+        uint256 buyerEnd = tokenA.balanceOf(buyer);
+        uint256 ownerEnd = tokenA.balanceOf(owner);
+        uint256 sellerEnd = tokenA.balanceOf(seller);
+        uint256 zeroEnd = tokenA.balanceOf(address(0));
+
+        uint256 innovationFee = (1000 ether * uint256(INNOVATION_FEE)) / 100000;
+        uint256 expectedSellerProceeds = 1000 ether - innovationFee;
+
+        assertEq(ownerEnd - ownerStart, innovationFee, "Owner fee incorrect");
+        assertEq(
+            sellerEnd - sellerStart, expectedSellerProceeds, "Seller proceeds should not be reduced by bogus royalty"
+        );
+        assertEq(zeroEnd - zeroStart, 0, "Royalty must not be transferred to address(0)");
+        assertEq(buyerStart - buyerEnd, 1000 ether, "Buyer spent wrong amount");
+        assertEq((ownerEnd - ownerStart) + (sellerEnd - sellerStart), 1000 ether, "Total distribution incorrect");
+        assertEq(tokenA.balanceOf(address(diamond)), 0, "Diamond holds ERC20");
+    }
+
+    function testRoyaltyReceiverZeroAddressSkipsRoyalty_ETH() public {
+        // Same edge case, but for native ETH payments.
+        // Important difference vs ERC-20: accidentally paying address(0) would silently burn ETH.
+        uint256 price = 1 ether;
+        uint128 listingId = _createRoyaltyListing(royaltyNFT, address(0), price, address(0), 10000);
+
+        vm.deal(buyer, price);
+
+        uint256 ownerStart = owner.balance;
+        uint256 sellerStart = seller.balance;
+        uint256 zeroStart = address(0).balance;
+
+        vm.prank(buyer);
+        market.purchaseListing{value: price}(listingId, price, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        uint256 ownerEnd = owner.balance;
+        uint256 sellerEnd = seller.balance;
+        uint256 zeroEnd = address(0).balance;
+
+        uint256 innovationFee = (price * uint256(INNOVATION_FEE)) / 100000;
+        uint256 expectedSellerProceeds = price - innovationFee;
+
+        assertEq(ownerEnd - ownerStart, innovationFee, "Owner fee incorrect");
+        assertEq(
+            sellerEnd - sellerStart, expectedSellerProceeds, "Seller proceeds should not be reduced by bogus royalty"
+        );
+        assertEq(zeroEnd - zeroStart, 0, "Royalty must not be transferred to address(0)");
+        assertEq((ownerEnd - ownerStart) + (sellerEnd - sellerStart), price, "Total distribution incorrect");
+        assertEq(address(diamond).balance, 0, "Diamond holds ETH");
+    }
+
     function testRoyaltyExceedsProceedsReverts() public {
         // Create listing with very high royalty (99.5%) that will exceed proceeds after 1% fee
         // With 1% fee: remaining = 1000 ether - 10 ether = 990 ether
