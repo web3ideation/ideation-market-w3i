@@ -1,3 +1,4 @@
 {
-    "chat.agent.maxRequests": 100
+    "chat.agent.maxRequests": 100,
+    "chat.restoreLastPanelSession": true
 }

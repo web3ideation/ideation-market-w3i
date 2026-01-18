@@ -7,7 +7,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 This project includes code from the following open-source project(s):
 
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) - Licensed under the MIT License.
+- [EIP-2535 Diamonds (Nick Mudge reference implementation)](https://github.com/mudgen/diamond) - Licensed under the MIT License.
+- [diamond-3-foundry (Alex Babits)](https://github.com/alexbabits/diamond-3-foundry) - Licensed under the MIT License.
 - further see the "third-party-licenses" folder
+
+Portions of this project are based on and adapted from Nick Mudge's EIP-2535 Diamond reference implementations and Alex Babits' diamond-3-foundry educational template. See [NOTICE](NOTICE) for detailed third-party attributions.
 
 <br><br><br><br><br>
 
@@ -411,6 +415,8 @@ For questions or support, please reach out to [your-email@example.com](mailto:yo
 This project leverages:
 
 - [EIP-2535 Diamonds](https://eips.ethereum.org/EIPS/eip-2535)
+- [Nick Mudge's EIP-2535 Diamond reference implementations](https://github.com/mudgen/diamond) (basis for the diamond template)
+- [alexbabits/diamond-3-foundry](https://github.com/alexbabits/diamond-3-foundry) (educational Foundry/AppStorage adaptation)
 - [OpenZeppelin Contracts](https://openzeppelin.com/contracts/)
 - [Foundry](https://github.com/foundry-rs/foundry)
 

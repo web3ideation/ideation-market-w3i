@@ -9,3 +9,64 @@ This project uses the following third-party libraries:
 2. Forge Standard Library
    - License: MIT
    - Repository: https://github.com/foundry-rs/forge-std
+
+3. EIP-2535 Diamonds (Nick Mudge reference implementation)
+   - License: MIT
+   - Repositories:
+     - https://github.com/mudgen/diamond
+     - https://github.com/mudgen/diamond-3
+     - https://github.com/mudgen/diamond-3-hardhat
+
+   Portions of this project are based on and adapted from Nick Mudge's EIP-2535 Diamond reference implementation.
+
+   MIT License
+
+   Copyright (c) 2020 Nick Mudge
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+
+4. diamond-3-foundry (Alex Babits)
+   - License: MIT (per SPDX headers in upstream source files)
+   - Repository: https://github.com/alexbabits/diamond-3-foundry
+
+   Portions of this project were initially developed using ideas/code patterns from Alex Babits' diamond-3-foundry educational template (which itself is based on the Diamond-3 template).
+
+   Note: As of the time this NOTICE entry was added, the upstream repository did not include a standalone LICENSE file; however, the upstream source files declare `SPDX-License-Identifier: MIT`.
+
+   MIT License
+
+   Copyright (c) Alex Babits
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.

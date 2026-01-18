@@ -1,13 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
-/**
- * \
- * Author: Nick Mudge <nick@perfectabstractions.com> (https://twitter.com/mudgen)
- * EIP-2535 Diamonds: https://eips.ethereum.org/EIPS/eip-2535
- *
- * --- NatSpec addition by wolf3i
- * /*****************************************************************************
- */
+
+// Based on Nick Mudge's EIP-2535 Diamond reference implementation (MIT).
 
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
