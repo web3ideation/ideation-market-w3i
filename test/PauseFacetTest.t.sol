@@ -429,16 +429,13 @@ contract PauseFacetTest is MarketTestBase {
         vm.stopPrank();
     }
 
-    /// @notice Test diamondCut works when paused (critical for recovery)
-    function testDiamondCutWorksWhenPaused() public {
-        vm.startPrank(owner);
+    /// @notice Test upgradeDiamond works when paused (critical for recovery)
+    function testUpgradeDiamondWorksWhenPaused() public {
+        vm.prank(owner);
         pauseFacet.pause();
 
-        // Diamond cut should work (needed for emergency upgrades)
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
-
-        vm.stopPrank();
+        // Upgrades should work (needed for emergency upgrades)
+        _upgradeNoopWithInit(address(0), "");
     }
 
     // ============================================
@@ -508,14 +505,12 @@ contract PauseFacetTest is MarketTestBase {
         );
         vm.stopPrank();
 
-        // Owner investigates and can still perform diamond cut if needed
-        vm.startPrank(owner);
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        // Owner investigates and can still perform upgrades if needed
+        _upgradeNoopWithInit(address(0), "");
 
         // Resume operations
+        vm.prank(owner);
         pauseFacet.unpause();
-        vm.stopPrank();
     }
 
     /// @notice Test pause doesn't affect existing listing data

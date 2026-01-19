@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Based on Nick Mudge's EIP-2535 Diamond reference implementation (MIT).
+// Based on Nick Mudge's Diamond reference implementation pattern (MIT).
 interface IDiamondLoupeFacet {
     struct Facet {
         address facetAddress;

@@ -4,8 +4,8 @@ pragma solidity ^0.8.28;
 import "forge-std/Script.sol";
 import "forge-std/console.sol";
 
-import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
+import {IDiamondUpgradeFacet} from "../src/interfaces/IDiamondUpgradeFacet.sol";
 import {IERC173} from "../src/interfaces/IERC173.sol";
 import {VersionFacet} from "../src/facets/VersionFacet.sol";
 import {GetterFacet} from "../src/facets/GetterFacet.sol";
@@ -22,13 +22,13 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 /// - DEV_PRIVATE_KEY: EOA key used to deploy the new facet.
 ///   - For direct upgrades (EOA-owner diamonds), this key must also be the diamond `owner()`.
 ///   - For multisig-owned diamonds, this key can be any funded dev EOA.
-/// - PREPARE_MULTISIG: If "true", deploys the new facet and prints Safe-ready `diamondCut` calldata.
+/// - PREPARE_MULTISIG: If "true", deploys the new facet and prints Safe-ready `upgradeDiamond` calldata.
 /// - PRINT_SETVERSION: If "true", prints Safe-ready `setVersion(VERSION_STRING, implementationId)` calldata.
 ///
 /// Operational gotchas:
 /// - PREPARE_MULTISIG requires `--broadcast` to produce a real on-chain facet address. Without broadcast the
 ///   deployment is only simulated and the printed calldata will not work in the Safe.
-/// - PRINT_SETVERSION must be run AFTER the multisig executed `diamondCut`, otherwise the computed
+/// - PRINT_SETVERSION must be run AFTER the multisig executed `upgradeDiamond`, otherwise the computed
 ///   `implementationId` will correspond to the pre-upgrade diamond state.
 ///
 /// Commands (3 modes):
@@ -37,7 +37,7 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 ///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
 ///      --rpc-url $SEPOLIA_RPC_URL --broadcast --private-key $DEV_PRIVATE_KEY -vvvv
 ///
-/// 2) Multisig step 1 (deploy facet + print `diamondCut` calldata for the Safe):
+/// 2) Multisig step 1 (deploy facet + print `upgradeDiamond` calldata for the Safe):
 ///    VERSION_STRING="1.0.1" PREPARE_MULTISIG=true DEV_PRIVATE_KEY=$DEV_PRIVATE_KEY \
 ///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
 ///      --rpc-url $SEPOLIA_RPC_URL --broadcast --private-key $DEV_PRIVATE_KEY -vvvv
@@ -47,7 +47,7 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 ///      forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
 ///      --rpc-url $SEPOLIA_RPC_URL -vvvv
 contract UpgradeDiamond is Script {
-    // Sepolia deployment (EIP-2535 diamond)
+    // Sepolia deployment
     address internal constant SEPOLIA_DIAMOND_ADDRESS = 0xF422A7779D2feB884CcC1773b88d98494A946604;
 
     address public diamondAddress;
@@ -148,7 +148,7 @@ contract UpgradeDiamond is Script {
         console.log("\nComputed implementationId:");
         console.logBytes32(implementationId);
         console.log(
-            "\nNote: run this AFTER the multisig has executed diamondCut, otherwise the implementationId will be for the pre-upgrade state."
+            "\nNote: run this AFTER the multisig has executed upgradeDiamond, otherwise the implementationId will be for the pre-upgrade state."
         );
     }
 
@@ -212,23 +212,25 @@ contract UpgradeDiamond is Script {
             require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
         }
 
-        // Prepare the cut
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(ideationMarketFacet),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: marketSelectors
-        });
-
-        cuts[1] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(getterFacet),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: getterSelectors
-        });
+        // Prepare ERC-8109 replace batch
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns = new IDiamondUpgradeFacet.FacetFunctions[](2);
+        replaceFns[0] =
+            IDiamondUpgradeFacet.FacetFunctions({facet: address(ideationMarketFacet), selectors: marketSelectors});
+        replaceFns[1] = IDiamondUpgradeFacet.FacetFunctions({facet: address(getterFacet), selectors: getterSelectors});
 
         // Execute
-        IDiamondCutFacet(diamondAddress).diamondCut(cuts, address(0), "");
-        console.log("Diamond cut executed (IdeationMarketFacet and GetterFacet selectors updated)");
+        IDiamondUpgradeFacet(diamondAddress).upgradeDiamond(
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            replaceFns,
+            new bytes4[](0),
+            address(0),
+            bytes(""),
+            bytes32(0),
+            bytes("")
+        );
+        console.log(
+            "Diamond upgrade executed via upgradeDiamond (IdeationMarketFacet and GetterFacet selectors updated)"
+        );
 
         // Post-check: ensure routing updated
         for (uint256 i = 0; i < marketSelectors.length; i++) {
@@ -239,7 +241,7 @@ contract UpgradeDiamond is Script {
     }
 
     /// @notice Deploys the new facet and prints the calldata for a multisig owner to execute.
-    /// @dev This intentionally does not call `diamondCut` or `setVersion`.
+    /// @dev This intentionally does not call `upgradeDiamond` or `setVersion`.
     function performUpgradePrepareMultisig() internal {
         // Deploy new facet
         IdeationMarketFacet ideationMarketFacet = new IdeationMarketFacet();
@@ -296,32 +298,32 @@ contract UpgradeDiamond is Script {
             require(currentFacet != address(0), "UpgradeDiamond: selector not found on diamond");
         }
 
-        // Build the cut and encode calldata
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(ideationMarketFacet),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: marketSelectors
-        });
+        // Build replace batch and encode calldata for ERC-8109 upgradeDiamond
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns = new IDiamondUpgradeFacet.FacetFunctions[](2);
+        replaceFns[0] =
+            IDiamondUpgradeFacet.FacetFunctions({facet: address(ideationMarketFacet), selectors: marketSelectors});
+        replaceFns[1] = IDiamondUpgradeFacet.FacetFunctions({facet: address(getterFacet), selectors: getterSelectors});
 
-        cuts[1] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(getterFacet),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: getterSelectors
-        });
-
-        bytes memory diamondCutCalldata =
-            abi.encodeWithSelector(IDiamondCutFacet.diamondCut.selector, cuts, address(0), bytes(""));
+        bytes memory diamondUpgradeCalldata = abi.encodeWithSelector(
+            IDiamondUpgradeFacet.upgradeDiamond.selector,
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            replaceFns,
+            new bytes4[](0),
+            address(0),
+            bytes(""),
+            bytes32(0),
+            bytes("")
+        );
 
         console.log("\n=== Multisig Transaction ===");
         console.log("To (diamond):", diamondAddress);
         console.log("Value:", uint256(0));
-        console.log("Data (diamondCut):");
-        console.logBytes(diamondCutCalldata);
+        console.log("Data (upgradeDiamond):");
+        console.logBytes(diamondUpgradeCalldata);
 
-        console.log("\nNote: setVersion must be executed separately after the cut.");
+        console.log("\nNote: setVersion must be executed separately after the upgrade.");
         console.log(
-            "After multisig executes diamondCut, run this script again WITHOUT PREPARE_MULTISIG to compute implementationId and setVersion (or add a separate multisig tx calling VersionFacet.setVersion)."
+            "After multisig executes upgradeDiamond, run this script again WITHOUT PREPARE_MULTISIG to compute implementationId and setVersion (or add a separate multisig tx calling VersionFacet.setVersion)."
         );
     }
 

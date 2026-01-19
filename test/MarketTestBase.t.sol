@@ -6,7 +6,7 @@ import "forge-std/Test.sol";
 // Facets and library imports from the marketplace project
 import "../src/IdeationMarketDiamond.sol";
 import "../src/upgradeInitializers/DiamondInit.sol";
-import "../src/facets/DiamondCutFacet.sol";
+import "../src/facets/DiamondUpgradeFacet.sol";
 import "../src/facets/DiamondLoupeFacet.sol";
 import "../src/facets/OwnershipFacet.sol";
 import "../src/facets/IdeationMarketFacet.sol";
@@ -16,8 +16,9 @@ import "../src/facets/CurrencyWhitelistFacet.sol";
 import "../src/facets/PauseFacet.sol";
 import "../src/facets/VersionFacet.sol";
 import "../src/facets/GetterFacet.sol";
-import "../src/interfaces/IDiamondCutFacet.sol";
 import "../src/interfaces/IDiamondLoupeFacet.sol";
+import "../src/interfaces/IDiamondInspectFacet.sol";
+import "../src/interfaces/IDiamondUpgradeFacet.sol";
 import "../src/interfaces/IERC165.sol";
 import "../src/interfaces/IERC173.sol";
 import "../src/interfaces/IERC721.sol";
@@ -44,10 +45,10 @@ abstract contract MarketTestBase is Test {
     VersionFacet internal versionFacet;
     GetterFacet internal getter;
 
-    // Address of the initial diamondCut facet deployed in setUp
-    address internal diamondCutFacetAddr;
+    // Address of the initial upgrade facet deployed in setUp
+    address internal diamondUpgradeFacetAddr;
 
-    // Raw facet implementation addresses (useful for diamondCut edge tests)
+    // Raw facet implementation addresses (useful for upgrade edge tests)
     address internal loupeImpl;
     address internal ownershipImpl;
     address internal marketImpl;
@@ -84,7 +85,7 @@ abstract contract MarketTestBase is Test {
 
         // Deploy initializer and facet contracts
         DiamondInit init = new DiamondInit();
-        DiamondCutFacet cutFacet = new DiamondCutFacet();
+        DiamondUpgradeFacet upgradeFacet = new DiamondUpgradeFacet();
         DiamondLoupeFacet loupeFacet = new DiamondLoupeFacet();
         OwnershipFacet ownershipFacet = new OwnershipFacet();
         IdeationMarketFacet marketFacet = new IdeationMarketFacet();
@@ -95,38 +96,31 @@ abstract contract MarketTestBase is Test {
         VersionFacet versionFacetImpl = new VersionFacet();
         GetterFacet getterFacet = new GetterFacet();
 
-        // Deploy the diamond and add the initial diamondCut function
-        diamond = new IdeationMarketDiamond(owner, address(cutFacet));
+        // Deploy the diamond and add the initial ERC-8109 upgradeDiamond function
+        diamond = new IdeationMarketDiamond(owner, address(upgradeFacet));
 
-        // Cache diamondCut facet address for later assertions
-        diamondCutFacetAddr = address(cutFacet);
+        // Cache upgrade facet address for later assertions
+        diamondUpgradeFacetAddr = address(upgradeFacet);
 
-        // Prepare facet cut definitions matching the deploy script
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](9);
+        // Prepare initial facet additions matching the deploy script
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns = new IDiamondUpgradeFacet.FacetFunctions[](9);
 
-        // Diamond Loupe selectors
-        bytes4[] memory loupeSelectors = new bytes4[](5);
+        // Diamond Loupe selectors (+ ERC-8109 inspect)
+        bytes4[] memory loupeSelectors = new bytes4[](6);
         loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
         loupeSelectors[1] = IDiamondLoupeFacet.facetFunctionSelectors.selector;
         loupeSelectors[2] = IDiamondLoupeFacet.facetAddresses.selector;
         loupeSelectors[3] = IDiamondLoupeFacet.facetAddress.selector;
         loupeSelectors[4] = IERC165.supportsInterface.selector;
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(loupeFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: loupeSelectors
-        });
+        loupeSelectors[5] = IDiamondInspectFacet.functionFacetPairs.selector;
+        addFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: address(loupeFacet), selectors: loupeSelectors});
 
         // Ownership selectors, including acceptOwnership from the OwnershipFacet
         bytes4[] memory ownershipSelectors = new bytes4[](3);
         ownershipSelectors[0] = IERC173.owner.selector;
         ownershipSelectors[1] = IERC173.transferOwnership.selector;
         ownershipSelectors[2] = OwnershipFacet.acceptOwnership.selector;
-        cuts[1] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(ownershipFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: ownershipSelectors
-        });
+        addFns[1] = IDiamondUpgradeFacet.FacetFunctions({facet: address(ownershipFacet), selectors: ownershipSelectors});
 
         // Marketplace selectors
         bytes4[] memory marketSelectors = new bytes4[](6);
@@ -136,11 +130,7 @@ abstract contract MarketTestBase is Test {
         marketSelectors[3] = IdeationMarketFacet.updateListing.selector;
         marketSelectors[4] = IdeationMarketFacet.setInnovationFee.selector;
         marketSelectors[5] = IdeationMarketFacet.cleanListing.selector;
-        cuts[2] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(marketFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: marketSelectors
-        });
+        addFns[2] = IDiamondUpgradeFacet.FacetFunctions({facet: address(marketFacet), selectors: marketSelectors});
 
         // Collection whitelist selectors
         bytes4[] memory collectionSelectors = new bytes4[](4);
@@ -148,31 +138,20 @@ abstract contract MarketTestBase is Test {
         collectionSelectors[1] = CollectionWhitelistFacet.removeWhitelistedCollection.selector;
         collectionSelectors[2] = CollectionWhitelistFacet.batchAddWhitelistedCollections.selector;
         collectionSelectors[3] = CollectionWhitelistFacet.batchRemoveWhitelistedCollections.selector;
-        cuts[3] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(collectionFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: collectionSelectors
-        });
+        addFns[3] =
+            IDiamondUpgradeFacet.FacetFunctions({facet: address(collectionFacet), selectors: collectionSelectors});
 
         // Buyer whitelist selectors
         bytes4[] memory buyerSelectors = new bytes4[](2);
         buyerSelectors[0] = BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector;
         buyerSelectors[1] = BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector;
-        cuts[4] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(buyerFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: buyerSelectors
-        });
+        addFns[4] = IDiamondUpgradeFacet.FacetFunctions({facet: address(buyerFacet), selectors: buyerSelectors});
 
         // Currency whitelist selectors
         bytes4[] memory currencySelectors = new bytes4[](2);
         currencySelectors[0] = CurrencyWhitelistFacet.addAllowedCurrency.selector;
         currencySelectors[1] = CurrencyWhitelistFacet.removeAllowedCurrency.selector;
-        cuts[5] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(currencyFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: currencySelectors
-        });
+        addFns[5] = IDiamondUpgradeFacet.FacetFunctions({facet: address(currencyFacet), selectors: currencySelectors});
 
         // Getter selectors (add all view functions exposed by GetterFacet)
         bytes4[] memory getterSelectors = new bytes4[](18);
@@ -194,34 +173,28 @@ abstract contract MarketTestBase is Test {
         getterSelectors[15] = GetterFacet.getPreviousVersion.selector;
         getterSelectors[16] = GetterFacet.getVersionString.selector;
         getterSelectors[17] = GetterFacet.getImplementationId.selector;
-        cuts[6] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(getterFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: getterSelectors
-        });
+        addFns[6] = IDiamondUpgradeFacet.FacetFunctions({facet: address(getterFacet), selectors: getterSelectors});
 
         // PauseFacet selectors
         bytes4[] memory pauseSelectors = new bytes4[](2);
         pauseSelectors[0] = PauseFacet.pause.selector;
         pauseSelectors[1] = PauseFacet.unpause.selector;
-        cuts[7] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(pauseFacetImpl),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: pauseSelectors
-        });
+        addFns[7] = IDiamondUpgradeFacet.FacetFunctions({facet: address(pauseFacetImpl), selectors: pauseSelectors});
 
         // VersionFacet selectors (setVersion only - getters are in GetterFacet)
         bytes4[] memory versionSelectors = new bytes4[](1);
         versionSelectors[0] = VersionFacet.setVersion.selector;
-        cuts[8] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(versionFacetImpl),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: versionSelectors
-        });
+        addFns[8] = IDiamondUpgradeFacet.FacetFunctions({facet: address(versionFacetImpl), selectors: versionSelectors});
 
-        // Execute diamond cut and initializer
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts, address(init), abi.encodeCall(DiamondInit.init, (INNOVATION_FEE, MAX_BATCH))
+        // Execute ERC-8109 upgrade and initializer
+        IDiamondUpgradeFacet(address(diamond)).upgradeDiamond(
+            addFns,
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new bytes4[](0),
+            address(init),
+            abi.encodeCall(DiamondInit.init, (INNOVATION_FEE, MAX_BATCH)),
+            bytes32(0),
+            bytes("")
         );
 
         // Note: DiamondInit.init() already initializes 76 allowed currencies including ETH
@@ -380,23 +353,77 @@ abstract contract MarketTestBase is Test {
         return false;
     }
 
-    function _diamondCutSingle(address facet, IDiamondCutFacet.FacetCutAction action, bytes4 selector) internal {
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
+    function _upgradeAddSelector(address facet, bytes4 selector) internal {
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = selector;
+        addFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: facet, selectors: selectors});
+        _upgradeDiamond(addFns, new IDiamondUpgradeFacet.FacetFunctions[](0), new bytes4[](0), address(0), "");
+    }
 
-        cuts[0] = IDiamondCutFacet.FacetCut({facetAddress: facet, action: action, functionSelectors: selectors});
+    function _upgradeAddSelectors(address facet, bytes4[] memory selectors) internal {
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
+        addFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: facet, selectors: selectors});
+        _upgradeDiamond(addFns, new IDiamondUpgradeFacet.FacetFunctions[](0), new bytes4[](0), address(0), "");
+    }
 
+    function _upgradeReplaceSelector(address facet, bytes4 selector) internal {
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
+        bytes4[] memory selectors = new bytes4[](1);
+        selectors[0] = selector;
+        replaceFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: facet, selectors: selectors});
+        _upgradeDiamond(new IDiamondUpgradeFacet.FacetFunctions[](0), replaceFns, new bytes4[](0), address(0), "");
+    }
+
+    function _upgradeReplaceSelectors(address facet, bytes4[] memory selectors) internal {
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
+        replaceFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: facet, selectors: selectors});
+        _upgradeDiamond(new IDiamondUpgradeFacet.FacetFunctions[](0), replaceFns, new bytes4[](0), address(0), "");
+    }
+
+    function _upgradeRemoveSelector(bytes4 selector) internal {
+        bytes4[] memory removeSelectors = new bytes4[](1);
+        removeSelectors[0] = selector;
+        _upgradeDiamond(
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            removeSelectors,
+            address(0),
+            ""
+        );
+    }
+
+    function _upgradeRemoveSelectors(bytes4[] memory selectors) internal {
+        _upgradeDiamond(
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            selectors,
+            address(0),
+            ""
+        );
+    }
+
+    function _upgradeNoopWithInit(address delegate, bytes memory functionCall) internal {
+        _upgradeDiamond(
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new bytes4[](0),
+            delegate,
+            functionCall
+        );
+    }
+
+    function _upgradeDiamond(
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns,
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns,
+        bytes4[] memory removeSelectors,
+        address delegate,
+        bytes memory functionCall
+    ) internal {
         vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
-    }
-
-    function _diamondCutAddSelector(address facet, bytes4 selector) internal {
-        _diamondCutSingle(facet, IDiamondCutFacet.FacetCutAction.Add, selector);
-    }
-
-    function _diamondCutReplaceSelector(address facet, bytes4 selector) internal {
-        _diamondCutSingle(facet, IDiamondCutFacet.FacetCutAction.Replace, selector);
+        IDiamondUpgradeFacet(address(diamond)).upgradeDiamond(
+            addFns, replaceFns, removeSelectors, delegate, functionCall, bytes32(0), bytes("")
+        );
     }
 
     function _createERC721ListingWithCurrency(address currency, uint256 price, uint256 tokenId)

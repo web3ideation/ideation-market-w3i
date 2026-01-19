@@ -171,20 +171,12 @@ contract StorageCollisionTest is MarketTestBase {
         // Deploy malicious facet that directly writes to AppStorage
         BadFacetAppSmash bad = new BadFacetAppSmash();
 
-        // Prepare diamondCut to add malicious facet
+        // Prepare upgrade to add malicious facet
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = BadFacetAppSmash.smash.selector;
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(bad),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: selectors
-        });
-
-        // Execute cut (as owner)
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        // Execute upgrade (as owner)
+        _upgradeAddSelectors(address(bad), selectors);
 
         // Call malicious smash function through diamond
         (bool ok,) =

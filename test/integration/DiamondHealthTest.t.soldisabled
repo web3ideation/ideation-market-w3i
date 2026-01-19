@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 
-// EIP-2535 loupe (subset)
+// Diamond loupe (subset)
 interface IDiamondLoupe {
     struct Facet {
         address facetAddress;

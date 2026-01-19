@@ -845,20 +845,16 @@ contract AttackVectorTest is MarketTestBase {
         pauseFacet.pause();
     }
 
-    /// @notice Malicious initializer cannot escalate privileges during diamondCut
-    function testDiamondCut_MaliciousInitializerCannotEscalate() public {
+    /// @notice Malicious initializer cannot escalate privileges during upgradeDiamond
+    function testUpgradeDiamond_MaliciousInitializerCannotEscalate() public {
         address ownerBefore = IERC173(address(diamond)).owner();
         uint32 feeBefore = getter.getInnovationFee();
 
         MaliciousInitTryAdmin bad = new MaliciousInitTryAdmin();
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-
         // The initializer swallows its own failures and returns successfully.
-        // diamondCut should succeed, but state (owner/fee) must be unchanged.
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts,
+        // upgradeDiamond should succeed, but state (owner/fee) must be unchanged.
+        _upgradeNoopWithInit(
             address(bad),
             abi.encodeWithSelector(MaliciousInitTryAdmin.initTryAdmin.selector, vm.addr(0xBEEF), uint32(999_999))
         );
@@ -878,18 +874,10 @@ contract AttackVectorTest is MarketTestBase {
         // Deploy and cut-in malicious facet
         BadFacetAppSmash bad = new BadFacetAppSmash();
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](1);
         sels[0] = BadFacetAppSmash.smash.selector;
 
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(bad),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        _upgradeAddSelectors(address(bad), sels);
 
         // Call the malicious function through the diamond
         uint32 newFee = fee0 + 1;

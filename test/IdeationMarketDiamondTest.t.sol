@@ -32,24 +32,28 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         assertEq(getter.getContractOwner(), owner);
         // Initially there is no pending owner
         assertEq(getter.getPendingOwner(), address(0));
+        // Verify that the upgradeDiamond selector maps to the original upgrade facet
+        address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
+        assertEq(upgradeAddr, diamondUpgradeFacetAddr);
     }
 
     function testDiamondLoupeFacets() public view {
         // The diamond should have the cut facet plus six additional facets = 7
         IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
-        // After deployment the diamond has the diamondCut facet plus nine added facets (including CurrencyWhitelistFacet)
+        // After deployment the diamond has the upgrade facet plus nine added facets (including CurrencyWhitelistFacet)
         assertEq(facetInfo.length, 10); // Updated: Added PauseFacet, VersionFacet, and CurrencyWhitelistFacet
 
-        // Verify that the diamondCut selector maps to the original cut facet
-        address cutAddr = loupe.facetAddress(IDiamondCutFacet.diamondCut.selector);
-        assertEq(cutAddr, diamondCutFacetAddr);
+        // Verify that the upgradeDiamond selector maps to the original upgrade facet
+        address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
+        assertEq(upgradeAddr, diamondUpgradeFacetAddr);
     }
 
     function testSupportsInterface() public view {
-        // Diamond supports ERC165, cut, loupe and ownership interfaces set in initializer
+        // Diamond supports ERC165, upgrade, loupe/inspect and ownership interfaces set in initializer
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC165).interfaceId));
-        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondCutFacet).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondUpgradeFacet).interfaceId));
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondLoupeFacet).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondInspectFacet).interfaceId));
         assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC173).interfaceId));
         // NFT interfaces also registered
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC721).interfaceId));

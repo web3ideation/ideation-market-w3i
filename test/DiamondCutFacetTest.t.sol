@@ -5,97 +5,63 @@ import "./MarketTestBase.t.sol";
 
 contract DiamondCutFacetTest is MarketTestBase {
     // ---------------------------------------------------------------------
-    // 1) DiamondCut event payload: exact struct array, _init, _calldata
+    // 1) ERC-8109 per-selector events emitted on upgrade
     // ---------------------------------------------------------------------
-    function testDiamondCut_EmitsExactPayload() public {
+    function testUpgradeDiamond_EmitsPerSelectorAddedEvent() public {
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
 
-        IDiamondCutFacet.FacetCut[] memory expectedCuts = new IDiamondCutFacet.FacetCut[](1);
-        bytes4[] memory selectors = new bytes4[](1);
-        selectors[0] = IDummyUpgrade.dummyFunction.selector;
-
-        expectedCuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v1),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: selectors
-        });
-
-        // Record logs around the diamondCut call
+        // Record logs around the upgradeDiamond call
         vm.recordLogs();
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(expectedCuts, address(0), "");
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        // topic0 = keccak256("DiamondCut((address,uint8,bytes4[])[],address,bytes)")
-        bytes32 topic0 = keccak256("DiamondCut((address,uint8,bytes4[])[],address,bytes)");
+        // topic0 = keccak256("DiamondFunctionAdded(bytes4,address)")
+        bytes32 topic0 = keccak256("DiamondFunctionAdded(bytes4,address)");
 
         bool found;
         for (uint256 i = 0; i < logs.length; i++) {
-            if (logs[i].emitter == address(diamond) && logs[i].topics.length > 0 && logs[i].topics[0] == topic0) {
-                (IDiamondCutFacet.FacetCut[] memory gotCuts, address init, bytes memory data) =
-                    abi.decode(logs[i].data, (IDiamondCutFacet.FacetCut[], address, bytes));
-
-                // Verify _init and _calldata
-                assertEq(init, address(0));
-                assertEq(data.length, 0);
-
-                // Verify the cuts payload matches exactly
-                assertEq(gotCuts.length, expectedCuts.length);
-                for (uint256 j = 0; j < gotCuts.length; j++) {
-                    assertEq(gotCuts[j].facetAddress, expectedCuts[j].facetAddress);
-                    assertEq(uint256(gotCuts[j].action), uint256(expectedCuts[j].action));
-                    assertEq(gotCuts[j].functionSelectors.length, expectedCuts[j].functionSelectors.length);
-                    for (uint256 k = 0; k < gotCuts[j].functionSelectors.length; k++) {
-                        // compare as bytes32 to avoid type overloading issues
-                        assertEq(
-                            bytes32(gotCuts[j].functionSelectors[k]), bytes32(expectedCuts[j].functionSelectors[k])
-                        );
-                    }
-                }
+            if (
+                logs[i].emitter == address(diamond) && logs[i].topics.length == 3 && logs[i].topics[0] == topic0
+                    && logs[i].topics[1] == bytes32(IDummyUpgrade.dummyFunction.selector)
+                    && logs[i].topics[2] == bytes32(uint256(uint160(address(v1))))
+            ) {
+                // Indexed topics fully describe the event; no data payload.
+                assertEq(logs[i].data.length, 0);
                 found = true;
                 break;
             }
         }
-        assertTrue(found, "DiamondCut event not found");
+        assertTrue(found, "DiamondFunctionAdded event not found");
     }
 
     // ---------------------------------------------------------------------
     // 2) Batch atomicity: later failing op reverts whole cut (no partial state)
     // ---------------------------------------------------------------------
-    function testDiamondCut_BatchAtomicity_WhenLaterOpFails() public {
+    function testUpgradeDiamond_IsAtomic_WhenRemovePhaseFails() public {
         // Baseline: add V1 and confirm behavior is 100
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
-        _diamondCutAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
         assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
 
-        // Prepare a batch: [Replace OK, Remove FAIL (non-zero facetAddress)]
+        // Prepare a batch: [Replace OK, Remove FAIL (non-existent selector)]
         DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](2);
-
         // Replace to V2 (valid)
+        IDiamondUpgradeFacet.FacetFunctions[] memory replaceFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
         bytes4[] memory selReplace = new bytes4[](1);
         selReplace[0] = IDummyUpgrade.dummyFunction.selector;
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v2),
-            action: IDiamondCutFacet.FacetCutAction.Replace,
-            functionSelectors: selReplace
-        });
+        replaceFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: address(v2), selectors: selReplace});
 
-        // Remove (invalid because facetAddress must be address(0))
+        // Remove non-existent selector (must revert)
         bytes4[] memory selRemove = new bytes4[](1);
-        selRemove[0] = IDummyUpgrade.dummyFunction.selector;
-        cuts[1] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0xBEEF), // non-zero → should revert in removeFunctions
-            action: IDiamondCutFacet.FacetCutAction.Remove,
-            functionSelectors: selRemove
-        });
+        selRemove[0] = bytes4(0xDEADBEEF);
 
         // Expect revert and ensure entire batch has no effect
-        vm.prank(owner);
-        vm.expectRevert(bytes("LibDiamondCut: Remove facet address must be address(0)"));
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        vm.expectRevert(
+            abi.encodeWithSelector(IDiamondUpgradeFacet.CannotRemoveFunctionThatDoesNotExist.selector, selRemove[0])
+        );
+        _upgradeDiamond(new IDiamondUpgradeFacet.FacetFunctions[](0), replaceFns, selRemove, address(0), "");
 
         // Still V1
         assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
@@ -113,11 +79,11 @@ contract DiamondCutFacetTest is MarketTestBase {
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
         DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
-        _diamondCutAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
         assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
         assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v1));
 
-        _diamondCutReplaceSelector(address(v2), IDummyUpgrade.dummyFunction.selector);
+        _upgradeReplaceSelector(address(v2), IDummyUpgrade.dummyFunction.selector);
         assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 200);
         assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v2));
     }
@@ -129,10 +95,10 @@ contract DiamondCutFacetTest is MarketTestBase {
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
         DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
 
-        _diamondCutAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
         assertTrue(_contains(loupe.facetAddresses(), address(v1)));
 
-        _diamondCutReplaceSelector(address(v2), IDummyUpgrade.dummyFunction.selector);
+        _upgradeReplaceSelector(address(v2), IDummyUpgrade.dummyFunction.selector);
 
         // After replace, V1 had only one selector; it should be removed from facetAddresses
         address[] memory facets = loupe.facetAddresses();
@@ -292,7 +258,7 @@ contract DiamondCutFacetTest is MarketTestBase {
     }
 
     // ---------------------------------------------------------------------
-    // 6) Init-only diamondCut: no facet changes, initializer mutates storage
+    // 6) Init-only upgrade: no facet changes, initializer mutates storage
     // ---------------------------------------------------------------------
     function testDiamondCut_InitOnly_CallsInitializerAndMutatesStorage() public {
         uint32 prev = getter.getInnovationFee();
@@ -303,12 +269,7 @@ contract DiamondCutFacetTest is MarketTestBase {
         InitWriteFee init = new InitWriteFee();
 
         // No facet changes; just run _init
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts, address(init), abi.encodeWithSelector(InitWriteFee.initSetFee.selector, uint32(4242))
-        );
+        _upgradeNoopWithInit(address(init), abi.encodeWithSelector(InitWriteFee.initSetFee.selector, uint32(4242)));
 
         assertEq(getter.getInnovationFee(), 4242, "init-only call did not apply");
         // Facet set unchanged
@@ -322,10 +283,8 @@ contract DiamondCutFacetTest is MarketTestBase {
     function testDiamondCut_InitGuard_AllowsCorrectLayout() public {
         LayoutGuardInitGood good = new LayoutGuardInitGood();
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts, address(good), abi.encodeWithSelector(LayoutGuardInitGood.initCheckLayout.selector, uint32(42_42))
+        _upgradeNoopWithInit(
+            address(good), abi.encodeWithSelector(LayoutGuardInitGood.initCheckLayout.selector, uint32(42_42))
         );
         assertEq(getter.getInnovationFee(), INNOVATION_FEE);
     }
@@ -337,37 +296,30 @@ contract DiamondCutFacetTest is MarketTestBase {
         uint32 prev = getter.getInnovationFee();
         uint32 marker = prev ^ 0xBEEF; // guaranteed != prev
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](0);
-        vm.prank(owner);
         vm.expectRevert(LayoutGuardInitBad.LayoutMismatch.selector);
-        IDiamondCutFacet(address(diamond)).diamondCut(
-            cuts, address(bad), abi.encodeWithSelector(LayoutGuardInitBad.initCheckLayout.selector, marker)
-        );
+        _upgradeNoopWithInit(address(bad), abi.encodeWithSelector(LayoutGuardInitBad.initCheckLayout.selector, marker));
     }
 
     // ---------------------------------------------------------------------
-    // 8) Owner authorization: only contract owner can call diamondCut
+    // 8) Owner authorization: only contract owner can call upgrade
     // ---------------------------------------------------------------------
     function testDiamondCut_OnlyOwnerCanCall() public {
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
         bytes4[] memory sels = new bytes4[](1);
         sels[0] = DummyUpgradeFacetV1.dummyFunction.selector;
 
-        IDiamondCutFacet.FacetCut[] memory addCut = new IDiamondCutFacet.FacetCut[](1);
-        addCut[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(v1),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns = new IDiamondUpgradeFacet.FacetFunctions[](1);
+        addFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: address(v1), selectors: sels});
 
-        // Non-owner cannot call diamondCut
+        // Non-owner cannot call upgrade
         vm.prank(buyer);
         vm.expectRevert("LibDiamond: Must be contract owner");
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+        IDiamondUpgradeFacet(address(diamond)).upgradeDiamond(
+            addFns, new IDiamondUpgradeFacet.FacetFunctions[](0), new bytes4[](0), address(0), "", bytes32(0), bytes("")
+        );
 
-        // Owner can successfully call diamondCut
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(addCut, address(0), "");
+        // Owner can successfully call upgrade
+        _upgradeAddSelectors(address(v1), sels);
 
         // Verify the facet was added
         (bool ok, bytes memory ret) =
@@ -379,29 +331,21 @@ contract DiamondCutFacetTest is MarketTestBase {
     function testDiamondCut_RemoveFacet_MakesSelectorUncallable() public {
         // 1) Add V1 and prove callable
         DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
-        _diamondCutAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
         assertEq(IDummyUpgrade(address(diamond)).dummyFunction(), 100);
         assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(v1));
 
         // 2) Remove the selector properly
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory selectors = new bytes4[](1);
         selectors[0] = IDummyUpgrade.dummyFunction.selector;
 
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0), // REQUIRED for Remove
-            action: IDiamondCutFacet.FacetCutAction.Remove,
-            functionSelectors: selectors
-        });
-
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        _upgradeRemoveSelectors(selectors);
 
         // 3) Loupe now returns zero for this selector
         assertEq(loupe.facetAddress(IDummyUpgrade.dummyFunction.selector), address(0));
 
         // 4) Calling removed function reverts via diamond fallback
-        vm.expectRevert();
+        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
         IDummyUpgrade(address(diamond)).dummyFunction();
 
         // 4b) Raw call also fails
@@ -425,17 +369,10 @@ contract DiamondCutFacetTest is MarketTestBase {
         DualFacet dual = new DualFacet();
 
         // Add both selectors
-        IDiamondCutFacet.FacetCut[] memory add = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory sels = new bytes4[](2);
         sels[0] = DualFacet.a.selector;
         sels[1] = DualFacet.b.selector;
-        add[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(dual),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: sels
-        });
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(add, address(0), "");
+        _upgradeAddSelectors(address(dual), sels);
 
         // Prove both callable
         (bool okA, bytes memory ra) = address(diamond).call(abi.encodeWithSelector(DualFacet.a.selector));
@@ -445,21 +382,14 @@ contract DiamondCutFacetTest is MarketTestBase {
         assertEq(abi.decode(rb, (uint256)), 22);
 
         // Remove only 'a'
-        IDiamondCutFacet.FacetCut[] memory rem = new IDiamondCutFacet.FacetCut[](1);
         bytes4[] memory one = new bytes4[](1);
         one[0] = DualFacet.a.selector;
-        rem[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(0),
-            action: IDiamondCutFacet.FacetCutAction.Remove,
-            functionSelectors: one
-        });
-        vm.prank(owner);
-        IDiamondCutFacet(address(diamond)).diamondCut(rem, address(0), "");
+        _upgradeRemoveSelectors(one);
 
         // 'a' gone, 'b' remains and facet not pruned
         assertEq(loupe.facetAddress(DualFacet.a.selector), address(0));
-        (okA,) = address(diamond).call(abi.encodeWithSelector(DualFacet.a.selector));
-        assertFalse(okA, "removed selector still callable");
+        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
+        DualFacet(address(diamond)).a();
 
         address facB = loupe.facetAddress(DualFacet.b.selector);
         assertEq(facB, address(dual), "remaining selector moved unexpectedly");

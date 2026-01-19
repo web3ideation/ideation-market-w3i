@@ -7,7 +7,7 @@ import "forge-std/console.sol";
 import {IdeationMarketDiamond} from "../src/IdeationMarketDiamond.sol";
 import {DiamondInit} from "../src/upgradeInitializers/DiamondInit.sol";
 
-import {DiamondCutFacet} from "../src/facets/DiamondCutFacet.sol";
+import {DiamondUpgradeFacet} from "../src/facets/DiamondUpgradeFacet.sol";
 import {DiamondLoupeFacet} from "../src/facets/DiamondLoupeFacet.sol";
 import {OwnershipFacet} from "../src/facets/OwnershipFacet.sol";
 import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
@@ -18,8 +18,9 @@ import {CurrencyWhitelistFacet} from "../src/facets/CurrencyWhitelistFacet.sol";
 import {VersionFacet} from "../src/facets/VersionFacet.sol";
 import {PauseFacet} from "../src/facets/PauseFacet.sol";
 
-import {IDiamondCutFacet} from "../src/interfaces/IDiamondCutFacet.sol";
 import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
+import {IDiamondInspectFacet} from "../src/interfaces/IDiamondInspectFacet.sol";
+import {IDiamondUpgradeFacet} from "../src/interfaces/IDiamondUpgradeFacet.sol";
 import {IERC165} from "../src/interfaces/IERC165.sol";
 import {IERC173} from "../src/interfaces/IERC173.sol";
 
@@ -27,11 +28,10 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 /// @notice Deploys the IdeationMarket Diamond and all facets, then initializes state via `DiamondInit.init`.
 /// @dev Run with Foundry (e.g., `forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url <URL> --broadcast`).
 /// Uses `vm.startBroadcast()`; the tx signer becomes the initial diamond owner.
-/// The script performs a diamondCut to add facet groups (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter,
-/// Currency WL, Version, Pause) on top of the initially deployed DiamondCut facet, then asserts there are exactly
-/// 10 facet addresses.
-/// @custom:security The script references `tx.origin` **only** in this off-chain deployment context to set the owner.
-/// Do not reuse this pattern inside on-chain contracts.
+/// The script performs an ERC-8109 `upgradeDiamond` to add facet groups (Loupe, Ownership, Market, Collection WL,
+/// Buyer WL, Getter, Currency WL, Version, Pause) on top of the initially deployed upgrade facet, then asserts
+/// there are exactly 10 facet addresses.
+/// @custom:security The script sets the initial owner from the broadcast EOA.
 contract DeployDiamond is Script {
     /// @notice Innovation/marketplace fee rate used during initialization.
     /// @dev Denominator is 100_000 (e.g., 1_000 = 1%). Passed to `DiamondInit.init`.
@@ -45,9 +45,9 @@ contract DeployDiamond is Script {
     /// @dev Set via environment variable VERSION_STRING, defaults to "1.0.0" if not set.
     string versionString;
 
-    /// @notice Deploys facets, the diamond, performs the diamond cut, and initializes storage.
+    /// @notice Deploys facets, the diamond, performs an ERC-8109 upgrade, and initializes storage.
     /// @dev Reverts if post-cut facet count isn’t 10 (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter,
-    /// Currency WL, Version, Pause, Cut).
+    /// Currency WL, Version, Pause, Upgrade).
     /// Emits Foundry `console.log` outputs with deployed addresses for traceability.
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
@@ -76,22 +76,23 @@ contract DeployDiamond is Script {
         console.log("Deployed versionFacet contract at address:", address(versionFacet));
         PauseFacet pauseFacet = new PauseFacet();
         console.log("Deployed pauseFacet contract at address:", address(pauseFacet));
-        DiamondCutFacet diamondCutFacet = new DiamondCutFacet();
-        console.log("Deployed diamondCutFacet contract at address:", address(diamondCutFacet));
+        DiamondUpgradeFacet diamondUpgradeFacet = new DiamondUpgradeFacet();
+        console.log("Deployed diamondUpgradeFacet contract at address:", address(diamondUpgradeFacet));
 
-        // Deploy the diamond with the initial facet cut for DiamondCutFacet
-        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(deployer, address(diamondCutFacet));
+        // Deploy the diamond with the initial upgrade facet (ERC-8109 upgradeDiamond)
+        IdeationMarketDiamond ideationMarketDiamond = new IdeationMarketDiamond(deployer, address(diamondUpgradeFacet));
         console.log("Deployed Diamond contract at address:", address(ideationMarketDiamond));
 
-        // Prepare an array of `cuts` that we want to upgrade our Diamond with.
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](9);
+        // Prepare add functions grouped by facet (ERC-8109)
+        IDiamondUpgradeFacet.FacetFunctions[] memory addFns = new IDiamondUpgradeFacet.FacetFunctions[](9);
 
-        bytes4[] memory loupeSelectors = new bytes4[](5);
+        bytes4[] memory loupeSelectors = new bytes4[](6);
         loupeSelectors[0] = IDiamondLoupeFacet.facets.selector;
         loupeSelectors[1] = IDiamondLoupeFacet.facetFunctionSelectors.selector;
         loupeSelectors[2] = IDiamondLoupeFacet.facetAddresses.selector;
         loupeSelectors[3] = IDiamondLoupeFacet.facetAddress.selector;
         loupeSelectors[4] = IERC165.supportsInterface.selector;
+        loupeSelectors[5] = IDiamondInspectFacet.functionFacetPairs.selector;
 
         bytes4[] memory ownershipSelectors = new bytes4[](3);
         ownershipSelectors[0] = IERC173.owner.selector;
@@ -143,74 +144,55 @@ contract DeployDiamond is Script {
         getterSelectors[16] = GetterFacet.getImplementationId.selector;
         getterSelectors[17] = GetterFacet.isPaused.selector;
 
-        // Populate the `cuts` array with all data needed for each `FacetCut` struct
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(diamondLoupeFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: loupeSelectors
+        addFns[0] = IDiamondUpgradeFacet.FacetFunctions({facet: address(diamondLoupeFacet), selectors: loupeSelectors});
+
+        addFns[1] = IDiamondUpgradeFacet.FacetFunctions({facet: address(ownershipFacet), selectors: ownershipSelectors});
+
+        addFns[2] =
+            IDiamondUpgradeFacet.FacetFunctions({facet: address(ideationMarketFacet), selectors: marketSelectors});
+
+        addFns[3] = IDiamondUpgradeFacet.FacetFunctions({
+            facet: address(collectionWhitelistFacet),
+            selectors: collectionWhitelistSelectors
         });
 
-        cuts[1] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(ownershipFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: ownershipSelectors
+        addFns[4] = IDiamondUpgradeFacet.FacetFunctions({
+            facet: address(buyerWhitelistFacet),
+            selectors: buyerWhitelistSelectors
         });
 
-        cuts[2] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(ideationMarketFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: marketSelectors
+        addFns[5] = IDiamondUpgradeFacet.FacetFunctions({facet: address(getterFacet), selectors: getterSelectors});
+
+        addFns[6] = IDiamondUpgradeFacet.FacetFunctions({
+            facet: address(currencyWhitelistFacet),
+            selectors: currencyWhitelistSelectors
         });
 
-        cuts[3] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(collectionWhitelistFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: collectionWhitelistSelectors
-        });
-
-        cuts[4] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(buyerWhitelistFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: buyerWhitelistSelectors
-        });
-
-        cuts[5] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(getterFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: getterSelectors
-        });
-
-        cuts[6] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(currencyWhitelistFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: currencyWhitelistSelectors
-        });
-
-        cuts[7] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(versionFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: versionSelectors
-        });
+        addFns[7] = IDiamondUpgradeFacet.FacetFunctions({facet: address(versionFacet), selectors: versionSelectors});
 
         bytes4[] memory pauseSelectors = new bytes4[](2);
         pauseSelectors[0] = PauseFacet.pause.selector;
         pauseSelectors[1] = PauseFacet.unpause.selector;
 
-        cuts[8] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(pauseFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: pauseSelectors
-        });
+        addFns[8] = IDiamondUpgradeFacet.FacetFunctions({facet: address(pauseFacet), selectors: pauseSelectors});
 
-        // Cut and initialize storage variables
-        IDiamondCutFacet(address(ideationMarketDiamond)).diamondCut(
-            cuts, address(diamondInit), abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize))
+        // Add functions and initialize storage variables
+        IDiamondUpgradeFacet(address(ideationMarketDiamond)).upgradeDiamond(
+            addFns,
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new bytes4[](0),
+            address(diamondInit),
+            abi.encodeCall(DiamondInit.init, (innovationFee, buyerWhitelistMaxBatchSize)),
+            bytes32(0),
+            bytes("")
         );
 
-        // Post-deployment sanity check for the total of the 10 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Version, Pause, Cut)
-        require(IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 10, "Diamond cut failed");
+        // Post-deployment sanity check for the total of the 10 facets (Loupe, Ownership, Market, Collection WL, Buyer WL, Getter, Currency WL, Version, Pause, Upgrade)
+        require(
+            IDiamondLoupeFacet(address(ideationMarketDiamond)).facetAddresses().length == 10, "Diamond upgrade failed"
+        );
 
-        console.log("Diamond cuts complete");
+        console.log("Diamond upgrade complete");
         console.log("Owner of Diamond:", IERC173(address(ideationMarketDiamond)).owner());
 
         // Automatically set the version

@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Based on Nick Mudge's EIP-2535 Diamond reference implementation (MIT).
-import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
+// Based on Nick Mudge's Diamond reference implementation pattern (MIT).
 
 error InitializationFunctionReverted(address _initializationContractAddress, bytes _calldata);
 
-/// @title LibDiamond (EIP-2535 core storage & cut helpers)
+/// @title LibDiamond (core storage & selector upgrade helpers)
 /// @notice Provides the shared diamond storage layout and internal helpers to add/replace/remove selectors.
 /// @dev All functions here must be called via facets executing in the diamond context (delegatecall).
 library LibDiamond {
@@ -35,7 +34,7 @@ library LibDiamond {
         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
         /// list of facet addresses
         address[] facetAddresses;
-        /// ERC-165 support flags (incl. DiamondCut, Loupe, ERC-173, etc.)
+        /// ERC-165 support flags (incl. Loupe, ERC-173, etc.)
         mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
         /// ownership (two-step transfer supported via `pendingContractOwner`)
         address contractOwner;
@@ -69,6 +68,28 @@ library LibDiamond {
     /// @notice Emitted when ownership changes.
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
+    /**
+     * @notice Emitted when a function is added to a diamond.
+     * @param _selector The function selector being added.
+     * @param _facet    The facet address that will handle calls to `_selector`.
+     */
+    event DiamondFunctionAdded(bytes4 indexed _selector, address indexed _facet);
+
+    /**
+     * @notice Emitted when changing the facet that will handle calls to a function.
+     * @param _selector The function selector being affected.
+     * @param _oldFacet The facet address previously responsible for `_selector`.
+     * @param _newFacet The facet address that will now handle calls to `_selector`.
+     */
+    event DiamondFunctionReplaced(bytes4 indexed _selector, address indexed _oldFacet, address indexed _newFacet);
+
+    /**
+     * @notice Emitted when a function is removed from a diamond.
+     * @param _selector The function selector being removed.
+     * @param _oldFacet The facet address that previously handled `_selector`.
+     */
+    event DiamondFunctionRemoved(bytes4 indexed _selector, address indexed _oldFacet);
+
     /// @notice Sets a new contract owner and emits `OwnershipTransferred`.
     /// @dev No authorization check here; callers should gate with `enforceIsContractOwner`.
     function setContractOwner(address _newOwner) internal {
@@ -86,39 +107,6 @@ library LibDiamond {
     /// @notice Reverts unless `msg.sender` is the diamond owner.
     function enforceIsContractOwner() internal view {
         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
-    }
-
-    /// @notice Emitted after a diamond cut is applied.
-    /// @param _diamondCut The set of facet actions performed.
-    /// @param _init Initializer target (executed via delegatecall) or address(0).
-    /// @param _calldata Encoded initializer call data (can be empty).
-    event DiamondCut(IDiamondCutFacet.FacetCut[] _diamondCut, address _init, bytes _calldata);
-
-    /// @notice Applies a diamond cut and optionally runs an initializer.
-    /// @dev Iterates over cuts; for Add/Replace/Remove dispatches to helpers. Emits `DiamondCut` and
-    /// then calls `initializeDiamondCut(_init, _calldata)`.
-    /// Version tracking is handled by deployment/upgrade scripts after the cut is complete.
-    function diamondCut(IDiamondCutFacet.FacetCut[] memory _diamondCut, address _init, bytes memory _calldata)
-        internal
-    {
-        uint256 cutLen = _diamondCut.length;
-        for (uint256 facetIndex = 0; facetIndex < cutLen;) {
-            IDiamondCutFacet.FacetCutAction action = _diamondCut[facetIndex].action;
-            if (action == IDiamondCutFacet.FacetCutAction.Add) {
-                addFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
-            } else if (action == IDiamondCutFacet.FacetCutAction.Replace) {
-                replaceFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
-            } else if (action == IDiamondCutFacet.FacetCutAction.Remove) {
-                removeFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
-            } else {
-                revert("LibDiamondCut: Incorrect FacetCutAction");
-            }
-            unchecked {
-                facetIndex++;
-            }
-        }
-        emit DiamondCut(_diamondCut, _init, _calldata);
-        initializeDiamondCut(_init, _calldata);
     }
 
     /// @notice Adds selectors to a facet (adding the facet if first selector).
@@ -140,6 +128,7 @@ library LibDiamond {
             address oldFacetAddress = ds.selectorToFacetAndPosition[selector].facetAddress;
             require(oldFacetAddress == address(0), "LibDiamondCut: Can't add function that already exists");
             addFunction(ds, selector, selectorPosition, _facetAddress);
+            emit DiamondFunctionAdded(selector, _facetAddress);
             selectorPosition++;
             unchecked {
                 selectorIndex++;
@@ -167,6 +156,7 @@ library LibDiamond {
             require(oldFacetAddress != _facetAddress, "LibDiamondCut: Can't replace function with same function");
             removeFunction(ds, oldFacetAddress, selector);
             addFunction(ds, selector, selectorPosition, _facetAddress);
+            emit DiamondFunctionReplaced(selector, oldFacetAddress, _facetAddress);
             selectorPosition++;
             unchecked {
                 selectorIndex++;
@@ -174,21 +164,19 @@ library LibDiamond {
         }
     }
 
-    /// @notice Removes selectors (facet address param must be zero by convention).
-    /// @dev Reverts if `_facetAddress != address(0)`.
-    /// Also reverts if any selector doesn't exist (i.e., is not currently registered in the diamond).
-    function removeFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
+    /// @notice Removes selectors from the diamond.
+    /// @dev ERC-8109 upgradeDiamond uses a selector-only removal list. Callers must validate
+    ///      existence/immutability constraints before calling to ensure standardized errors.
+    function removeSelectors(bytes4[] memory _functionSelectors) internal {
         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
         DiamondStorage storage ds = diamondStorage();
-        // per EIP-2535 convention, `_facetAddress` must be address(0) for removals
-        require(_facetAddress == address(0), "LibDiamondCut: Remove facet address must be address(0)");
 
         uint256 selLen = _functionSelectors.length;
-
         for (uint256 selectorIndex; selectorIndex < selLen;) {
             bytes4 selector = _functionSelectors[selectorIndex];
             address oldFacetAddress = ds.selectorToFacetAndPosition[selector].facetAddress;
             removeFunction(ds, oldFacetAddress, selector);
+            emit DiamondFunctionRemoved(selector, oldFacetAddress);
             unchecked {
                 selectorIndex++;
             }

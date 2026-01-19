@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-// Based on Nick Mudge's EIP-2535 Diamond reference implementation (MIT).
+// Based on Nick Mudge's Diamond reference implementation pattern (MIT).
 import {LibDiamond} from "../libraries/LibDiamond.sol";
 import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
-import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
+import {IDiamondInspectFacet} from "../interfaces/IDiamondInspectFacet.sol";
+import {IDiamondUpgradeFacet} from "../interfaces/IDiamondUpgradeFacet.sol";
 import {IERC173} from "../interfaces/IERC173.sol";
 import {IERC165} from "../interfaces/IERC165.sol";
 import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
 
-/// @title DiamondInit (EIP-2535 initializer)
+/// @title DiamondInit (diamond initializer)
 /// @notice Registers ERC-165 interface support and initializes marketplace configuration in shared storage.
-/// @dev Must be executed as the `init` call data of `diamondCut` (i.e., via `delegatecall` into the diamond),
-/// so that changes persist in the diamond’s storage. Writes to:
-/// - `LibDiamond.DiamondStorage.supportedInterfaces` for ERC-165, DiamondCut, DiamondLoupe, and ERC-173.
+/// @dev Must be executed via `delegatecall` into the diamond (e.g. as the init/delegate step of either
+/// ERC-8109 `upgradeDiamond`), so that changes persist in the diamond’s storage.
+/// Writes to:
+/// - `LibDiamond.DiamondStorage.supportedInterfaces` for ERC-165, upgrade/cut, loupe/inspect, and ERC-173.
 /// - `LibAppStorage.AppStorage` for `innovationFee` and `buyerWhitelistMaxBatchSize`.
 contract DiamondInit {
     /// @notice Initializes ERC-165 flags and marketplace parameters.
@@ -26,8 +28,9 @@ contract DiamondInit {
 
         // Diamond and ERC165 interfaces
         ds.supportedInterfaces[type(IERC165).interfaceId] = true;
-        ds.supportedInterfaces[type(IDiamondCutFacet).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondUpgradeFacet).interfaceId] = true;
         ds.supportedInterfaces[type(IDiamondLoupeFacet).interfaceId] = true;
+        ds.supportedInterfaces[type(IDiamondInspectFacet).interfaceId] = true;
         ds.supportedInterfaces[type(IERC173).interfaceId] = true;
 
         // Initialize emergency pause state

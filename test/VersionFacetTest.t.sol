@@ -168,24 +168,16 @@ contract VersionFacetTest is MarketTestBase {
 
     /// @notice Test version update in context of diamond upgrade
     function testVersionUpdateWithDiamondUpgrade() public {
-        vm.startPrank(owner);
-
         // Simulate upgrade by adding a dummy facet
         DummyUpgradeFacetV2 dummyFacet = new DummyUpgradeFacetV2();
         bytes4[] memory dummySelectors = new bytes4[](1);
         dummySelectors[0] = DummyUpgradeFacetV2.dummyFunction.selector;
 
-        IDiamondCutFacet.FacetCut[] memory cuts = new IDiamondCutFacet.FacetCut[](1);
-        cuts[0] = IDiamondCutFacet.FacetCut({
-            facetAddress: address(dummyFacet),
-            action: IDiamondCutFacet.FacetCutAction.Add,
-            functionSelectors: dummySelectors
-        });
-
-        IDiamondCutFacet(address(diamond)).diamondCut(cuts, address(0), "");
+        _upgradeAddSelectors(address(dummyFacet), dummySelectors);
 
         // Now update version to reflect the upgrade
         bytes32 newId = computeImplementationId(address(diamond), loupe.facets());
+        vm.prank(owner);
         versionFacet.setVersion("1.1.0", newId);
 
         // Verify new version is set
@@ -197,7 +189,5 @@ contract VersionFacetTest is MarketTestBase {
         assertEq(prevVersion, "1.0.0", "Previous version should be 1.0.0");
         assertEq(prevId, keccak256("initial-test-id"), "Previous ID should match initial");
         assertGt(prevTimestamp, 0, "Previous version timestamp should be set");
-
-        vm.stopPrank();
     }
 }

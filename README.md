@@ -7,11 +7,16 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 This project includes code from the following open-source project(s):
 
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) - Licensed under the MIT License.
-- [EIP-2535 Diamonds (Nick Mudge reference implementation)](https://github.com/mudgen/diamond) - Licensed under the MIT License.
+- [mudgen/diamond](https://github.com/mudgen/diamond) - Licensed under the MIT License.
 - [diamond-3-foundry (Alex Babits)](https://github.com/alexbabits/diamond-3-foundry) - Licensed under the MIT License.
 - further see the "third-party-licenses" folder
 
-Portions of this project are based on and adapted from Nick Mudge's EIP-2535 Diamond reference implementations and Alex Babits' diamond-3-foundry educational template. See [NOTICE](NOTICE) for detailed third-party attributions.
+Portions of this project are based on and adapted from the Diamonds reference implementations and Alex Babits' diamond-3-foundry educational template. See [NOTICE](NOTICE) for detailed third-party attributions.
+
+## ERC-8109 note
+
+This repo originally started from a classic diamond template, but the *upgrade entrypoint* has been migrated to
+**ERC-8109**. The on-chain upgrade function is `upgradeDiamond(...)`.
 
 <br><br><br><br><br>
 
@@ -81,7 +86,8 @@ running the sepolia tests: // !!!W check these if they are still up to date and 
 
 # IdeationMarketDiamond
 
-A decentralized NFT marketplace built on the EIP-2535 Diamonds standard, allowing users to list, buy, sell, and swap NFTs efficiently while ensuring modularity, upgradability, and security. The repository leverages OpenZeppelin’s standards and introduces custom facets for enhanced functionality.
+A decentralized NFT marketplace built on a diamond architecture with an **ERC-8109** upgrade interface (`upgradeDiamond`).
+It allows users to list, buy, sell, and swap NFTs while keeping the contract modular, upgradeable, and security-auditable.
 
 ## Overview
 
@@ -89,7 +95,7 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 
 ### Features
 
-- **EIP-2535 Compliant:** Modular and upgradable contract design.
+- **ERC-8109 Upgrades:** Modular and upgradable via `upgradeDiamond`.
 - **NFT Marketplace:** List, buy, cancel, and update NFTs.
 - **NFT Swapping:** Swap NFTs directly or with additional ETH.
 - **Marketplace Fee:** Configurable fees for transactions.
@@ -109,11 +115,11 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 
 ### Facets
 
-- **`DiamondCutFacet.sol`**
-  Enables adding, replacing, or removing facets.
+- **`DiamondUpgradeFacet.sol`**
+  Implements ERC-8109 `upgradeDiamond(...)` to add/replace/remove selectors.
 
 - **`DiamondLoupeFacet.sol`**
-  Implements EIP-2535 loupe functions for querying facets and their functions.
+  Provides loupe/introspection and includes the ERC-8109 required `functionFacetPairs()`.
 
 - **`OwnershipFacet.sol`**
   Manages ownership of the diamond contract.
@@ -187,19 +193,19 @@ bytes32 id = GetterFacet(diamond).getImplementationId();
 
 ### Setting Versions (Automatic)
 
-The deployment and upgrade scripts automatically compute and set the version after every diamond cut.
+The deployment and upgrade scripts automatically compute and set the version after every upgrade.
 
 #### Initial Deployment
 
 ```bash
 # Version defaults to "1.0.0" or set via VERSION_STRING
-VERSION_STRING="1.0.0" forge script scripts/DeployDiamond.s.sol:DeployDiamond \
+VERSION_STRING="1.0.0" forge script script/DeployDiamond.s.sol:DeployDiamond \
     --rpc-url $RPC_URL --broadcast
 ```
 
 The script automatically:
 1. Deploys all facets and the diamond
-2. Executes the diamond cut
+2. Executes `upgradeDiamond`
 3. **Automatically queries all facets and selectors via DiamondLoupe**
 4. **Computes the implementationId hash deterministically**
 5. **Calls `setVersion()` with the version string and ID**
@@ -209,12 +215,12 @@ The script automatically:
 ```bash
 # Version set via VERSION_STRING
 DIAMOND_ADDRESS=0x... VERSION_STRING="1.1.0" \
-forge script scripts/UpgradeDiamond.s.sol:UpgradeDiamond \
+forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
     --rpc-url $RPC_URL --broadcast
 ```
 
 The upgrade script automatically:
-1. Performs the diamond cut (deploy facets, add/replace/remove functions)
+1. Performs the upgrade (deploy facets, add/replace/remove functions via `upgradeDiamond`)
 2. **Automatically computes and sets the new version**
 3. Shows before/after version information
 
@@ -363,7 +369,7 @@ Update the marketplace/innovation fee (only accessible by the owner).
    The `nonReentrant` modifier is applied to critical functions to prevent reentrancy attacks.
 
 2. **Upgradability:**
-   Changes to the diamond structure follow EIP-2535 guidelines to ensure compatibility.
+  Selector/facet upgrades are executed via ERC-8109 `upgradeDiamond`.
 
 3. **Ownership Management:**
    Ownership functions are secured using the `onlyOwner` modifier.
@@ -414,8 +420,7 @@ For questions or support, please reach out to [your-email@example.com](mailto:yo
 
 This project leverages:
 
-- [EIP-2535 Diamonds](https://eips.ethereum.org/EIPS/eip-2535)
-- [Nick Mudge's EIP-2535 Diamond reference implementations](https://github.com/mudgen/diamond) (basis for the diamond template)
+- [mudgen/diamond](https://github.com/mudgen/diamond) (basis for the diamond template)
 - [alexbabits/diamond-3-foundry](https://github.com/alexbabits/diamond-3-foundry) (educational Foundry/AppStorage adaptation)
 - [OpenZeppelin Contracts](https://openzeppelin.com/contracts/)
 - [Foundry](https://github.com/foundry-rs/foundry)
