@@ -35,6 +35,66 @@ contract DiamondCutFacetTest is MarketTestBase {
         assertTrue(found, "DiamondFunctionAdded event not found");
     }
 
+    function testUpgradeDiamond_EmitsPerSelectorReplacedEvent() public {
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+        DummyUpgradeFacetV2 v2 = new DummyUpgradeFacetV2();
+
+        // First add selector to v1
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+
+        // Record logs around the replace upgrade
+        vm.recordLogs();
+        _upgradeReplaceSelector(address(v2), IDummyUpgrade.dummyFunction.selector);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // topic0 = keccak256("DiamondFunctionReplaced(bytes4,address,address)")
+        bytes32 topic0 = keccak256("DiamondFunctionReplaced(bytes4,address,address)");
+
+        bool found;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(diamond) && logs[i].topics.length == 4 && logs[i].topics[0] == topic0
+                    && logs[i].topics[1] == bytes32(IDummyUpgrade.dummyFunction.selector)
+                    && logs[i].topics[2] == bytes32(uint256(uint160(address(v1))))
+                    && logs[i].topics[3] == bytes32(uint256(uint160(address(v2))))
+            ) {
+                // Indexed topics fully describe the event; no data payload.
+                assertEq(logs[i].data.length, 0);
+                found = true;
+                break;
+            }
+        }
+        assertTrue(found, "DiamondFunctionReplaced event not found");
+    }
+
+    function testUpgradeDiamond_EmitsPerSelectorRemovedEvent() public {
+        DummyUpgradeFacetV1 v1 = new DummyUpgradeFacetV1();
+
+        _upgradeAddSelector(address(v1), IDummyUpgrade.dummyFunction.selector);
+
+        vm.recordLogs();
+        _upgradeRemoveSelector(IDummyUpgrade.dummyFunction.selector);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // topic0 = keccak256("DiamondFunctionRemoved(bytes4,address)")
+        bytes32 topic0 = keccak256("DiamondFunctionRemoved(bytes4,address)");
+
+        bool found;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (
+                logs[i].emitter == address(diamond) && logs[i].topics.length == 3 && logs[i].topics[0] == topic0
+                    && logs[i].topics[1] == bytes32(IDummyUpgrade.dummyFunction.selector)
+                    && logs[i].topics[2] == bytes32(uint256(uint160(address(v1))))
+            ) {
+                // Indexed topics fully describe the event; no data payload.
+                assertEq(logs[i].data.length, 0);
+                found = true;
+                break;
+            }
+        }
+        assertTrue(found, "DiamondFunctionRemoved event not found");
+    }
+
     // ---------------------------------------------------------------------
     // 2) Batch atomicity: later failing op reverts whole cut (no partial state)
     // ---------------------------------------------------------------------
@@ -258,6 +318,55 @@ contract DiamondCutFacetTest is MarketTestBase {
     }
 
     // ---------------------------------------------------------------------
+    // 5c) ERC-8109 inspect: functionFacetPairs() matches loupe views
+    // ---------------------------------------------------------------------
+    function testInspect_FunctionFacetPairs_MatchLoupe() public view {
+        IDiamondInspectFacet.FunctionFacetPair[] memory pairs =
+            IDiamondInspectFacet(address(diamond)).functionFacetPairs();
+
+        // Count selectors from loupe views
+        address[] memory facets = loupe.facetAddresses();
+        uint256 expected;
+        for (uint256 i = 0; i < facets.length; i++) {
+            expected += loupe.facetFunctionSelectors(facets[i]).length;
+        }
+        assertEq(pairs.length, expected, "functionFacetPairs length mismatch");
+
+        bool foundUpgrade;
+
+        for (uint256 i = 0; i < pairs.length; i++) {
+            bytes4 sel = pairs[i].selector;
+            address fac = pairs[i].facet;
+
+            assertTrue(fac != address(0), "functionFacetPairs: zero facet");
+            assertEq(loupe.facetAddress(sel), fac, "functionFacetPairs: facetAddress mismatch");
+
+            // selector must appear in that facet's selector list
+            bytes4[] memory sels = loupe.facetFunctionSelectors(fac);
+            bool inFacet;
+            for (uint256 j = 0; j < sels.length; j++) {
+                if (sels[j] == sel) {
+                    inFacet = true;
+                    break;
+                }
+            }
+            assertTrue(inFacet, "functionFacetPairs: selector not listed under facet");
+
+            // selectors should be unique across all pairs
+            for (uint256 k = i + 1; k < pairs.length; k++) {
+                assertTrue(pairs[k].selector != sel, "functionFacetPairs: duplicate selector");
+            }
+
+            if (sel == IDiamondUpgradeFacet.upgradeDiamond.selector) {
+                foundUpgrade = true;
+                assertEq(fac, diamondUpgradeFacetAddr, "upgradeDiamond mapped to unexpected facet");
+            }
+        }
+
+        assertTrue(foundUpgrade, "upgradeDiamond selector missing from functionFacetPairs");
+    }
+
+    // ---------------------------------------------------------------------
     // 6) Init-only upgrade: no facet changes, initializer mutates storage
     // ---------------------------------------------------------------------
     function testDiamondCut_InitOnly_CallsInitializerAndMutatesStorage() public {
@@ -298,6 +407,69 @@ contract DiamondCutFacetTest is MarketTestBase {
 
         vm.expectRevert(LayoutGuardInitBad.LayoutMismatch.selector);
         _upgradeNoopWithInit(address(bad), abi.encodeWithSelector(LayoutGuardInitBad.initCheckLayout.selector, marker));
+    }
+
+    // ---------------------------------------------------------------------
+    // 7) ERC-8109 upgrade-level events: DiamondDelegateCall & DiamondMetadata
+    // ---------------------------------------------------------------------
+    function testUpgradeDiamond_EmitsDelegateCallAndMetadata() public {
+        // Snapshot current fee to prove delegatecall actually executed
+        uint32 prev = getter.getInnovationFee();
+        assertEq(prev, INNOVATION_FEE);
+
+        InitWriteFee init = new InitWriteFee();
+        bytes memory functionCall = abi.encodeWithSelector(InitWriteFee.initSetFee.selector, uint32(4242));
+        bytes32 tag = keccak256("test-tag");
+        bytes memory meta = hex"010203";
+
+        vm.recordLogs();
+
+        vm.prank(owner);
+        IDiamondUpgradeFacet(address(diamond)).upgradeDiamond(
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new IDiamondUpgradeFacet.FacetFunctions[](0),
+            new bytes4[](0),
+            address(init),
+            functionCall,
+            tag,
+            meta
+        );
+
+        // Delegatecall must have executed and updated storage
+        assertEq(getter.getInnovationFee(), 4242, "delegatecall did not mutate state");
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        // topic0 = keccak256("DiamondDelegateCall(address,bytes)")
+        bytes32 delegateTopic0 = keccak256("DiamondDelegateCall(address,bytes)");
+        // topic0 = keccak256("DiamondMetadata(bytes32,bytes)")
+        bytes32 metaTopic0 = keccak256("DiamondMetadata(bytes32,bytes)");
+
+        bool foundDelegate;
+        bool foundMetadata;
+
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].emitter != address(diamond)) continue;
+
+            if (logs[i].topics.length == 2 && logs[i].topics[0] == delegateTopic0) {
+                // indexed delegate
+                if (logs[i].topics[1] == bytes32(uint256(uint160(address(init))))) {
+                    assertEq(logs[i].data, abi.encode(functionCall));
+                    foundDelegate = true;
+                }
+            }
+
+            if (logs[i].topics.length == 2 && logs[i].topics[0] == metaTopic0) {
+                // indexed tag
+                if (logs[i].topics[1] == tag) {
+                    assertEq(logs[i].data, abi.encode(meta));
+                    foundMetadata = true;
+                }
+            }
+        }
+
+        assertTrue(foundDelegate, "DiamondDelegateCall event not found");
+        assertTrue(foundMetadata, "DiamondMetadata event not found");
     }
 
     // ---------------------------------------------------------------------
