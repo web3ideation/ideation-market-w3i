@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-contract DiamondCutFacetTest is MarketTestBase {
+contract DiamondUpgradeFacetTest is MarketTestBase {
     // ---------------------------------------------------------------------
     // 1) ERC-8109 per-selector events emitted on upgrade
     // ---------------------------------------------------------------------
