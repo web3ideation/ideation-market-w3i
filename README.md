@@ -70,6 +70,30 @@ EXPLORERS:
 Louper: https://louper.dev/diamond/0xF422A7779D2feB884CcC1773b88d98494A946604?network=sepolia
 Etherscan: https://sepolia.etherscan.io/address/0xF422A7779D2feB884CcC1773b88d98494A946604
 
+deployment 3 log:
+  Deployed diamondInit contract at address: 0x6ab53B38A5703387e0E2Ee3D1AD99894728e587c
+  Deployed diamondLoupeFacet contract at address: 0x16D2e785ec9f270C8e0CdB6dc0Ca0f0f9646610C
+  Deployed ownershipFacet contract at address: 0x1dEEE0f8e73a19E31c49D51419C47e15f48667f9
+  Deployed ideationMarketFacet contract at address: 0x6f4e8be1EEaF712a3ff85E7FFe992d21794E790E
+  Deployed collectionWhitelistFacet contract at address: 0x1eeDB782151377AC05d61EecC3Bdf4ECCbf3B298
+  Deployed buyerWhitelistFacet contract at address: 0x1b0Dc3BD49A8bd493387bb49376212B9b0A9A64f
+  Deployed getterFacet contract at address: 0xb42c109A61Cb882B11bb7E98B9A0302C3E486327
+  Deployed currencyWhitelistFacet contract at address: 0xf98025444A70391286e15014023758624754d780
+  Deployed versionFacet contract at address: 0xeDD15c75a980da4eD70F609c30F8E73bCDBdd186
+  Deployed pauseFacet contract at address: 0xc39f8c071668Eea19392F1Ea3AC7fe8A5391b4b3
+  Deployed diamondUpgradeFacet contract at address: 0xDA227064DadE08d65d1880488B368B1A73AAA489
+  Deployed Diamond contract at address: 0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
+  Diamond upgrade complete
+  Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+  Setting version: 1.0.0
+  Version set: 1.0.0
+  Implementation ID:
+  0x94e212f6785d382d4e9f65c8e49dfa69523440374e542ea38617b9fc295a69a4
+EXPLORERS:
+Louper: https://louper.dev/diamond/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC?network=sepolia
+Etherscan: https://sepolia.etherscan.io/address/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
+
+
 for etherscan interaction: // !!!W check these if they are still up to date and integrate the info in the final readme
 add token address to 'collection whitelist'
 approve marketplace to handle the token in the token contract

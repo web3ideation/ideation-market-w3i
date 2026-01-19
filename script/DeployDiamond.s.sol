@@ -31,6 +31,9 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 /// The script performs an ERC-8109 `upgradeDiamond` to add facet groups (Loupe, Ownership, Market, Collection WL,
 /// Buyer WL, Getter, Currency WL, Version, Pause) on top of the initially deployed upgrade facet, then asserts
 /// there are exactly 10 facet addresses.
+///
+/// To deploy run this command: source .env && forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url $SEPOLIA_RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY
+///
 /// @custom:security The script sets the initial owner from the broadcast EOA.
 contract DeployDiamond is Script {
     /// @notice Innovation/marketplace fee rate used during initialization.
