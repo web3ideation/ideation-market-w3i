@@ -40,3 +40,6 @@ dist/
 
 #ignore Openzeppelin
 /lib/openzeppelin-contracts/
+
+#ignore etherscan
+/etherscan/
