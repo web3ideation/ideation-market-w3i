@@ -71,6 +71,13 @@ struct AppStorage {
     mapping(address collection => uint256 index) whitelistedCollectionsIndex;
     /// @notice Per-listing buyer whitelist set by the listing seller.
     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId;
+    /* -------------------------------------------------------------------------- */
+    /* !!!W                         Upgrade Test Fields                            */
+    /* -------------------------------------------------------------------------- */
+
+    /// @notice Dummy state variable used to test diamond upgrades.
+    /// @dev Upgrade rule reminder: this field must remain at the end of AppStorage.
+    uint256 dummyUpgradeValue;
 }
 
 /// @title LibAppStorage
