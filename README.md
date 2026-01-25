@@ -107,6 +107,8 @@ running the sepolia tests: // !!!W check these if they are still up to date and 
 'forge script test/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv' run the MarketSmokeBroadcast testscript against the real live sepolia testnet
 'forge script test/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull --rpc-url $SEPOLIA_RPC_URL --broadcast -vvv' run the MarketSmokeBroadcastFull testscript against the real live sepolia testnet
 
+"If you want, I can also update the README section that claims “purchaseListing has no onlyWhitelistedCollection check” — your actual IdeationMarketFacet.sol does enforce collection whitelist in purchaseListing."
+
 
 # IdeationMarketDiamond
 

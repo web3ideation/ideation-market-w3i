@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "forge-std/Test.sol";
+
+interface IDiamondLoupe {
+    struct Facet {
+        address facetAddress;
+        bytes4[] functionSelectors;
+    }
+
+    function facets() external view returns (Facet[] memory facets_);
+    function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
+}
+
+contract DiamondSelectorIntegrityTest is Test {
+    // Sepolia diamond
+    // Set DIAMOND_ADDRESS to override.
+    address diamond;
+
+    // Address you reported as facetAddress(0x34ab8a44) on live Sepolia.
+    // Set REPORTED_MARKET_FACET to override (or set to address(0) to disable the check).
+    address constant DEFAULT_REPORTED_MARKET_FACET = 0x6f4e8be1EEaF712a3ff85E7FFe992d21794E790E;
+
+    bytes4 constant CREATE_LISTING_SELECTOR = 0x34ab8a44;
+
+    function setUp() public {
+        string memory url = vm.envString("SEPOLIA_RPC_URL");
+        vm.createSelectFork(url);
+        diamond = vm.envOr("DIAMOND_ADDRESS", address(0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC));
+        emit log_named_uint("fork chainid", block.chainid);
+        emit log_named_uint("fork block", block.number);
+    }
+
+    function test_LoupeSelectorMappingIsConsistent() public view {
+        IDiamondLoupe loupe = IDiamondLoupe(diamond);
+        IDiamondLoupe.Facet[] memory fs = loupe.facets();
+        assertTrue(fs.length > 0, "no facets");
+
+        for (uint256 i = 0; i < fs.length; i++) {
+            address facet = fs[i].facetAddress;
+            bytes4[] memory sels = fs[i].functionSelectors;
+            assertTrue(facet != address(0), "zero facet");
+            assertTrue(sels.length > 0, "facet has no selectors");
+
+            for (uint256 j = 0; j < sels.length; j++) {
+                // In a healthy diamond, facetAddress(selector) must round-trip to the same facet.
+                address resolved = loupe.facetAddress(sels[j]);
+                assertEq(resolved, facet, "selector->facet mapping mismatch");
+            }
+        }
+    }
+
+    function test_LogCreateListingRouting() public {
+        IDiamondLoupe loupe = IDiamondLoupe(diamond);
+
+        address routed = loupe.facetAddress(CREATE_LISTING_SELECTOR);
+        emit log_named_bytes32("createListing selector", bytes32(CREATE_LISTING_SELECTOR));
+        emit log_named_address("facetAddress(createListing)", routed);
+        assertTrue(routed != address(0), "createListing not routed");
+
+        // Check if the reported facet address is actually active in the diamond.
+        IDiamondLoupe.Facet[] memory fs = loupe.facets();
+
+        address reportedFacet = vm.envOr("REPORTED_MARKET_FACET", DEFAULT_REPORTED_MARKET_FACET);
+        bool found;
+        for (uint256 i = 0; i < fs.length; i++) {
+            if (fs[i].facetAddress == reportedFacet) {
+                found = true;
+                break;
+            }
+        }
+
+        emit log_named_address("reported facet", reportedFacet);
+        emit log_named_uint("reported facet is active? (1=yes)", found ? 1 : 0);
+
+        // If reportedFacet is non-zero, require it to be present.
+        if (reportedFacet != address(0)) {
+            assertTrue(found, "reported facet not active");
+        }
+    }
+}

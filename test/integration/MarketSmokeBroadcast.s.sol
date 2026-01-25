@@ -15,11 +15,18 @@ interface IERC721 {
     function safeTransferFrom(address from, address to, uint256 id) external;
 }
 
+// Diamond loupe (for selector presence checks)
+interface IDiamondLoupe {
+    function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
+}
+
 interface IGetterFacet {
     function getNextListingId() external view returns (uint128);
     function isCollectionWhitelisted(address collection) external view returns (bool);
     function isCurrencyAllowed(address currency) external view returns (bool);
     function getListingByListingId(uint128 listingId) external view returns (Listing memory listing);
+    function isPaused() external view returns (bool);
+    function getContractOwner() external view returns (address);
 }
 
 interface ICollectionWhitelistFacet {
@@ -56,8 +63,8 @@ interface IIdeationMarketFacet {
 }
 
 contract MarketSmokeBroadcast is Script {
-    // live addresses on Sepolia testnet
-    address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79;
+    // Set DIAMOND_ADDRESS to override.
+    address diamond;
     address constant TOKEN721 = 0x41655AE49482de69eEC8F6875c34A8Ada01965e2;
 
     address constant ACCOUNT1 = 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D; // 721 id 16
@@ -69,12 +76,47 @@ contract MarketSmokeBroadcast is Script {
     uint256 constant PRICE1 = 200_000_000_000_000;
     uint256 constant PRICE2 = 300_000_000_000_000;
 
-    IGetterFacet getter = IGetterFacet(DIAMOND);
-    IIdeationMarketFacet market = IIdeationMarketFacet(DIAMOND);
-    ICollectionWhitelistFacet cwl = ICollectionWhitelistFacet(DIAMOND);
+    IGetterFacet getter;
+    IIdeationMarketFacet market;
+    ICollectionWhitelistFacet cwl;
     IERC721 erc721 = IERC721(TOKEN721);
 
     function run() external {
+        diamond = vm.envOr("DIAMOND_ADDRESS", address(0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC));
+        getter = IGetterFacet(diamond);
+        market = IIdeationMarketFacet(diamond);
+        cwl = ICollectionWhitelistFacet(diamond);
+        console.log("diamond", diamond);
+
+        // Preflight: make sure this diamond has the selectors we intend to use.
+        // This prevents spending gas only to hit "function does not exist" on a wrong deployment.
+        {
+            IDiamondLoupe loupe = IDiamondLoupe(diamond);
+            bytes4 createSel = IIdeationMarketFacet.createListing.selector;
+            bytes4 purchaseSel = IIdeationMarketFacet.purchaseListing.selector;
+            bytes4 cancelSel = IIdeationMarketFacet.cancelListing.selector;
+            bytes4 addAllowedCurrencySel = bytes4(keccak256("addAllowedCurrency(address)"));
+            bytes4 addWhitelistedCollectionSel = bytes4(keccak256("addWhitelistedCollection(address)"));
+
+            address createFacet = loupe.facetAddress(createSel);
+            address purchaseFacet = loupe.facetAddress(purchaseSel);
+            address cancelFacet = loupe.facetAddress(cancelSel);
+            address currencyFacet = loupe.facetAddress(addAllowedCurrencySel);
+            address collectionFacet = loupe.facetAddress(addWhitelistedCollectionSel);
+
+            console.log("createListing facet", createFacet);
+            console.log("purchaseListing facet", purchaseFacet);
+            console.log("cancelListing facet", cancelFacet);
+            console.log("addAllowedCurrency facet", currencyFacet);
+            console.log("addWhitelistedCollection facet", collectionFacet);
+
+            require(createFacet != address(0), "diamond missing createListing(selector)");
+            require(purchaseFacet != address(0), "diamond missing purchaseListing(selector)");
+            require(cancelFacet != address(0), "diamond missing cancelListing(selector)");
+            require(currencyFacet != address(0), "diamond missing addAllowedCurrency(selector)");
+            require(collectionFacet != address(0), "diamond missing addWhitelistedCollection(selector)");
+        }
+
         uint256 pk1 = vm.envUint("PRIVATE_KEY_1"); // MUST control ACCOUNT1
         uint256 pk2 = vm.envUint("PRIVATE_KEY_2"); // MUST control ACCOUNT2
 
@@ -82,10 +124,15 @@ contract MarketSmokeBroadcast is Script {
         require(vm.addr(pk1) == ACCOUNT1, "PRIVATE_KEY_1 does not control ACCOUNT1");
         require(vm.addr(pk2) == ACCOUNT2, "PRIVATE_KEY_2 does not control ACCOUNT2");
 
+        require(!getter.isPaused(), "diamond is paused");
+
+        // Strong guard: setup steps require diamond owner privileges.
+        require(getter.getContractOwner() == ACCOUNT1, "diamond owner is not ACCOUNT1");
+
         // whitelist ETH as currency if not yet (non-custodial multi-currency requirement)
         if (!getter.isCurrencyAllowed(address(0))) {
             vm.startBroadcast(pk1);
-            (bool success,) = DIAMOND.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
+            (bool success,) = diamond.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
             require(success, "ETH whitelisting failed - CurrencyWhitelistFacet may need to be deployed");
             vm.stopBroadcast();
             console.log("ETH whitelisted as currency");
@@ -166,8 +213,8 @@ contract MarketSmokeBroadcast is Script {
 
     function _approve721IfNeeded(uint256 pk, address owner, uint256 tokenId) internal {
         vm.startBroadcast(pk);
-        if (erc721.getApproved(tokenId) != DIAMOND && !erc721.isApprovedForAll(owner, DIAMOND)) {
-            erc721.approve(DIAMOND, tokenId);
+        if (erc721.getApproved(tokenId) != diamond && !erc721.isApprovedForAll(owner, diamond)) {
+            erc721.approve(diamond, tokenId);
         }
         vm.stopBroadcast();
     }

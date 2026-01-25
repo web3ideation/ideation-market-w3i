@@ -72,7 +72,7 @@ struct AppStorage {
     /// @notice Per-listing buyer whitelist set by the listing seller.
     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId;
     /* -------------------------------------------------------------------------- */
-    /* !!!W                         Upgrade Test Fields                            */
+    /* !!!W remove these after testing   Upgrade Test Fields                      */
     /* -------------------------------------------------------------------------- */
 
     /// @notice Dummy state variable used to test diamond upgrades.

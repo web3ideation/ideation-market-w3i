@@ -16,12 +16,28 @@ interface IERC721 {
     function safeTransferFrom(address from, address to, uint256 id) external;
 }
 
+// Diamond loupe (for selector presence checks)
+interface IDiamondLoupe {
+    function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
+}
+
 interface IGetterFacet {
     function getNextListingId() external view returns (uint128);
     function isCollectionWhitelisted(address collection) external view returns (bool);
     function isCurrencyAllowed(address currency) external view returns (bool);
     function getListingByListingId(uint128 listingId) external view returns (Listing memory listing);
+    function getContractOwner() external view returns (address);
+    function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool);
+    function isPaused() external view returns (bool);
 }
+
+// Errors copied by name so we can tolerate "already set" reverts during setup.
+error CurrencyWhitelist__AlreadyAllowed();
+error CollectionWhitelist__AlreadyWhitelisted();
+
+// Core market errors we assert on in negative-path tests.
+error IdeationMarket__BuyerNotWhitelisted(uint128 listingId, address buyer);
+error IdeationMarket__CollectionNotWhitelisted(address tokenAddress);
 
 interface ICollectionWhitelistFacet {
     function addWhitelistedCollection(address tokenAddress) external;
@@ -94,8 +110,9 @@ contract Mock1155 {
 }
 
 contract MarketSmoke is Test {
-    // ---- Live addresses (from your README + deployment log) ---- 
-    address constant DIAMOND = 0x8cE90712463c87a6d62941D67C3507D090Ea9d79;
+    // ---- Live addresses (from your README + deployment log) ----
+    // Set DIAMOND_ADDRESS to override.
+    address diamond;
     address constant TOKEN721 = 0x41655AE49482de69eEC8F6875c34A8Ada01965e2;
 
     // Funded EOAs you provided
@@ -117,9 +134,9 @@ contract MarketSmoke is Test {
     uint256 constant PARTIAL1 = 3;
     uint256 constant PARTIAL2 = 7;
 
-    IGetterFacet getter = IGetterFacet(DIAMOND);
-    IIdeationMarketFacet market = IIdeationMarketFacet(DIAMOND);
-    ICollectionWhitelistFacet cwl = ICollectionWhitelistFacet(DIAMOND);
+    IGetterFacet getter;
+    IIdeationMarketFacet market;
+    ICollectionWhitelistFacet cwl;
     IERC721 erc721 = IERC721(TOKEN721);
 
     function setUp() public {
@@ -127,6 +144,22 @@ contract MarketSmoke is Test {
         // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
         string memory url = vm.envString("SEPOLIA_RPC_URL");
         vm.createSelectFork(url);
+
+        diamond = vm.envOr("DIAMOND_ADDRESS", address(0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC));
+        getter = IGetterFacet(diamond);
+        market = IIdeationMarketFacet(diamond);
+        cwl = ICollectionWhitelistFacet(diamond);
+
+        emit log_named_uint("fork chainid", block.chainid);
+        emit log_named_uint("fork block", block.number);
+        emit log_named_address("diamond", diamond);
+
+        // Discover current on-chain diamond owner (can change post-deploy).
+        address diamondOwner = _diamondOwner();
+        require(diamondOwner != address(0), "cannot determine diamond owner");
+
+        // If paused, createListing/purchaseListing should revert; fail early with a clear reason.
+        require(!getter.isPaused(), "diamond is paused");
 
         // fund local fork accounts for gas
         vm.deal(ACCOUNT1, 10 ether);
@@ -136,21 +169,75 @@ contract MarketSmoke is Test {
         assertEq(erc721.ownerOf(TOKEN1), ACCOUNT1, "token 16 not at ACCOUNT1");
         assertEq(erc721.ownerOf(TOKEN2), ACCOUNT2, "token 534 not at ACCOUNT2");
 
-        // whitelist ETH as currency if not yet (non-custodial multi-currency requirement)
+        // Preflight: ensure the live diamond actually has the selectors this test expects.
+        // If this fails, your Sepolia deployment likely doesn't include the expected IdeationMarketFacet version.
+        IDiamondLoupe loupe = IDiamondLoupe(diamond);
+
+        bytes4 createSel = IIdeationMarketFacet.createListing.selector;
+        address createFacet = loupe.facetAddress(createSel);
+        emit log_named_uint("createListing selector (uint32)", uint256(uint32(createSel)));
+        emit log_named_address("createListing facet", createFacet);
+        require(createFacet != address(0), "diamond missing createListing(selector)");
+
+        bytes4 purchaseSel = IIdeationMarketFacet.purchaseListing.selector;
+        address purchaseFacet = loupe.facetAddress(purchaseSel);
+        emit log_named_uint("purchaseListing selector (uint32)", uint256(uint32(purchaseSel)));
+        emit log_named_address("purchaseListing facet", purchaseFacet);
+        require(purchaseFacet != address(0), "diamond missing purchaseListing(selector)");
+
+        bytes4 cancelSel = IIdeationMarketFacet.cancelListing.selector;
+        address cancelFacet = loupe.facetAddress(cancelSel);
+        emit log_named_uint("cancelListing selector (uint32)", uint256(uint32(cancelSel)));
+        emit log_named_address("cancelListing facet", cancelFacet);
+        require(cancelFacet != address(0), "diamond missing cancelListing(selector)");
+
+        // Also ensure admin/setup selectors exist (so a pass can't be explained by "already whitelisted" state).
+        bytes4 addAllowedCurrencySel = bytes4(keccak256("addAllowedCurrency(address)"));
+        address currencyFacet = loupe.facetAddress(addAllowedCurrencySel);
+        emit log_named_address("addAllowedCurrency facet", currencyFacet);
+        require(currencyFacet != address(0), "diamond missing addAllowedCurrency(selector)");
+
+        bytes4 addWhitelistedCollectionSel = bytes4(keccak256("addWhitelistedCollection(address)"));
+        address collectionFacet = loupe.facetAddress(addWhitelistedCollectionSel);
+        emit log_named_address("addWhitelistedCollection facet", collectionFacet);
+        require(collectionFacet != address(0), "diamond missing addWhitelistedCollection(selector)");
+
+        // Ensure ETH is allowed as currency for listings.
+        // If it's already allowed, keep setup idempotent; otherwise require the admin call succeeds.
         if (!getter.isCurrencyAllowed(address(0))) {
-            vm.startPrank(ACCOUNT1); // diamond owner
-            // Note: This will fail if CurrencyWhitelistFacet not deployed on fork
-            // In that case, the fork needs to be upgraded first
-            (bool success,) = DIAMOND.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
-            require(success, "ETH whitelisting failed - may need CurrencyWhitelistFacet upgrade");
+            vm.startPrank(diamondOwner);
+            {
+                (bool success, bytes memory ret) =
+                    diamond.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
+                if (!success) {
+                    bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
+                    // If state said "not allowed" but we got "AlreadyAllowed", accept and continue.
+                    if (sel != CurrencyWhitelist__AlreadyAllowed.selector) {
+                        revert("failed to allowlist ETH");
+                    }
+                }
+            }
             vm.stopPrank();
+
+            assertTrue(getter.isCurrencyAllowed(address(0)), "ETH still not allowed");
         }
 
-        // whitelist the 721 collection if not yet
+        // Ensure the 721 collection is whitelisted.
         if (!getter.isCollectionWhitelisted(TOKEN721)) {
-            vm.startPrank(ACCOUNT1); // diamond owner (per README deploy log)
-            cwl.addWhitelistedCollection(TOKEN721);
+            vm.startPrank(diamondOwner);
+            {
+                (bool success, bytes memory ret) =
+                    diamond.call(abi.encodeWithSignature("addWhitelistedCollection(address)", TOKEN721));
+                if (!success) {
+                    bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
+                    if (sel != CollectionWhitelist__AlreadyWhitelisted.selector) {
+                        revert("failed to whitelist TOKEN721");
+                    }
+                }
+            }
             vm.stopPrank();
+
+            assertTrue(getter.isCollectionWhitelisted(TOKEN721), "TOKEN721 still not whitelisted");
         }
     }
 
@@ -239,6 +326,9 @@ contract MarketSmoke is Test {
         }
         vm.stopPrank();
 
+        // Ensure the whitelist actually got applied.
+        assertTrue(getter.isBuyerWhitelisted(id, ACCOUNT2), "ACCOUNT2 not whitelisted");
+
         vm.prank(ACCOUNT2);
         market.purchaseListing{value: PRICE1}(id, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
 
@@ -277,8 +367,12 @@ contract MarketSmoke is Test {
         }
         vm.stopPrank();
 
+        // Ensure whitelist is enabled and ACCOUNT2 is not included.
+        assertTrue(getter.isBuyerWhitelisted(id, ACCOUNT1), "ACCOUNT1 not whitelisted");
+        assertTrue(!getter.isBuyerWhitelisted(id, ACCOUNT2), "ACCOUNT2 unexpectedly whitelisted");
+
         vm.prank(ACCOUNT2);
-        vm.expectRevert(); // generic (custom error selector unknown here)
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, ACCOUNT2));
         market.purchaseListing{value: PRICE1}(id, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // cleanup
@@ -293,14 +387,28 @@ contract MarketSmoke is Test {
         // deploy a local mock 1155 and whitelist it
         Mock1155 token1155 = new Mock1155();
 
-        vm.startPrank(ACCOUNT1);
-        cwl.addWhitelistedCollection(address(token1155));
+        address diamondOwner = _diamondOwner();
+
+        // Best-effort: whitelist the mock 1155.
+        assertTrue(!getter.isCollectionWhitelisted(address(token1155)), "mock1155 unexpectedly pre-whitelisted");
+        vm.startPrank(diamondOwner);
+        {
+            (bool success, bytes memory ret) =
+                diamond.call(abi.encodeWithSignature("addWhitelistedCollection(address)", address(token1155)));
+            if (!success) {
+                bytes4 sel = ret.length >= 4 ? bytes4(ret) : bytes4(0);
+                if (sel != CollectionWhitelist__AlreadyWhitelisted.selector) {
+                    revert("failed to whitelist mock1155");
+                }
+            }
+        }
         vm.stopPrank();
+        assertTrue(getter.isCollectionWhitelisted(address(token1155)), "mock1155 still not whitelisted");
 
         // mint to seller and approve marketplace
         vm.startPrank(ACCOUNT1);
         token1155.mint(ACCOUNT1, ID1155, QTY1155);
-        token1155.setApprovalForAll(DIAMOND, true);
+        token1155.setApprovalForAll(diamond, true);
         vm.stopPrank();
 
         // create listing with partial ON
@@ -335,10 +443,21 @@ contract MarketSmoke is Test {
         uint256 remainingQty = QTY1155 - PARTIAL1;
         uint256 remainingTotal = (PRICE1155 * QTY1155) - (PRICE1155 * PARTIAL1);
 
+        // Verify listing state was updated correctly after partial buy.
+        {
+            Listing memory l = getter.getListingByListingId(id);
+            assertEq(l.erc1155Quantity, remainingQty, "remaining qty mismatch");
+            assertEq(l.price, remainingTotal, "remaining total mismatch");
+        }
+
         vm.prank(ACCOUNT2);
         market.purchaseListing{value: PRICE1155 * PARTIAL2}(
             id, remainingTotal, address(0), remainingQty, address(0), 0, 0, PARTIAL2, ACCOUNT2
         );
+
+        // Listing should now be fully bought and removed.
+        vm.expectRevert();
+        getter.getListingByListingId(id);
 
         // assertion + cleanup (return to seller)
         assertEq(token1155.balanceOf(ACCOUNT2, ID1155), QTY1155, "buyer 1155 qty mismatch");
@@ -350,12 +469,37 @@ contract MarketSmoke is Test {
         assertEq(token1155.balanceOf(ACCOUNT1, ID1155), QTY1155, "cleanup return failed");
     }
 
+    // Collection whitelist must gate createListing (defense-in-depth smoke check).
+    function test_F_CreateListing_RevertsWhenCollectionNotWhitelisted() public {
+        // We use a random address (no code) because createListing must revert on whitelist *before*
+        // interacting with the token contract.
+        address notWhitelistedToken = address(0xDeaD);
+
+        vm.startPrank(ACCOUNT1);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, notWhitelistedToken));
+        market.createListing(
+            notWhitelistedToken, 1, address(0), 1, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
+    }
+
     // --- helpers ---
     function _approve721IfNeeded(address owner, uint256 tokenId) internal {
         vm.startPrank(owner);
-        if (erc721.getApproved(tokenId) != DIAMOND && !erc721.isApprovedForAll(owner, DIAMOND)) {
-            erc721.approve(DIAMOND, tokenId);
+        if (erc721.getApproved(tokenId) != diamond && !erc721.isApprovedForAll(owner, diamond)) {
+            erc721.approve(diamond, tokenId);
         }
         vm.stopPrank();
+    }
+
+    function _diamondOwner() internal view returns (address owner_) {
+        (bool ok, bytes memory ret) = diamond.staticcall(abi.encodeWithSignature("getContractOwner()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+
+        (ok, ret) = diamond.staticcall(abi.encodeWithSignature("owner()"));
+        if (ok && ret.length >= 32) return abi.decode(ret, (address));
+
+        // If neither getter exists, something is very wrong with the deployment.
+        return address(0);
     }
 }
