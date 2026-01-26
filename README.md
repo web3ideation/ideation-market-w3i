@@ -93,6 +93,15 @@ EXPLORERS:
 Louper: https://louper.dev/diamond/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC?network=sepolia
 Etherscan: https://sepolia.etherscan.io/address/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
 
+Deployed MockERC20_18: 0xC740Ee33A12c21Fa7F3cdd426D6051e16EaB456e
+Deployed MockUSDC_6: 0xEaefa01B8c4c8126226A8B2DA2cF6Eb0E5B0bD26
+Deployed MockWBTC_8: 0xB1A8786Fd1bBDB7F56f8cEa78A77897a0Aa9fAb2
+Deployed MockEURS_2: 0xe06E78AB6314993FCa9106536aecfE4284aA791a
+Deployed MockUSDTLike_6: 0xd11Db19892F8c9C89A03Ba6EFD636795cbBc0d74
+Minted to: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+Minted to: 0x8a200122f666af83aF2D4f425aC7A35fa5491ca7
+Minted to: 0xf034e8ad11F249c8081d9da94852bE1734bc11a4
+
 
 for etherscan interaction: // !!!W check these if they are still up to date and integrate the info in the final readme
 add token address to 'collection whitelist'
