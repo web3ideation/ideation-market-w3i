@@ -8,9 +8,6 @@ import {IDiamondLoupeFacet} from "../src/interfaces/IDiamondLoupeFacet.sol";
 import {IDiamondUpgradeFacet} from "../src/interfaces/IDiamondUpgradeFacet.sol";
 import {IERC173} from "../src/interfaces/IERC173.sol";
 
-import {VersionFacet} from "../src/facets/VersionFacet.sol";
-import {GetterFacet} from "../src/facets/GetterFacet.sol";
-
 import {DummyUpgradeFacet} from "../src/facets/DummyUpgradeFacet.sol";
 import {DummyUpgradeInit} from "../src/upgradeInitializers/DummyUpgradeInit.sol";
 
@@ -18,17 +15,14 @@ import {DummyUpgradeInit} from "../src/upgradeInitializers/DummyUpgradeInit.sol"
 /// @notice Deploys a dummy facet + initializer and adds it to an already-deployed diamond.
 /// @dev This script is intended for multisig-owned diamonds:
 ///      - It deploys the new facet + init contract (requires `--broadcast`).
-///      - It prints Safe-ready calldata for a SINGLE multisig proposal using the Safe batch builder:
-///        1) diamond.upgradeDiamond(...)
-///        2) diamond.setVersion("1.0.1", expectedPostImplementationId)
+///      - It prints calldata for a SINGLE multisig transaction calling `upgradeDiamond(...)`.
+///      - Versioning is done atomically inside the initializer delegatecall (no batching required).
 ///      - It does NOT execute the upgrade itself.
 ///
 /// Important assumptions:
-/// - This script models an ADD-ONLY upgrade (adding a brand new facet with new selectors).
-/// - The printed `expectedPostImplementationId` is only correct if the multisig executes the
-///   `upgradeDiamond` call exactly as printed (same facet address and selector set).
-///   If you redeploy the facet, change selectors, or perform other upgrades in-between,
-///   the correct post-upgrade implementationId will differ.
+/// - This is an ADD-ONLY upgrade (adding a brand new facet with new selectors).
+/// - The initializer computes the post-cut implementationId on-chain from diamond storage,
+///   so it stays correct even without off-chain prediction.
 ///
 /// Required environment variables:
 /// - DEV_PRIVATE_KEY: funded dev EOA key used only to deploy facet/init (does not need to be the diamond owner).
@@ -90,8 +84,11 @@ contract UpgradeDummy is Script {
 
         bytes memory initCall = abi.encodeCall(DummyUpgradeInit.initDummyUpgrade, (value));
 
-        // 5) print multisig calldata for a single Safe batch proposal
-        console.log("\n=== Safe Batch Proposal (2 calls) ===");
+        // 5) print multisig calldata for a single-call proposal (upgradeDiamond only)
+        // initializer handles both the dummy value and the versioning update atomically.
+        initCall = abi.encodeCall(DummyUpgradeInit.initDummyUpgradeAndVersion, (value, VERSION_STRING));
+
+        console.log("\n=== Multisig Proposal (single call) ===");
 
         bytes memory upgradeCalldata = abi.encodeWithSelector(
             IDiamondUpgradeFacet.upgradeDiamond.selector,
@@ -104,85 +101,12 @@ contract UpgradeDummy is Script {
             bytes("")
         );
 
-        console.log("\n--- Call #1: upgradeDiamond ---");
+        console.log("\n--- upgradeDiamond ---");
         console.log("To (diamond):", diamondAddress);
         console.log("Value:", uint256(0));
         console.log("Data:");
         console.logBytes(upgradeCalldata);
 
-        bytes32 expectedPostImplementationId =
-            computeExpectedImplementationIdAfterAdd(diamondAddress, address(facet), selectors);
-        bytes memory setVersionCalldata =
-            abi.encodeWithSelector(VersionFacet.setVersion.selector, VERSION_STRING, expectedPostImplementationId);
-
-        console.log("\n--- Call #2: setVersion ---");
-        console.log("To (diamond):", diamondAddress);
-        console.log("Value:", uint256(0));
-        console.log("Data:");
-        console.logBytes(setVersionCalldata);
-        console.log("\nExpected post-upgrade implementationId:");
-        console.logBytes32(expectedPostImplementationId);
-
         vm.stopBroadcast();
-    }
-
-    /// @notice Computes the expected post-upgrade implementationId for adding a new facet+selectors.
-    /// @dev Deterministic: keccak256(chainId, diamond, sortedFacetAddresses[], sortedSelectorsPerFacet[][]).
-    /// This does NOT execute the upgrade; it models the expected diamond state after Call #1.
-    function computeExpectedImplementationIdAfterAdd(address diamond, address newFacet, bytes4[] memory newSelectors)
-        internal
-        view
-        returns (bytes32)
-    {
-        IDiamondLoupeFacet loupe = IDiamondLoupeFacet(diamond);
-        IDiamondLoupeFacet.Facet[] memory facets = loupe.facets();
-        uint256 facetCount = facets.length;
-
-        address[] memory facetAddresses = new address[](facetCount + 1);
-        bytes4[][] memory selectorsPerFacet = new bytes4[][](facetCount + 1);
-
-        for (uint256 i = 0; i < facetCount; i++) {
-            facetAddresses[i] = facets[i].facetAddress;
-            selectorsPerFacet[i] = facets[i].functionSelectors;
-        }
-
-        // Append the new facet and its selectors.
-        facetAddresses[facetCount] = newFacet;
-        selectorsPerFacet[facetCount] = newSelectors;
-
-        // Sort facets by address (and keep selectors aligned with their facet).
-        for (uint256 i = 0; i < facetAddresses.length; i++) {
-            for (uint256 j = i + 1; j < facetAddresses.length; j++) {
-                if (facetAddresses[i] > facetAddresses[j]) {
-                    (facetAddresses[i], facetAddresses[j]) = (facetAddresses[j], facetAddresses[i]);
-                    (selectorsPerFacet[i], selectorsPerFacet[j]) = (selectorsPerFacet[j], selectorsPerFacet[i]);
-                }
-            }
-        }
-
-        // Sort selectors within each facet.
-        for (uint256 i = 0; i < selectorsPerFacet.length; i++) {
-            selectorsPerFacet[i] = sortSelectors(selectorsPerFacet[i]);
-        }
-
-        return keccak256(abi.encode(block.chainid, diamond, facetAddresses, selectorsPerFacet));
-    }
-
-    /// @notice Sorts function selectors in ascending order.
-    function sortSelectors(bytes4[] memory selectors) internal pure returns (bytes4[] memory) {
-        uint256 length = selectors.length;
-        bytes4[] memory sorted = new bytes4[](length);
-        for (uint256 i = 0; i < length; i++) {
-            sorted[i] = selectors[i];
-        }
-
-        for (uint256 i = 0; i < length; i++) {
-            for (uint256 j = i + 1; j < length; j++) {
-                if (uint32(sorted[i]) > uint32(sorted[j])) {
-                    (sorted[i], sorted[j]) = (sorted[j], sorted[i]);
-                }
-            }
-        }
-        return sorted;
     }
 }
