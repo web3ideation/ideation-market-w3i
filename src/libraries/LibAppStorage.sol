@@ -92,7 +92,7 @@ library LibAppStorage {
     /// @dev Inline assembly assigns the slot to the returned storage reference.
     function appStorage() internal pure returns (AppStorage storage s) {
         bytes32 appStoragePosition = APP_STORAGE_POSITION;
-        assembly {
+        assembly ("memory-safe") {
             s.slot := appStoragePosition
         }
     }

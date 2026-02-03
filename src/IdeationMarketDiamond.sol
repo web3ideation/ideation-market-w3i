@@ -34,14 +34,14 @@ contract IdeationMarketDiamond {
         LibDiamond.DiamondStorage storage ds;
         bytes32 position = LibDiamond.DIAMOND_STORAGE_POSITION;
         // get diamond storage
-        assembly {
+        assembly ("memory-safe") {
             ds.slot := position
         }
         // get facet from function selector
         address facet = ds.selectorToFacetAndPosition[msg.sig].facetAddress;
         if (facet == address(0)) revert Diamond__FunctionDoesNotExist();
         // Execute external function from facet using delegatecall and return any value.
-        assembly {
+        assembly ("memory-safe") {
             // copy function selector and any arguments
             calldatacopy(0, 0, calldatasize())
             // execute function call using the facet

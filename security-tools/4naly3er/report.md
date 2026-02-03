@@ -7,93 +7,123 @@
 | |Issue|Instances|
 |-|:-|:-:|
 | [GAS-1](#GAS-1) | `a = a + b` is more gas effective than `a += b` for state variables (excluding arrays and mappings) | 4 |
-| [GAS-2](#GAS-2) | Using bools for storage incurs overhead | 5 |
-| [GAS-3](#GAS-3) | Cache array length outside of loop | 2 |
-| [GAS-4](#GAS-4) | For Operations that will not overflow, you could use unchecked | 111 |
-| [GAS-5](#GAS-5) | Use Custom Errors instead of Revert Strings to save Gas | 12 |
-| [GAS-6](#GAS-6) | Avoid contract existence checks by using low level calls | 7 |
+| [GAS-2](#GAS-2) | Using bools for storage incurs overhead | 6 |
+| [GAS-3](#GAS-3) | Cache array length outside of loop | 8 |
+| [GAS-4](#GAS-4) | For Operations that will not overflow, you could use unchecked | 188 |
+| [GAS-5](#GAS-5) | Use Custom Errors instead of Revert Strings to save Gas | 14 |
+| [GAS-6](#GAS-6) | Avoid contract existence checks by using low level calls | 8 |
 | [GAS-7](#GAS-7) | Functions guaranteed to revert when called by normal users can be marked `payable` | 4 |
-| [GAS-8](#GAS-8) | `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`) | 18 |
-| [GAS-9](#GAS-9) | Use != 0 instead of > 0 for unsigned integer comparison | 29 |
+| [GAS-8](#GAS-8) | `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`) | 28 |
+| [GAS-9](#GAS-9) | Using `private` rather than `public` for constants, saves gas | 3 |
+| [GAS-10](#GAS-10) | Superfluous event fields | 2 |
+| [GAS-11](#GAS-11) | Increments/decrements can be unchecked in for-loops | 13 |
+| [GAS-12](#GAS-12) | Use != 0 instead of > 0 for unsigned integer comparison | 31 |
 ### <a name="GAS-1"></a>[GAS-1] `a = a + b` is more gas effective than `a += b` for state variables (excluding arrays and mappings)
 This saves **16 gas per instance.**
 
 *Instances (4)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/DiamondLoupeFacet.sol
 
-393:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
-
-403:         s.proceeds[listedItem.seller] += sellerProceeds;
-
-404:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
-
-406:             s.proceeds[msg.sender] += excessPayment;
+76:             totalSelectors += ds.facetFunctionSelectors[ds.facetAddresses[i]].functionSelectors.length;
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
+
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+24:         balanceOf[to] += amount;
+
+25:         totalSupply += amount;
+
+56:             balanceOf[to] += value;
+
+```
 
 ### <a name="GAS-2"></a>[GAS-2] Using bools for storage incurs overhead
 Use uint256(1) and uint256(2) for true/false to avoid a Gwarmaccess (100 gas), and to avoid Gsset (20000 gas) when changing from ‘false’ to ‘true’, after having been ‘true’ in the past. See [source](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/58f635312aa21f947cae5f8578638a85aa2519f5/contracts/security/ReentrancyGuard.sol#L23-L27).
 
-*Instances (5)*:
+*Instances (6)*:
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-28:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+36:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
 
-54:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+63:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/libraries/LibAppStorage.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+60:     mapping(address currency => bool allowed) allowedCurrencies;
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+67:     mapping(address collection => bool isWhitelisted) whitelistedCollections;
+
+73:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId;
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-42:         mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
+38:         mapping(bytes4 interfaceId => bool isSupported) supportedInterfaces;
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
 ### <a name="GAS-3"></a>[GAS-3] Cache array length outside of loop
 If not cached, the solidity compiler will always read the length of the array during each iteration. That is, if it is a storage array, this is an extra sload operation (100 additional extra gas for each iteration except for the first) and if it is a memory array, this is an extra mload operation (3 additional gas for each iteration except for the first).
 
-*Instances (2)*:
+*Instances (8)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-467:             for (uint256 i = deprecatedListingArray.length; i != 0;) {
+24:         for (uint256 i = 0; i < _addFunctions.length; i++) {
 
-873:         for (uint256 i = listingArray.length; i != 0;) {
+31:             for (uint256 j = 0; j < selectors.length; j++) {
+
+43:         for (uint256 i = 0; i < _replaceFunctions.length; i++) {
+
+50:             for (uint256 j = 0; j < selectors.length; j++) {
+
+64:             for (uint256 i = 0; i < _removeFunctions.length; i++) {
+
+112:         for (uint256 i = 0; i < arr.length; i++) {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
+
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+149:         for (uint256 i = 0; i < currencies.length; i++) {
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+56:         for (uint256 i = 0; i < facetAddresses.length; i++) {
+
+```
 
 ### <a name="GAS-4"></a>[GAS-4] For Operations that will not overflow, you could use unchecked
 
-*Instances (111)*:
+*Instances (188)*:
 ```solidity
-File: IdeationMarketDiamond.sol
+File: src/IdeationMarketDiamond.sol
 
-13: import {LibDiamond} from "./libraries/LibDiamond.sol";
+5: import {LibDiamond} from "./libraries/LibDiamond.sol";
 
-14: import {IDiamondCutFacet} from "./interfaces/IDiamondCutFacet.sol";
+6: import {IDiamondUpgradeFacet} from "./interfaces/IDiamondUpgradeFacet.sol";
+
+37:         assembly ("memory-safe") {
+
+44:         assembly ("memory-safe") {
 
 ```
-[Link to code](--forceIdeationMarketDiamond.sol)
 
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
 4: import "../libraries/LibAppStorage.sol";
 
@@ -103,77 +133,112 @@ File: facets/BuyerWhitelistFacet.sol
 
 7: import "../interfaces/IBuyerWhitelistFacet.sol";
 
-40:                 i++;
+48:                 i++;
 
-66:                 i++;
+75:                 i++;
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
 4: import "../libraries/LibAppStorage.sol";
 
 5: import "../libraries/LibDiamond.sol";
 
-47:         uint256 lastIndex = s.whitelistedCollectionsArray.length - 1;
+53:         uint256 lastIndex = s.whitelistedCollectionsArray.length - 1;
 
-85:                 i++;
+92:                 i++;
 
-105:                 uint256 lastIndex = arr.length - 1;
+113:                 uint256 lastIndex = arr.length - 1;
 
-123:                 i++;
-
-```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
-
-```solidity
-File: facets/DiamondCutFacet.sol
-
-10: import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
-
-11: import {LibDiamond} from "../libraries/LibDiamond.sol";
+131:                 i++;
 
 ```
-[Link to code](--forcefacets/DiamondCutFacet.sol)
 
 ```solidity
-File: facets/DiamondLoupeFacet.sol
-
-10: import {LibDiamond} from "../libraries/LibDiamond.sol";
-
-11: import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
-
-12: import {IERC165} from "../interfaces/IERC165.sol";
-
-26:                 i++;
-
-```
-[Link to code](--forcefacets/DiamondLoupeFacet.sol)
-
-```solidity
-File: facets/GetterFacet.sol
+File: src/facets/CurrencyWhitelistFacet.sol
 
 4: import "../libraries/LibAppStorage.sol";
 
 5: import "../libraries/LibDiamond.sol";
 
-28:                 activeCount++;
-
-31:                 i++;
-
-48:                 arrayIndex++;
-
-51:                 i++;
-
-100:         return s.listingIdCounter + 1;
+59:         uint256 lastIndex = s.allowedCurrenciesArray.length - 1;
 
 ```
-[Link to code](--forcefacets/GetterFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/DiamondLoupeFacet.sol
+
+6: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+7: import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
+
+8: import {IDiamondInspectFacet} from "../interfaces/IDiamondInspectFacet.sol";
+
+9: import {IERC165} from "../interfaces/IERC165.sol";
+
+27:                 i++;
+
+76:             totalSelectors += ds.facetFunctionSelectors[ds.facetAddresses[i]].functionSelectors.length;
+
+78:                 i++;
+
+91:                     k++;
+
+92:                     j++;
+
+96:                 i++;
+
+```
+
+```solidity
+File: src/facets/DiamondUpgradeFacet.sol
+
+4: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+5: import {IDiamondUpgradeFacet} from "../interfaces/IDiamondUpgradeFacet.sol";
+
+24:         for (uint256 i = 0; i < _addFunctions.length; i++) {
+
+31:             for (uint256 j = 0; j < selectors.length; j++) {
+
+43:         for (uint256 i = 0; i < _replaceFunctions.length; i++) {
+
+50:             for (uint256 j = 0; j < selectors.length; j++) {
+
+64:             for (uint256 i = 0; i < _removeFunctions.length; i++) {
+
+98:         assembly ("memory-safe") {
+
+105:         assembly ("memory-safe") {
+
+112:         for (uint256 i = 0; i < arr.length; i++) {
+
+```
+
+```solidity
+File: src/facets/DummyUpgradeFacet.sol
+
+4: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+5: import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
+
+```
+
+```solidity
+File: src/facets/GetterFacet.sol
+
+4: import "../libraries/LibAppStorage.sol";
+
+5: import "../libraries/LibDiamond.sol";
+
+49:         return s.listingIdCounter + 1;
+
+```
+
+```solidity
+File: src/facets/IdeationMarketFacet.sol
 
 4: import "../libraries/LibAppStorage.sol";
 
@@ -189,210 +254,366 @@ File: facets/IdeationMarketFacet.sol
 
 10: import "../interfaces/IBuyerWhitelistFacet.sol";
 
-166:         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+205:         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
 
-167:         uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
+206:         uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
 
-170:         address[] calldata allowedBuyers // whitelisted Buyers
+209:         address[] calldata allowedBuyers // whitelisted Buyers
 
-258:         s.listingIdCounter++;
+284:         s.listingIdCounter++;
 
-311:         uint256 erc1155PurchaseQuantity, // the exact ERC1155 quantity the buyer wants when partialBuyEnabled = true; for ERC721 must be 0
+397:             uint256 unitPrice = listedItem.price / listedItem.erc1155Quantity;
 
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
+398:             purchasePrice = unitPrice * erc1155PurchaseQuantity;
 
-350:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+439:         uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+440:         uint256 remainingProceeds = purchasePrice - innovationFee;
 
-384:         uint256 sellerProceeds = purchasePrice - innovationProceeds;
+452:                 remainingProceeds -= royaltyAmount;
 
-392:                 sellerProceeds -= royaltyAmount; // NFT royalties get deducted from the sellerProceeds
+517:             s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
 
-393:                 s.proceeds[royaltyReceiver] += royaltyAmount; // Update proceeds for the Royalty Receiver
+518:             s.listings[listingId].price -= purchasePrice;
 
-399:         uint256 excessPayment = msg.value - purchasePrice;
+594:                 } catch { /* ignore */ }
 
-403:         s.proceeds[listedItem.seller] += sellerProceeds;
+603:                 } catch { /* ignore */ }
 
-404:         s.proceeds[LibDiamond.contractOwner()] += innovationProceeds;
-
-406:             s.proceeds[msg.sender] += excessPayment;
-
-411:             address desiredOwner = address(0); // initializing this for cleanup
-
-412:             address obsoleteSeller = address(0); // initializing this for cleanup
-
-413:             uint256 remainingERC1155Balance = 0; // initializing this for cleanup
-
-441:                 obsoleteSeller = desiredErc1155Holder; // for cleanup
-
-442:                 remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
-
-460:                 obsoleteSeller = desiredOwner; // for cleanup
-
-469:                     i--;
-
-484:                     deprecatedListingArray[i] = deprecatedListingArray[deprecatedListingArray.length - 1];
-
-497:             s.listings[listingId].erc1155Quantity -= erc1155PurchaseQuantity;
-
-498:             s.listings[listingId].price -= purchasePrice;
-
-555:                 } catch { /* ignore */ }
-
-564:                 } catch { /* ignore */ }
-
-577:                 } catch { /* ignore */ }
-
-595:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-
-596:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
-
-599:         address[] calldata newAllowedBuyers // whitelisted Buyers
-
-679:         listedItem.feeRate = s.innovationFee; // note that with updating a listing the up to date innovationFee will be set
-
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
-
-875:                 i--;
-
-878:                 listingArray[i] = listingArray[listingArray.length - 1];
+616:                 } catch { /* ignore */ }
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: facets/OwnershipFacet.sol
+File: src/facets/OwnershipFacet.sol
 
 4: import {LibDiamond} from "../libraries/LibDiamond.sol";
 
 5: import {IERC173} from "../interfaces/IERC173.sol";
 
 ```
-[Link to code](--forcefacets/OwnershipFacet.sol)
 
 ```solidity
-File: interfaces/IERC1155.sol
+File: src/facets/PauseFacet.sol
+
+4: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+```
+
+```solidity
+File: src/facets/VersionFacet.sol
+
+4: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+```
+
+```solidity
+File: src/interfaces/IERC1155.sol
 
 6: import {IERC165} from "./IERC165.sol";
 
 ```
-[Link to code](--forceinterfaces/IERC1155.sol)
 
 ```solidity
-File: interfaces/IERC2981.sol
+File: src/interfaces/IERC2981.sol
 
 6: import {IERC165} from "./IERC165.sol";
 
 ```
-[Link to code](--forceinterfaces/IERC2981.sol)
 
 ```solidity
-File: interfaces/IERC4907.sol
+File: src/interfaces/IERC4907.sol
 
 5: import {IERC721} from "./IERC721.sol";
 
 ```
-[Link to code](--forceinterfaces/IERC4907.sol)
 
 ```solidity
-File: interfaces/IERC721.sol
+File: src/interfaces/IERC721.sol
 
 6: import {IERC165} from "./IERC165.sol";
 
 ```
-[Link to code](--forceinterfaces/IERC721.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/libraries/LibAppStorage.sol
 
-6:     uint32 feeRate; // storing the fee at the time of listing
-
-7:     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
-
-8:     bool partialBuyEnabled; // true means that the ERC1155 Listing can be bought in multiple parts
-
-12:     uint256 erc1155Quantity; // For ERC1155 >1 and for ERC721 ==0
-
-15:     address desiredTokenAddress; // For swap Listing !=address(0)
-
-17:     uint256 desiredErc1155Quantity; // For swap ERC1155 >1 and for swap ERC721 ==0 or non swap
-
-22:     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
-
-23:     uint16 buyerWhitelistMaxBatchSize; // should be 300
-
-26:     mapping(uint128 listingId => Listing listing) listings; // Listings by listingId
-
-27:     mapping(address tokenContract => mapping(uint256 tokenId => uint128[] listingIds)) tokenToListingIds; // reverse index from token to ListingIds
-
-28:     mapping(address seller => uint256 amount) proceeds; // Proceeds by seller address
-
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
-
-30:     address[] whitelistedCollectionsArray; // for lookups
-
-31:     mapping(address collection => uint256 index) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
-
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+95:         assembly ("memory-safe") {
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-11: import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
+63:         assembly ("memory-safe") {
 
-24:         uint96 functionSelectorPosition; // position in facetFunctionSelectors.functionSelectors array
+132:             selectorPosition++;
 
-29:         uint256 facetAddressPosition; // position of facetAddress in facetAddresses array
+134:                 selectorIndex++;
 
-92:                 facetIndex++;
+160:             selectorPosition++;
 
-116:             selectorPosition++;
+162:                 selectorIndex++;
 
-118:                 selectorIndex++;
+181:                 selectorIndex++;
 
-141:             selectorPosition++;
+212:         uint256 lastSelectorPosition = ds.facetFunctionSelectors[_facetAddress].functionSelectors.length - 1;
 
-143:                 selectorIndex++;
+226:             uint256 lastFacetAddressPosition = ds.facetAddresses.length - 1;
 
-161:                 selectorIndex++;
+248:                 assembly ("memory-safe") {
 
-186:         uint256 lastSelectorPosition = ds.facetFunctionSelectors[_facetAddress].functionSelectors.length - 1;
-
-200:             uint256 lastFacetAddressPosition = ds.facetAddresses.length - 1;
+262:         assembly ("memory-safe") {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
 ```solidity
-File: upgradeInitializers/DiamondInit.sol
+File: src/mocks/MockERC20_18.sol
 
-12: import {LibDiamond} from "../libraries/LibDiamond.sol";
-
-13: import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
-
-14: import {IDiamondCutFacet} from "../interfaces/IDiamondCutFacet.sol";
-
-15: import {IERC173} from "../interfaces/IERC173.sol";
-
-16: import {IERC165} from "../interfaces/IERC165.sol";
-
-17: import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
-
-18: import {IERC721} from "../interfaces/IERC721.sol";
-
-19: import {IERC1155} from "../interfaces/IERC1155.sol";
-
-20: import {IERC2981} from "../interfaces/IERC2981.sol";
-
-34:         s.innovationFee = innovationFee; // represents a rate in basis points (e.g., 100 = 0.1%)
+4: import {MockMintableERC20} from "./MockMintableERC20.sol";
 
 ```
-[Link to code](--forceupgradeInitializers/DiamondInit.sol)
+
+```solidity
+File: src/mocks/MockEURS_2.sol
+
+4: import {MockMintableERC20} from "./MockMintableERC20.sol";
+
+```
+
+```solidity
+File: src/mocks/MockMintableERC20.sol
+
+4: import {ERC20} from "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol";
+
+```
+
+```solidity
+File: src/mocks/MockUSDC_6.sol
+
+4: import {MockMintableERC20} from "./MockMintableERC20.sol";
+
+```
+
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+24:         balanceOf[to] += amount;
+
+25:         totalSupply += amount;
+
+44:             allowance[from][msg.sender] = allowed - value;
+
+55:             balanceOf[from] = bal - value;
+
+56:             balanceOf[to] += value;
+
+```
+
+```solidity
+File: src/mocks/MockWBTC_8.sol
+
+4: import {MockMintableERC20} from "./MockMintableERC20.sol";
+
+```
+
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+5: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+6: import {IDiamondLoupeFacet} from "../interfaces/IDiamondLoupeFacet.sol";
+
+7: import {IDiamondInspectFacet} from "../interfaces/IDiamondInspectFacet.sol";
+
+8: import {IDiamondUpgradeFacet} from "../interfaces/IDiamondUpgradeFacet.sol";
+
+9: import {IERC173} from "../interfaces/IERC173.sol";
+
+10: import {IERC165} from "../interfaces/IERC165.sol";
+
+11: import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
+
+41:         s.innovationFee = innovationFee; // Denominator is 100_000 (e.g., 1_000 = 1%). innovation/Marketplace fee (excluding gascosts) for each sale
+
+48:         address[] memory currencies = new address[](76); // 1 ETH + 75 ERC-20 = 76 total
+
+54:         currencies[1] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
+
+55:         currencies[2] = 0xae78736Cd615f374D3085123A210448E74Fc6393; // rETH (Rocket Pool)
+
+56:         currencies[3] = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH (Lido)
+
+59:         currencies[4] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599; // WBTC
+
+60:         currencies[5] = 0x18084fbA666a33d37592fA2633fD49a74DD93a88; // tBTC
+
+63:         currencies[6] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // USDC
+
+64:         currencies[7] = 0xdAC17F958D2ee523a2206206994597C13D831ec7; // USDT
+
+65:         currencies[8] = 0x6B175474E89094C44Da98b954EedeAC495271d0F; // DAI
+
+66:         currencies[9] = 0x5f98805A4E8be255a32880FDeC7F6728C6568bA0; // LUSD
+
+67:         currencies[10] = 0x853d955aCEf822Db058eb8505911ED77F175b99e; // FRAX
+
+68:         currencies[11] = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f; // GHO
+
+69:         currencies[12] = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E; // crvUSD
+
+72:         currencies[13] = 0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c; // EURC
+
+73:         currencies[14] = 0xdB25f211AB05b1c97D595516F45794528a807ad8; // EURS
+
+74:         currencies[15] = 0xC581b735A1688071A1746c968e0798D642EDE491; // EURT
+
+77:         currencies[16] = 0x70e8dE73cE538DA2bEEd35d14187F6959a8ecA96; // XSGD
+
+78:         currencies[17] = 0x2C537E5624e4af88A7ae4060C022609376C8D0EB; // TRYB (BiLira)
+
+81:         currencies[18] = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984; // UNI
+
+82:         currencies[19] = 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9; // AAVE
+
+83:         currencies[20] = 0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2; // MKR
+
+84:         currencies[21] = 0xc00e94Cb662C3520282E6f5717214004A7f26888; // COMP
+
+85:         currencies[22] = 0xD533a949740bb3306d119CC777fa900bA034cd52; // CRV
+
+86:         currencies[23] = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B; // CVX
+
+87:         currencies[24] = 0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F; // SNX
+
+88:         currencies[25] = 0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e; // YFI
+
+89:         currencies[26] = 0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32; // LDO
+
+90:         currencies[27] = 0x111111111117dC0aa78b770fA6A738034120C302; // 1INCH
+
+91:         currencies[28] = 0xba100000625a3754423978a60c9317c58a424e3D; // BAL
+
+92:         currencies[29] = 0x6B3595068778DD592e39A122f4f5a5cF09C90fE2; // SUSHI
+
+93:         currencies[30] = 0xdeFA4e8a7bcBA345F687a2f1456F5Edd9CE97202; // KNC
+
+94:         currencies[31] = 0xE41d2489571d322189246DaFA5ebDe1F4699F498; // ZRX
+
+95:         currencies[32] = 0x6810e776880C02933D47DB1b9fc05908e5386b96; // GNO
+
+96:         currencies[33] = 0x1a7e4e63778B4f12a199C062f3eFdD288afCBce8; // EURA (was FXS)
+
+99:         currencies[34] = 0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK
+
+100:         currencies[35] = 0xc944E90C64B2c07662A292be6244BDf05Cda44a7; // GRT
+
+101:         currencies[36] = 0x0D8775F648430679A709E98d2b0Cb6250d2887EF; // BAT
+
+102:         currencies[37] = 0x967da4048cD07aB37855c090aAF366e4ce1b9F48; // OCEAN
+
+103:         currencies[38] = 0x6De037ef9aD2725EB40118Bb1702EBb27e4Aeb24; // RENDER
+
+104:         currencies[39] = 0x58b6A8A3302369DAEc383334672404Ee733aB239; // LPT
+
+105:         currencies[40] = 0x7DD9c5Cba05E151C895FDe1CF355C9A1D5DA6429; // GLM
+
+106:         currencies[41] = 0x4a220E6096B25EADb88358cb44068A3248254675; // QNT
+
+107:         currencies[42] = 0x8290333ceF9e6D528dD5618Fb97a76f268f3EDD4; // ANKR
+
+108:         currencies[43] = 0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85; // FET
+
+109:         currencies[44] = 0x0b38210ea11411557c13457D4dA7dC6ea731B88a; // API3
+
+110:         currencies[45] = 0x1776e1F26f98b1A5dF9cD347953a26dd3Cb46671; // NMR
+
+111:         currencies[46] = 0x163f8C2467924be0ae7B5347228CABF260318753; // WLD (Worldcoin - AI/Identity)
+
+114:         currencies[47] = 0x4d224452801ACEd8B2F0aebE155379bb5D594381; // APE
+
+115:         currencies[48] = 0x3845badAde8e6dFF049820680d1F14bD3903a5d0; // SAND
+
+116:         currencies[49] = 0x0F5D2fB29fb7d3CFeE444a200298f468908cC942; // MANA
+
+117:         currencies[50] = 0xBB0E17EF65F82Ab018d8EDd776e8DD940327B28b; // AXS
+
+118:         currencies[51] = 0xF629cBd94d3791C9250152BD8dfBDF380E2a3B9c; // ENJ
+
+119:         currencies[52] = 0xF57e7e7C23978C3cAEC3C3548E3D615c346e79fF; // IMX
+
+120:         currencies[53] = 0x3506424F91fD33084466F402d5D97f05F8e3b4AF; // CHZ
+
+121:         currencies[54] = 0x5283D291DBCF85356A21bA090E6db59121208b44; // BLUR
+
+122:         currencies[55] = 0xf4d2888d29D722226FafA5d9B24F9164c092421E; // LOOKS
+
+123:         currencies[56] = 0xba5BDe662c17e2aDFF1075610382B9B691296350; // RARE
+
+124:         currencies[57] = 0xFca59Cd816aB1eaD66534D82bc21E7515cE441CF; // RARI
+
+125:         currencies[58] = 0x767FE9EDC9E0dF98E07454847909b5E959D7ca0E; // ILV
+
+128:         currencies[59] = 0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6; // POL
+
+129:         currencies[60] = 0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1; // ARB
+
+130:         currencies[61] = 0x3c3a81e81dc49A522A592e7622A7E711c06bf354; // MNT
+
+131:         currencies[62] = 0xCa14007Eff0dB1f8135f4C25B34De49AB0d42766; // STRK
+
+132:         currencies[63] = 0x9E32b13ce7f2E80A01932B42553652E053D6ed8e; // Metis
+
+133:         currencies[64] = 0xBBbbCA6A901c926F240b89EacB641d8Aec7AEafD; // LRC
+
+134:         currencies[65] = 0x6985884C4392D348587B19cb9eAAf157F13271cd; // ZRO
+
+135:         currencies[66] = 0x467719aD09025FcC6cF6F8311755809d45a5E5f3; // AXL
+
+136:         currencies[67] = 0x66A5cFB2e9c529f14FE6364Ad1075dF3a649C0A5; // ZK
+
+137:         currencies[68] = 0x4F9254C83EB525f9FCf346490bbb3ed28a81C667; // CELR
+
+140:         currencies[69] = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // WBETH
+
+141:         currencies[70] = 0x8c1BEd5b9a0928467c9B1341Da1D7BD5e10b6549; // LsETH
+
+142:         currencies[71] = 0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38; // osETH
+
+143:         currencies[72] = 0x9D39A5DE30e57443BfF2A8307A4256c8797A3497; // SUSDe
+
+144:         currencies[73] = 0x68749665FF8D2d112Fa859AA293F07A622782F38; // XAUt (Tether Gold)
+
+145:         currencies[74] = 0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3; // ONDO
+
+146:         currencies[75] = 0x57e114B691Db790C35207b2e685D4A43181e6061; // ENA
+
+149:         for (uint256 i = 0; i < currencies.length; i++) {
+
+152:             s.allowedCurrenciesIndex[currency] = i; // Store actual index (same pattern as whitelistedCollectionsIndex)
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+4: import {LibAppStorage, AppStorage} from "../libraries/LibAppStorage.sol";
+
+5: import {LibDiamond} from "../libraries/LibDiamond.sol";
+
+56:         for (uint256 i = 0; i < facetAddresses.length; i++) {
+
+67:         for (uint256 i = 0; i < length; i++) {
+
+68:             for (uint256 j = i + 1; j < length; j++) {
+
+79:         for (uint256 i = 0; i < length; i++) {
+
+83:         for (uint256 i = 0; i < length; i++) {
+
+84:             for (uint256 j = i + 1; j < length; j++) {
+
+```
 
 ### <a name="GAS-5"></a>[GAS-5] Use Custom Errors instead of Revert Strings to save Gas
 Custom errors are available from solidity version 0.8.4. Custom errors save [**~50 gas**](https://gist.github.com/IllIllI000/ad1bd0d29a0101b25e57c293b4b0c746) each time they're hit by [avoiding having to allocate and store the revert string](https://blog.soliditylang.org/2021/04/21/custom-errors/#errors-in-depth). Not defining the strings also save deployment gas
@@ -405,84 +626,101 @@ Source: <https://blog.soliditylang.org/2021/04/21/custom-errors/>:
 
 Consider replacing **all revert strings** with custom errors in the solution, and particularly those that have multiple occurrences:
 
-*Instances (12)*:
+*Instances (14)*:
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-70:         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
+109:         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
 
-89:                 revert("LibDiamondCut: Incorrect FacetCutAction");
+115:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-100:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+117:         require(_facetAddress != address(0), "LibDiamondCut: Add facet can't be address(0)");
 
-102:         require(_facetAddress != address(0), "LibDiamondCut: Add facet can't be address(0)");
+129:             require(oldFacetAddress == address(0), "LibDiamondCut: Can't add function that already exists");
 
-114:             require(oldFacetAddress == address(0), "LibDiamondCut: Can't add function that already exists");
+142:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-124:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+144:         require(_facetAddress != address(0), "LibDiamondCut: Replace facet can't be address(0)");
 
-126:         require(_facetAddress != address(0), "LibDiamondCut: Add facet can't be address(0)");
+156:             require(oldFacetAddress != _facetAddress, "LibDiamondCut: Can't replace function with same function");
 
-138:             require(oldFacetAddress != _facetAddress, "LibDiamondCut: Can't replace function with same function");
+171:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-149:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+207:         require(_facetAddress != address(0), "LibDiamondCut: Can't remove function that doesn't exist");
 
-152:         require(_facetAddress == address(0), "LibDiamondCut: Remove facet address must be address(0)");
-
-181:         require(_facetAddress != address(0), "LibDiamondCut: Can't remove function that doesn't exist");
-
-183:         require(_facetAddress != address(this), "LibDiamondCut: Can't remove immutable function");
+209:         require(_facetAddress != address(this), "LibDiamondCut: Can't remove immutable function");
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
+
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+31:         if (value != 0 && current != 0) revert("USDTLike: must reset allowance to 0");
+
+43:             if (allowed < value) revert("USDTLike: insufficient allowance");
+
+51:         if (to == address(0)) revert("USDTLike: transfer to zero");
+
+53:         if (bal < value) revert("USDTLike: insufficient balance");
+
+```
 
 ### <a name="GAS-6"></a>[GAS-6] Avoid contract existence checks by using low level calls
 Prior to 0.8.10 the compiler inserted extra code, including `EXTCODESIZE` (**100 gas**), to check for contract existence for external function calls. In more recent solidity versions, the compiler will not insert these checks if the external call has a return value. Similar behavior can be achieved in earlier versions by using low-level calls, since low level calls never check for contract existence
 
-*Instances (7)*:
+*Instances (8)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-196:             uint256 balance = token.balanceOf(erc1155Holder, tokenId);
-
-367:             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
-
-417:                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
-
-442:                 remainingERC1155Balance = desiredToken.balanceOf(obsoleteSeller, listedItem.desiredTokenId); // for cleanup
-
-628:             uint256 balance = token.balanceOf(seller, tokenId);
-
-748:                     try token.balanceOf(listedItem.seller, listedItem.tokenId) returns (uint256 balance) {
+98:             if (token.balanceOf(seller, tokenId) < erc1155Quantity) {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-217:         (bool success, bytes memory error) = _init.delegatecall(_calldata);
+79:             (bool success, bytes memory returndata) = _delegate.delegatecall(_functionCall);
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
+
+```solidity
+File: src/facets/IdeationMarketFacet.sol
+
+237:             uint256 balance = token.balanceOf(erc1155Holder, tokenId);
+
+425:             uint256 balance = IERC1155(listedItem.tokenAddress).balanceOf(listedItem.seller, listedItem.tokenId);
+
+466:                 uint256 swapBalance = desiredToken.balanceOf(desiredErc1155Holder, listedItem.desiredTokenId);
+
+680:             uint256 balance = token.balanceOf(listedItem.seller, listedItem.tokenId);
+
+782:                     try token.balanceOf(listedItem.seller, listedItem.tokenId) returns (uint256 balance) {
+
+```
+
+```solidity
+File: src/libraries/LibDiamond.sol
+
+245:         (bool success, bytes memory error) = _init.delegatecall(_calldata);
+
+```
 
 ### <a name="GAS-7"></a>[GAS-7] Functions guaranteed to revert when called by normal users can be marked `payable`
 If a function modifier such as `onlyOwner` is used, the function will revert if a normal user tries to pay the function. Marking the function as `payable` will lower the gas cost for legitimate callers because the compiler will not include checks for whether a payment was provided.
 
 *Instances (4)*:
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-26:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
+31:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-41:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
+47:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-66:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+73:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
-93:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+101:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ### <a name="GAS-8"></a>[GAS-8] `++i` costs less gas compared to `i++` or `i += 1` (same for `--i` vs `i--` or `i -= 1`)
 Pre-increments and pre-decrements are cheaper.
@@ -523,157 +761,283 @@ Consider using pre-increments and pre-decrements where they are relevant (meanin
 
 *Saves 5 gas per instance*
 
-*Instances (18)*:
+*Instances (28)*:
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-40:                 i++;
+48:                 i++;
 
-66:                 i++;
+75:                 i++;
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-85:                 i++;
+92:                 i++;
 
-123:                 i++;
+131:                 i++;
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ```solidity
-File: facets/DiamondLoupeFacet.sol
+File: src/facets/DiamondLoupeFacet.sol
 
-26:                 i++;
+27:                 i++;
+
+78:                 i++;
+
+91:                     k++;
+
+92:                     j++;
+
+96:                 i++;
 
 ```
-[Link to code](--forcefacets/DiamondLoupeFacet.sol)
 
 ```solidity
-File: facets/GetterFacet.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-28:                 activeCount++;
+24:         for (uint256 i = 0; i < _addFunctions.length; i++) {
 
-31:                 i++;
+31:             for (uint256 j = 0; j < selectors.length; j++) {
 
-48:                 arrayIndex++;
+43:         for (uint256 i = 0; i < _replaceFunctions.length; i++) {
 
-51:                 i++;
+50:             for (uint256 j = 0; j < selectors.length; j++) {
+
+64:             for (uint256 i = 0; i < _removeFunctions.length; i++) {
+
+112:         for (uint256 i = 0; i < arr.length; i++) {
 
 ```
-[Link to code](--forcefacets/GetterFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-258:         s.listingIdCounter++;
-
-469:                     i--;
-
-875:                 i--;
+284:         s.listingIdCounter++;
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-92:                 facetIndex++;
+132:             selectorPosition++;
 
-116:             selectorPosition++;
+134:                 selectorIndex++;
 
-118:                 selectorIndex++;
+160:             selectorPosition++;
 
-141:             selectorPosition++;
+162:                 selectorIndex++;
 
-143:                 selectorIndex++;
-
-161:                 selectorIndex++;
+181:                 selectorIndex++;
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
-
-### <a name="GAS-9"></a>[GAS-9] Use != 0 instead of > 0 for unsigned integer comparison
-
-*Instances (29)*:
-```solidity
-File: facets/BuyerWhitelistFacet.sol
-
-85:         if (erc1155Quantity > 0) {
-
-```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/upgradeInitializers/DiamondInit.sol
 
-166:         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-
-167:         uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
-
-181:         if (erc1155Quantity > 0) {
-
-242:         if (erc1155Quantity == 0 && s.tokenToListingIds[tokenAddress][tokenId].length > 0) {
-
-252:         if (erc1155Quantity > 0) {
-
-280:             if (allowedBuyers.length > 0) {
-
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-349:         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
-
-357:         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
-
-366:         if (listedItem.erc1155Quantity > 0) {
-
-390:             if (royaltyAmount > 0) {
-
-405:         if (excessPayment > 0) {
-
-414:             if (listedItem.desiredErc1155Quantity > 0) {
-
-503:         if (erc1155PurchaseQuantity > 0) {
-
-595:         uint256 newDesiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
-
-596:         uint256 newErc1155Quantity, // >0 for ERC1155, 0 for only ERC721
-
-611:         if (newErc1155Quantity > 0) {
-
-616:             if (erc1155Quantity > 0) {
-
-622:         if (newErc1155Quantity > 0) {
-
-684:             if (newAllowedBuyers.length > 0) {
-
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-744:                 if (listedItem.erc1155Quantity > 0) {
-
-856:         } else if (desiredErc1155Quantity > 0) {
+149:         for (uint256 i = 0; i < currencies.length; i++) {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/upgradeInitializers/DummyUpgradeInit.sol
 
-100:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+56:         for (uint256 i = 0; i < facetAddresses.length; i++) {
 
-124:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+67:         for (uint256 i = 0; i < length; i++) {
 
-149:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+68:             for (uint256 j = i + 1; j < length; j++) {
 
-219:             if (error.length > 0) {
+79:         for (uint256 i = 0; i < length; i++) {
 
-237:         require(contractSize > 0, _errorMessage);
+83:         for (uint256 i = 0; i < length; i++) {
+
+84:             for (uint256 j = i + 1; j < length; j++) {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
+
+### <a name="GAS-9"></a>[GAS-9] Using `private` rather than `public` for constants, saves gas
+If needed, the values can be read from the verified contract source code, or if there are multiple values there can be a single getter function that [returns a tuple](https://github.com/code-423n4/2022-08-frax/blob/90f55a9ce4e25bceed3a74290b854341d8de6afa/src/contracts/FraxlendPair.sol#L156-L178) of the values of all currently-public constants. Saves **3406-3606 gas** in deployment gas due to the compiler not having to create non-payable getter functions for deployment calldata, not having to store the bytes of the value outside of where it's used, and not adding another entry to the method ID table
+
+*Instances (3)*:
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+11:     string public constant name = "Mock USDT";
+
+12:     string public constant symbol = "mUSDT";
+
+13:     uint8 public constant decimals = 6;
+
+```
+
+### <a name="GAS-10"></a>[GAS-10] Superfluous event fields
+`block.timestamp` and `block.number` are added to event information by default so adding them manually wastes gas
+
+*Instances (2)*:
+```solidity
+File: src/facets/VersionFacet.sol
+
+13:     event VersionUpdated(string version, bytes32 indexed implementationId, uint256 timestamp);
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+12:     event DummyUpgradeVersionInitialized(string version, bytes32 implementationId, uint256 timestamp);
+
+```
+
+### <a name="GAS-11"></a>[GAS-11] Increments/decrements can be unchecked in for-loops
+In Solidity 0.8+, there's a default overflow check on unsigned integers. It's possible to uncheck this in for-loops and save some gas at each iteration, but at the cost of some code readability, as this uncheck cannot be made inline.
+
+[ethereum/solidity#10695](https://github.com/ethereum/solidity/issues/10695)
+
+The change would be:
+
+```diff
+- for (uint256 i; i < numIterations; i++) {
++ for (uint256 i; i < numIterations;) {
+ // ...  
++   unchecked { ++i; }
+}  
+```
+
+These save around **25 gas saved** per instance.
+
+The same can be applied with decrements (which should use `break` when `i == 0`).
+
+The risk of overflow is non-existent for `uint256`.
+
+*Instances (13)*:
+```solidity
+File: src/facets/DiamondUpgradeFacet.sol
+
+24:         for (uint256 i = 0; i < _addFunctions.length; i++) {
+
+31:             for (uint256 j = 0; j < selectors.length; j++) {
+
+43:         for (uint256 i = 0; i < _replaceFunctions.length; i++) {
+
+50:             for (uint256 j = 0; j < selectors.length; j++) {
+
+64:             for (uint256 i = 0; i < _removeFunctions.length; i++) {
+
+112:         for (uint256 i = 0; i < arr.length; i++) {
+
+```
+
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+149:         for (uint256 i = 0; i < currencies.length; i++) {
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+56:         for (uint256 i = 0; i < facetAddresses.length; i++) {
+
+67:         for (uint256 i = 0; i < length; i++) {
+
+68:             for (uint256 j = i + 1; j < length; j++) {
+
+79:         for (uint256 i = 0; i < length; i++) {
+
+83:         for (uint256 i = 0; i < length; i++) {
+
+84:             for (uint256 j = i + 1; j < length; j++) {
+
+```
+
+### <a name="GAS-12"></a>[GAS-12] Use != 0 instead of > 0 for unsigned integer comparison
+
+*Instances (31)*:
+```solidity
+File: src/facets/BuyerWhitelistFacet.sol
+
+95:         if (erc1155Quantity > 0) {
+
+```
+
+```solidity
+File: src/facets/DiamondUpgradeFacet.sol
+
+63:         if (_removeFunctions.length > 0) {
+
+81:                 if (returndata.length > 0) {
+
+91:         if (_tag != bytes32(0) || _metadata.length > 0) {
+
+101:         return size > 0;
+
+```
+
+```solidity
+File: src/facets/IdeationMarketFacet.sol
+
+205:         uint256 desiredErc1155Quantity, // >0 for swap ERC1155, 0 for only swap ERC721 or non swap
+
+206:         uint256 erc1155Quantity, // >0 for ERC1155, 0 for only ERC721
+
+222:         if (erc1155Quantity > 0) {
+
+278:         if (erc1155Quantity > 0) {
+
+396:         if (erc1155PurchaseQuantity > 0 && erc1155PurchaseQuantity != listedItem.erc1155Quantity) {
+
+410:             if (msg.value > 0) {
+
+415:         if (listedItem.desiredErc1155Quantity > 0 && desiredErc1155Holder == address(0)) {
+
+424:         if (listedItem.erc1155Quantity > 0) {
+
+450:             if (royaltyReceiver != address(0) && royaltyAmount > 0) {
+
+463:             if (listedItem.desiredErc1155Quantity > 0) {
+
+523:         if (erc1155PurchaseQuantity > 0) {
+
+663:         if (newErc1155Quantity > 0) {
+
+668:             if (listedItem.erc1155Quantity > 0) {
+
+674:         if (newErc1155Quantity > 0) {
+
+778:                 if (listedItem.erc1155Quantity > 0) {
+
+903:             if (allowedBuyers.length > 0) {
+
+907:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+
+953:             if (desiredErc1155Quantity > 0) {
+
+1019:             if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+
+1039:             if (royaltyAmount > 0 && royaltyReceiver != address(0)) {
+
+1071:         if (!success || (returndata.length > 0 && !abi.decode(returndata, (bool)))) {
+
+```
+
+```solidity
+File: src/libraries/LibDiamond.sol
+
+115:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+
+142:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+
+171:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+
+247:             if (error.length > 0) {
+
+265:         require(contractSize > 0, _errorMessage);
+
+```
 
 
 ## Non Critical Issues
@@ -681,126 +1045,243 @@ File: libraries/LibDiamond.sol
 
 | |Issue|Instances|
 |-|:-|:-:|
-| [NC-1](#NC-1) | `constant`s should be defined rather than using magic numbers | 1 |
-| [NC-2](#NC-2) | Control structures do not follow the Solidity Style Guide | 30 |
-| [NC-3](#NC-3) | Critical Changes Should Use Two-step Procedure | 1 |
-| [NC-4](#NC-4) | Default Visibility for constants | 2 |
-| [NC-5](#NC-5) | Functions should not be longer than 50 lines | 102 |
-| [NC-6](#NC-6) | Lines are too long | 4 |
-| [NC-7](#NC-7) | Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor | 9 |
-| [NC-8](#NC-8) | Take advantage of Custom Error's return value property | 57 |
-| [NC-9](#NC-9) | Use scientific notation for readability reasons for large multiples of ten | 1 |
-| [NC-10](#NC-10) | Avoid the use of sensitive terms | 119 |
-| [NC-11](#NC-11) | Strings should use double quotes rather than single quotes | 1 |
-| [NC-12](#NC-12) | Use Underscores for Number Literals (add an underscore every 3 digits) | 2 |
-| [NC-13](#NC-13) | Variables need not be initialized to zero | 15 |
-### <a name="NC-1"></a>[NC-1] `constant`s should be defined rather than using magic numbers
-Even [assembly](https://github.com/code-423n4/2022-05-opensea-seaport/blob/9d7ce4d08bf3c3010304a0476a785c70c0e90ae7/contracts/lib/TokenTransferrer.sol#L35-L39) can benefit from using readable constants instead of hex/numeric literals
+| [NC-1](#NC-1) | Replace `abi.encodeWithSignature` and `abi.encodeWithSelector` with `abi.encodeCall` which keeps the code typo/type safe | 1 |
+| [NC-2](#NC-2) | Constants should be in CONSTANT_CASE | 3 |
+| [NC-3](#NC-3) | `constant`s should be defined rather than using magic numbers | 6 |
+| [NC-4](#NC-4) | Control structures do not follow the Solidity Style Guide | 50 |
+| [NC-5](#NC-5) | Critical Changes Should Use Two-step Procedure | 1 |
+| [NC-6](#NC-6) | Default Visibility for constants | 2 |
+| [NC-7](#NC-7) | Functions should not be longer than 50 lines | 132 |
+| [NC-8](#NC-8) | Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor | 9 |
+| [NC-9](#NC-9) | Consider using named mappings | 2 |
+| [NC-10](#NC-10) | `address`s shouldn't be hard-coded | 75 |
+| [NC-11](#NC-11) | Take advantage of Custom Error's return value property | 57 |
+| [NC-12](#NC-12) | Use scientific notation for readability reasons for large multiples of ten | 1 |
+| [NC-13](#NC-13) | Avoid the use of sensitive terms | 131 |
+| [NC-14](#NC-14) | Strings should use double quotes rather than single quotes | 1 |
+| [NC-15](#NC-15) | Use Underscores for Number Literals (add an underscore every 3 digits) | 1 |
+| [NC-16](#NC-16) | Constants should be defined rather than using magic numbers | 1 |
+| [NC-17](#NC-17) | Variables need not be initialized to zero | 23 |
+### <a name="NC-1"></a>[NC-1] Replace `abi.encodeWithSignature` and `abi.encodeWithSelector` with `abi.encodeCall` which keeps the code typo/type safe
+When using `abi.encodeWithSignature`, it is possible to include a typo for the correct function signature.
+When using `abi.encodeWithSignature` or `abi.encodeWithSelector`, it is also possible to provide parameters that are not of the correct type for the function.
+
+To avoid these pitfalls, it would be best to use [`abi.encodeCall`](https://solidity-by-example.org/abi-encode/) instead.
 
 *Instances (1)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+1062:         bytes memory data = abi.encodeWithSelector(0x23b872dd, from, to, amount);
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
-### <a name="NC-2"></a>[NC-2] Control structures do not follow the Solidity Style Guide
+### <a name="NC-2"></a>[NC-2] Constants should be in CONSTANT_CASE
+For `constant` variable names, each word should use all capital letters, with underscores separating each word (CONSTANT_CASE)
+
+*Instances (3)*:
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+11:     string public constant name = "Mock USDT";
+
+12:     string public constant symbol = "mUSDT";
+
+13:     uint8 public constant decimals = 6;
+
+```
+
+### <a name="NC-3"></a>[NC-3] `constant`s should be defined rather than using magic numbers
+Even [assembly](https://github.com/code-423n4/2022-05-opensea-seaport/blob/9d7ce4d08bf3c3010304a0476a785c70c0e90ae7/contracts/lib/TokenTransferrer.sol#L35-L39) can benefit from using readable constants instead of hex/numeric literals
+
+*Instances (6)*:
+```solidity
+File: src/facets/DiamondUpgradeFacet.sol
+
+106:             revert(add(revertData, 32), mload(revertData))
+
+```
+
+```solidity
+File: src/facets/IdeationMarketFacet.sol
+
+439:         uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
+
+```
+
+```solidity
+File: src/mocks/MockERC20_18.sol
+
+8:     constructor() MockMintableERC20("Mock ERC20 18", "mERC20", 18) {}
+
+```
+
+```solidity
+File: src/mocks/MockEURS_2.sol
+
+8:     constructor() MockMintableERC20("Mock EURS", "mEURS", 2) {}
+
+```
+
+```solidity
+File: src/mocks/MockUSDC_6.sol
+
+8:     constructor() MockMintableERC20("Mock USDC", "mUSDC", 6) {}
+
+```
+
+```solidity
+File: src/mocks/MockWBTC_8.sol
+
+8:     constructor() MockMintableERC20("Mock WBTC", "mWBTC", 8) {}
+
+```
+
+### <a name="NC-4"></a>[NC-4] Control structures do not follow the Solidity Style Guide
 See the [control structures](https://docs.soliditylang.org/en/latest/style-guide.html#control-structures) section of the Solidity Style Guide
 
-*Instances (30)*:
+*Instances (50)*:
 ```solidity
-File: IdeationMarketDiamond.sol
+File: src/IdeationMarketDiamond.sol
 
-45:         if (facet == address(0)) revert Diamond__FunctionDoesNotExist();
+42:         if (facet == address(0)) revert Diamond__FunctionDoesNotExist();
 
 ```
-[Link to code](--forceIdeationMarketDiamond.sol)
 
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+41:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+68:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+84:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+90:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-93:             if (
+109:             if (tokenHolder != seller) revert BuyerWhitelist__SellerIsNotERC721Owner(seller, tokenHolder);
+
+111:             if (
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-28:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
+33:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
 
-29:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
+34:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
 
-43:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
+49:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
 
-74:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
+81:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/CurrencyWhitelistFacet.sol
 
-135:         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
+36:         if (s.allowedCurrencies[currency]) revert CurrencyWhitelist__AlreadyAllowed();
 
-141:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
-
-215:             if (
-
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
-
-325:         if (
-
-335:         if (
-
-391:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
-
-418:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
-
-419:                 if (
-
-447:                 if (
-
-475:                 if (
-
-636:             if (
-
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-824:         if (
-
-853:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-854:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-855:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
+53:         if (!s.allowedCurrencies[currency]) revert CurrencyWhitelist__NotAllowed();
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+28:             if (selectors.length == 0) revert NoSelectorsProvidedForFacet(facet);
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+29:             if (!_hasCode(facet)) revert NoBytecodeAtAddress(facet);
+
+47:             if (selectors.length == 0) revert NoSelectorsProvidedForFacet(facet);
+
+48:             if (!_hasCode(facet)) revert NoBytecodeAtAddress(facet);
+
+53:                 if (oldFacet == address(0)) revert CannotReplaceFunctionThatDoesNotExist(selector);
+
+54:                 if (oldFacet == address(this)) revert CannotReplaceImmutableFunction(selector);
+
+55:                 if (oldFacet == facet) revert CannotReplaceFunctionWithTheSameFacet(selector);
+
+67:                 if (oldFacet == address(0)) revert CannotRemoveFunctionThatDoesNotExist(selector);
+
+68:                 if (oldFacet == address(this)) revert CannotRemoveImmutableFunction(selector);
+
+77:             if (!_hasCode(_delegate)) revert NoBytecodeAtAddress(_delegate);
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
-### <a name="NC-3"></a>[NC-3] Critical Changes Should Use Two-step Procedure
+```solidity
+File: src/facets/IdeationMarketFacet.sol
+
+158:         if (LibDiamond.diamondStorage().paused) revert IdeationMarket__ContractPaused();
+
+165:         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
+
+173:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
+
+256:             if (
+
+371:         if (
+
+382:         if (
+
+451:                 if (remainingProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
+
+467:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
+
+468:                 if (
+
+493:                 if (
+
+688:             if (
+
+882:         if (!partialBuyEnabled) return;
+
+907:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+
+916:         if (
+
+949:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+
+950:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+
+951:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
+
+1015:             if (!successFee) revert IdeationMarket__EthTransferFailed(marketplaceOwner);
+
+1021:                 if (!successRoyalty) revert IdeationMarket__EthTransferFailed(royaltyReceiver);
+
+1027:             if (!successSeller) revert IdeationMarket__EthTransferFailed(seller);
+
+1058:         if (token.code.length == 0) revert IdeationMarket__ERC20TokenAddressIsNotAContract(token);
+
+```
+
+```solidity
+File: src/facets/PauseFacet.sol
+
+32:         if (ds.paused) revert Pause__AlreadyPaused();
+
+42:         if (!ds.paused) revert Pause__NotPaused();
+
+```
+
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+31:         if (value != 0 && current != 0) revert("USDTLike: must reset allowance to 0");
+
+43:             if (allowed < value) revert("USDTLike: insufficient allowance");
+
+51:         if (to == address(0)) revert("USDTLike: transfer to zero");
+
+53:         if (bal < value) revert("USDTLike: insufficient balance");
+
+```
+
+### <a name="NC-5"></a>[NC-5] Critical Changes Should Use Two-step Procedure
 The critical procedures should be two step process.
 
 See similar findings in previous Code4rena contests for reference: <https://code4rena.com/reports/2022-06-illuminate/#2-critical-changes-should-use-two-step-procedure>
@@ -811,193 +1292,235 @@ Lack of two-step procedure for critical operations leaves them error-prone. Cons
 
 *Instances (1)*:
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-58:     function setContractOwner(address _newOwner) internal {
+95:     function setContractOwner(address _newOwner) internal {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-4"></a>[NC-4] Default Visibility for constants
+### <a name="NC-6"></a>[NC-6] Default Visibility for constants
 Some constants are using the default visibility. For readability, consider explicitly declaring them as `internal`.
 
 *Instances (2)*:
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/libraries/LibAppStorage.sol
 
-37:     bytes32 constant APP_STORAGE_POSITION = keccak256("diamond.standard.app.storage");
+89:     bytes32 constant APP_STORAGE_POSITION = keccak256("diamond.standard.app.storage");
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-20:     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
+13:     bytes32 constant DIAMOND_STORAGE_POSITION = keccak256("diamond.standard.diamond.storage");
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-5"></a>[NC-5] Functions should not be longer than 50 lines
+### <a name="NC-7"></a>[NC-7] Functions should not be longer than 50 lines
 Overly complex code can make understanding functionality more difficult, try to further modularize your code to ensure readability 
 
-*Instances (102)*:
+*Instances (132)*:
 ```solidity
-File: IdeationMarketDiamond.sol
+File: src/IdeationMarketDiamond.sol
 
-25:         functionSelectors[0] = IDiamondCutFacet.diamondCut.selector;
+24:         functionSelectors[0] = IDiamondUpgradeFacet.upgradeDiamond.selector;
+
+26:         LibDiamond.addFunctions(_diamondUpgradeFacet, functionSelectors);
 
 ```
-[Link to code](--forceIdeationMarketDiamond.sol)
 
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-22:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
+30:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
 
-48:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
+57:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
 
-73:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
+83:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-26:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
+31:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-41:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
+47:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-66:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+73:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
-93:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+101:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ```solidity
-File: facets/DiamondCutFacet.sol
+File: src/facets/CurrencyWhitelistFacet.sol
 
-18:     function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external override {
+32:     function addAllowedCurrency(address currency) external {
+
+49:     function removeAllowedCurrency(address currency) external {
 
 ```
-[Link to code](--forcefacets/DiamondCutFacet.sol)
 
 ```solidity
-File: facets/DiamondLoupeFacet.sol
+File: src/facets/DiamondLoupeFacet.sol
 
-17:     function facets() external view override returns (Facet[] memory facets_) {
+18:     function facets() external view override returns (Facet[] memory facets_) {
 
-24:             facets_[i].functionSelectors = ds.facetFunctionSelectors[facetAddress_].functionSelectors;
+25:             facets_[i].functionSelectors = ds.facetFunctionSelectors[facetAddress_].functionSelectors;
 
-41:         facetFunctionSelectors_ = ds.facetFunctionSelectors[_facet].functionSelectors;
+43:         facetFunctionSelectors_ = ds.facetFunctionSelectors[_facet].functionSelectors;
 
-46:     function facetAddresses() external view override returns (address[] memory facetAddresses_) {
+49:     function facetAddresses() external view override returns (address[] memory facetAddresses_) {
 
-55:     function facetAddress(bytes4 _functionSelector) external view override returns (address facetAddress_) {
+70:     function functionFacetPairs() external view override returns (FunctionFacetPair[] memory pairs) {
 
-63:     function supportsInterface(bytes4 _interfaceId) external view override returns (bool) {
+76:             totalSelectors += ds.facetFunctionSelectors[ds.facetAddresses[i]].functionSelectors.length;
+
+89:                 pairs[k] = FunctionFacetPair({selector: selectors[j], facet: facet});
+
+104:     function supportsInterface(bytes4 _interfaceId) external view override returns (bool) {
 
 ```
-[Link to code](--forcefacets/DiamondLoupeFacet.sol)
 
 ```solidity
-File: facets/GetterFacet.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-15:     function getListingsByNFT(address tokenAddress, uint256 tokenId)
+96:     function _hasCode(address _addr) internal view returns (bool) {
 
-61:     function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
+104:     function _revertWith(bytes memory revertData) internal pure {
 
-75:     function getProceeds(address seller) external view returns (uint256) {
-
-84:     function getBalance() external view returns (uint256) {
-
-89:     function getInnovationFee() external view returns (uint32 innovationFee) {
-
-98:     function getNextListingId() external view returns (uint128) {
-
-108:     function isCollectionWhitelisted(address collection) external view returns (bool) {
-
-117:     function getWhitelistedCollections() external view returns (address[] memory) {
-
-126:     function getContractOwner() external view returns (address) {
-
-134:     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
-
-144:     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
-
-149:     function getPendingOwner() external view returns (address) {
+110:     function _toMemory(bytes4[] calldata arr) internal pure returns (bytes4[] memory out) {
 
 ```
-[Link to code](--forcefacets/GetterFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/DummyUpgradeFacet.sol
 
-528:     function cancelListing(uint128 listingId) public listingExists(listingId) {
+13:     function getDummyUpgradeValue() external view returns (uint256) {
 
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
-
-708:     function withdrawProceeds() external nonReentrant {
-
-724:     function setInnovationFee(uint32 newFee) external {
-
-733:     function cleanListing(uint128 listingId) external listingExists(listingId) {
-
-822:     function requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
-
-834:     function requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
-
-867:     function deleteListingAndCleanup(AppStorage storage s, uint128 listingId, address tokenAddress, uint256 tokenId)
+20:     function setDummyUpgradeValue(uint256 value) external {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: facets/OwnershipFacet.sol
+File: src/facets/GetterFacet.sol
 
-14:     function transferOwnership(address newOwner) external override {
+15:     function getActiveListingIdByERC721(address tokenAddress, uint256 tokenId) external view returns (uint128) {
 
-31:     function owner() external view override returns (address) {
+23:     function getListingByListingId(uint128 listingId) external view returns (Listing memory listing) {
+
+34:     function getBalance() external view returns (uint256) {
+
+40:     function getInnovationFee() external view returns (uint32 innovationFee) {
+
+47:     function getNextListingId() external view returns (uint128) {
+
+55:     function isCollectionWhitelisted(address collection) external view returns (bool) {
+
+63:     function getWhitelistedCollections() external view returns (address[] memory) {
+
+70:     function getContractOwner() external view returns (address) {
+
+79:     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
+
+89:     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
+
+95:     function getPendingOwner() external view returns (address) {
+
+104:     function isCurrencyAllowed(address currency) external view returns (bool) {
+
+111:     function getAllowedCurrencies() external view returns (address[] memory currencies) {
+
+122:     function getVersion() external view returns (string memory version, bytes32 implementationId, uint256 timestamp) {
+
+142:     function getVersionString() external view returns (string memory) {
+
+148:     function getImplementationId() external view returns (bytes32) {
+
+154:     function isPaused() external view returns (bool) {
 
 ```
-[Link to code](--forcefacets/OwnershipFacet.sol)
 
 ```solidity
-File: interfaces/IBuyerWhitelistFacet.sol
+File: src/facets/IdeationMarketFacet.sol
+
+565:     function cancelListing(uint128 listingId) public listingExists(listingId) {
+
+752:     function setInnovationFee(uint32 newFee) external {
+
+766:     function cleanListing(uint128 listingId) external listingExists(listingId) {
+
+860:     function _enforceCurrencyAllowed(AppStorage storage s, address currency) private view {
+
+868:     function _enforceCollectionWhitelisted(AppStorage storage s, address tokenAddress) private view {
+
+899:     function _applyBuyerWhitelist(uint128 listingId, bool buyerWhitelistEnabled, address[] calldata allowedBuyers)
+
+914:     function _requireERC721Approval(address tokenAddress, uint256 tokenId) internal view {
+
+929:     function _requireERC1155Approval(address tokenAddress, address tokenOwner) internal view {
+
+1057:     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+
+```
+
+```solidity
+File: src/facets/OwnershipFacet.sol
+
+21:     function transferOwnership(address newOwner) external override {
+
+40:     function owner() external view override returns (address) {
+
+```
+
+```solidity
+File: src/facets/VersionFacet.sol
+
+21:     function setVersion(string calldata newVersion, bytes32 newImplementationId) external {
+
+```
+
+```solidity
+File: src/interfaces/IBuyerWhitelistFacet.sol
 
 10:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external;
 
 15:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external;
 
 ```
-[Link to code](--forceinterfaces/IBuyerWhitelistFacet.sol)
 
 ```solidity
-File: interfaces/IDiamondCutFacet.sol
+File: src/interfaces/IDiamondInspectFacet.sol
 
-30:     function diamondCut(FacetCut[] calldata _diamondCut, address _init, bytes calldata _calldata) external;
+13:     function facetAddress(bytes4 _functionSelector) external view returns (address);
+
+24:     function functionFacetPairs() external view returns (FunctionFacetPair[] memory pairs);
 
 ```
-[Link to code](--forceinterfaces/IDiamondCutFacet.sol)
 
 ```solidity
-File: interfaces/IDiamondLoupeFacet.sol
+File: src/interfaces/IDiamondLoupeFacet.sol
 
-18:     function facets() external view returns (Facet[] memory facets_);
+13:     function facets() external view returns (Facet[] memory facets_);
 
-23:     function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory facetFunctionSelectors_);
+18:     function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory facetFunctionSelectors_);
 
-27:     function facetAddresses() external view returns (address[] memory facetAddresses_);
+22:     function facetAddresses() external view returns (address[] memory facetAddresses_);
 
-33:     function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
+28:     function facetAddress(bytes4 _functionSelector) external view returns (address facetAddress_);
 
 ```
-[Link to code](--forceinterfaces/IDiamondLoupeFacet.sol)
 
 ```solidity
-File: interfaces/IERC1155.sol
+File: src/interfaces/IDiamondUpgradeFacet.sol
+
+12:     error CannotAddFunctionToDiamondThatAlreadyExists(bytes4 _selector);
+
+```
+
+```solidity
+File: src/interfaces/IERC1155.sol
 
 44:     function balanceOf(address account, uint256 id) external view returns (uint256);
 
@@ -1010,36 +1533,32 @@ File: interfaces/IERC1155.sol
 94:     function safeTransferFrom(address from, address to, uint256 id, uint256 value, bytes calldata data) external;
 
 ```
-[Link to code](--forceinterfaces/IERC1155.sol)
 
 ```solidity
-File: interfaces/IERC165.sol
+File: src/interfaces/IERC165.sol
 
 11:     function supportsInterface(bytes4 interfaceId) external view returns (bool);
 
 ```
-[Link to code](--forceinterfaces/IERC165.sol)
 
 ```solidity
-File: interfaces/IERC173.sol
+File: src/interfaces/IERC173.sol
 
 13:     function owner() external view returns (address owner_);
 
-18:     function transferOwnership(address _newOwner) external;
+19:     function transferOwnership(address _newOwner) external;
 
 ```
-[Link to code](--forceinterfaces/IERC173.sol)
 
 ```solidity
-File: interfaces/IERC2981.sol
+File: src/interfaces/IERC2981.sol
 
 22:     function royaltyInfo(uint256 tokenId, uint256 salePrice)
 
 ```
-[Link to code](--forceinterfaces/IERC2981.sol)
 
 ```solidity
-File: interfaces/IERC4907.sol
+File: src/interfaces/IERC4907.sol
 
 22:     function setUser(uint256 tokenId, address user, uint64 expires) external;
 
@@ -1048,10 +1567,9 @@ File: interfaces/IERC4907.sol
 34:     function userExpires(uint256 tokenId) external view returns (uint256);
 
 ```
-[Link to code](--forceinterfaces/IERC4907.sol)
 
 ```solidity
-File: interfaces/IERC721.sol
+File: src/interfaces/IERC721.sol
 
 30:     function balanceOf(address owner) external view returns (uint256 balance);
 
@@ -1072,336 +1590,519 @@ File: interfaces/IERC721.sol
 134:     function isApprovedForAll(address owner, address operator) external view returns (bool);
 
 ```
-[Link to code](--forceinterfaces/IERC721.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/libraries/LibAppStorage.sol
 
-39:     function appStorage() internal pure returns (AppStorage storage s) {
+93:     function appStorage() internal pure returns (AppStorage storage s) {
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-16: error InitializationFunctionReverted(address _initializationContractAddress, bytes _calldata);
+6: error InitializationFunctionReverted(address _initializationContractAddress, bytes _calldata);
 
-24:         uint96 functionSelectorPosition; // position in facetFunctionSelectors.functionSelectors array
+34:         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
 
-37:         mapping(address facetAddress => FacetFunctionSelectors selectors) facetFunctionSelectors;
+61:     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
 
-48:     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
+76:     event DiamondFunctionAdded(bytes4 indexed _selector, address indexed _facet);
 
-58:     function setContractOwner(address _newOwner) internal {
+84:     event DiamondFunctionReplaced(bytes4 indexed _selector, address indexed _oldFacet, address indexed _newFacet);
 
-65:     function contractOwner() internal view returns (address contractOwner_) {
+91:     event DiamondFunctionRemoved(bytes4 indexed _selector, address indexed _oldFacet);
 
-76:     function diamondCut(IDiamondCutFacet.FacetCut[] memory _diamondCut, address _init, bytes memory _calldata)
+95:     function setContractOwner(address _newOwner) internal {
 
-83:                 addFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+103:     function contractOwner() internal view returns (address contractOwner_) {
 
-85:                 replaceFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+114:     function addFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
 
-87:                 removeFunctions(_diamondCut[facetIndex].facetAddress, _diamondCut[facetIndex].functionSelectors);
+115:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-99:     function addFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
+118:         uint96 selectorPosition = uint96(ds.facetFunctionSelectors[_facetAddress].functionSelectors.length);
 
-100:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+130:             addFunction(ds, selector, selectorPosition, _facetAddress);
 
-103:         uint96 selectorPosition = uint96(ds.facetFunctionSelectors[_facetAddress].functionSelectors.length);
+141:     function replaceFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
 
-115:             addFunction(ds, selector, selectorPosition, _facetAddress);
+142:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-123:     function replaceFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
+145:         uint96 selectorPosition = uint96(ds.facetFunctionSelectors[_facetAddress].functionSelectors.length);
 
-124:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+158:             addFunction(ds, selector, selectorPosition, _facetAddress);
 
-127:         uint96 selectorPosition = uint96(ds.facetFunctionSelectors[_facetAddress].functionSelectors.length);
+159:             emit DiamondFunctionReplaced(selector, oldFacetAddress, _facetAddress);
 
-140:             addFunction(ds, selector, selectorPosition, _facetAddress);
+170:     function removeSelectors(bytes4[] memory _functionSelectors) internal {
 
-148:     function removeFunctions(address _facetAddress, bytes4[] memory _functionSelectors) internal {
+171:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
 
-149:         require(_functionSelectors.length > 0, "LibDiamondCut: No selectors in facet to cut");
+188:     function addFacet(DiamondStorage storage ds, address _facetAddress) internal {
 
-166:     function addFacet(DiamondStorage storage ds, address _facetAddress) internal {
+190:         ds.facetFunctionSelectors[_facetAddress].facetAddressPosition = ds.facetAddresses.length;
 
-168:         ds.facetFunctionSelectors[_facetAddress].facetAddressPosition = ds.facetAddresses.length;
+196:     function addFunction(DiamondStorage storage ds, bytes4 _selector, uint96 _selectorPosition, address _facetAddress)
 
-172:     function addFunction(DiamondStorage storage ds, bytes4 _selector, uint96 _selectorPosition, address _facetAddress)
+200:         ds.facetFunctionSelectors[_facetAddress].functionSelectors.push(_selector);
 
-176:         ds.facetFunctionSelectors[_facetAddress].functionSelectors.push(_selector);
+206:     function removeFunction(DiamondStorage storage ds, address _facetAddress, bytes4 _selector) internal {
 
-180:     function removeFunction(DiamondStorage storage ds, address _facetAddress, bytes4 _selector) internal {
+212:         uint256 lastSelectorPosition = ds.facetFunctionSelectors[_facetAddress].functionSelectors.length - 1;
 
-186:         uint256 lastSelectorPosition = ds.facetFunctionSelectors[_facetAddress].functionSelectors.length - 1;
+215:             bytes4 lastSelector = ds.facetFunctionSelectors[_facetAddress].functionSelectors[lastSelectorPosition];
 
-189:             bytes4 lastSelector = ds.facetFunctionSelectors[_facetAddress].functionSelectors[lastSelectorPosition];
+216:             ds.facetFunctionSelectors[_facetAddress].functionSelectors[selectorPosition] = lastSelector;
 
-190:             ds.facetFunctionSelectors[_facetAddress].functionSelectors[selectorPosition] = lastSelector;
+217:             ds.selectorToFacetAndPosition[lastSelector].functionSelectorPosition = uint96(selectorPosition);
 
-191:             ds.selectorToFacetAndPosition[lastSelector].functionSelectorPosition = uint96(selectorPosition);
+220:         ds.facetFunctionSelectors[_facetAddress].functionSelectors.pop();
 
-194:         ds.facetFunctionSelectors[_facetAddress].functionSelectors.pop();
+227:             uint256 facetAddressPosition = ds.facetFunctionSelectors[_facetAddress].facetAddressPosition;
 
-201:             uint256 facetAddressPosition = ds.facetFunctionSelectors[_facetAddress].facetAddressPosition;
+231:                 ds.facetFunctionSelectors[lastFacetAddress].facetAddressPosition = facetAddressPosition;
 
-205:                 ds.facetFunctionSelectors[lastFacetAddress].facetAddressPosition = facetAddressPosition;
+234:             delete ds.facetFunctionSelectors[_facetAddress].facetAddressPosition;
 
-208:             delete ds.facetFunctionSelectors[_facetAddress].facetAddressPosition;
+240:     function initializeDiamondCut(address _init, bytes memory _calldata) internal {
 
-212:     function initializeDiamondCut(address _init, bytes memory _calldata) internal {
-
-232:     function enforceHasContractCode(address _contract, string memory _errorMessage) internal view {
+260:     function enforceHasContractCode(address _contract, string memory _errorMessage) internal view {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
 ```solidity
-File: upgradeInitializers/DiamondInit.sol
+File: src/mocks/MockMintableERC20.sol
 
-23:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
+16:     function decimals() public view override returns (uint8) {
 
-```
-[Link to code](--forceupgradeInitializers/DiamondInit.sol)
-
-### <a name="NC-6"></a>[NC-6] Lines are too long
-Usually lines in source code are limited to [80](https://softwareengineering.stackexchange.com/questions/148677/why-is-80-characters-the-standard-limit-for-code-width) characters. Today's screens are much larger so it's reasonable to stretch this in some cases. Since the files will most likely reside in GitHub, and GitHub starts using a scroll bar in all cases when the length is over [164](https://github.com/aizatto/character-length) characters, the lines below should be split when they reach that length
-
-*Instances (4)*:
-```solidity
-File: facets/IdeationMarketFacet.sol
-
-312:         address desiredErc1155Holder // if it is a swap listing where the desired token is an erc1155, the buyer needs to specify the owner of that erc1155, because in case he is not the owner but authorized, the marketplace needs this info to check the approval
-
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+21:     function mint(address to, uint256 amount) external {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/mocks/MockUSDTLike_6.sol
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+23:     function mint(address to, uint256 amount) external {
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+29:     function approve(address spender, uint256 value) external {
+
+36:     function transfer(address to, uint256 value) external {
+
+40:     function transferFrom(address from, address to, uint256 value) external {
+
+50:     function _transfer(address from, address to, uint256 value) internal {
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
-### <a name="NC-7"></a>[NC-7] Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+26:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+14:     function initDummyUpgrade(uint256 value) external {
+
+23:     function initDummyUpgradeAndVersion(uint256 value, string calldata newVersion) external {
+
+47:     function _computeImplementationIdFromDiamondStorage(LibDiamond.DiamondStorage storage ds)
+
+57:             bytes4[] memory selectors = ds.facetFunctionSelectors[facetAddresses[i]].functionSelectors;
+
+65:     function _sortAddresses(address[] memory arr) internal pure {
+
+76:     function _sortSelectors(bytes4[] memory selectors) internal pure returns (bytes4[] memory) {
+
+```
+
+### <a name="NC-8"></a>[NC-8] Use a `modifier` instead of a `require/if` statement for a special `msg.sender` actor
 If a function is supposed to be access-controlled, a `modifier` should be used instead of a `require/if` statement for more readability.
 
 *Instances (9)*:
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-87:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
+102:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-192:             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
+233:             if (msg.sender != erc1155Holder && !token.isApprovedForAll(erc1155Holder, msg.sender)) {
 
-319:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
+365:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
 
-361:         if (msg.sender == listedItem.seller) {
+419:         if (msg.sender == listedItem.seller) {
 
-534:         if (msg.sender == diamondOwner) {
+571:         if (msg.sender == diamondOwner) {
 
-552:                     if (approvedAddress == msg.sender) {
+591:                     if (approvedAddress == msg.sender) {
 
-625:             if (msg.sender != seller && !token.isApprovedForAll(seller, msg.sender)) {
+677:             if (msg.sender != listedItem.seller && !token.isApprovedForAll(listedItem.seller, msg.sender)) {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: facets/OwnershipFacet.sol
+File: src/facets/OwnershipFacet.sol
 
-23:         if (msg.sender != ds.pendingContractOwner) {
+32:         if (msg.sender != ds.pendingContractOwner) {
 
 ```
-[Link to code](--forcefacets/OwnershipFacet.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-70:         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
+109:         require(msg.sender == diamondStorage().contractOwner, "LibDiamond: Must be contract owner");
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-8"></a>[NC-8] Take advantage of Custom Error's return value property
+### <a name="NC-9"></a>[NC-9] Consider using named mappings
+Consider moving to solidity version 0.8.18 or later, and using [named mappings](https://ethereum.stackexchange.com/questions/51629/how-to-name-the-arguments-in-mapping/145555#145555) to make it easier to understand the purpose of each mapping
+
+*Instances (2)*:
+```solidity
+File: src/mocks/MockUSDTLike_6.sol
+
+17:     mapping(address => uint256) public balanceOf;
+
+18:     mapping(address => mapping(address => uint256)) public allowance;
+
+```
+
+### <a name="NC-10"></a>[NC-10] `address`s shouldn't be hard-coded
+It is often better to declare `address`es as `immutable`, and assign them via constructor arguments. This allows the code to remain the same across deployments on different networks, and avoids recompilation when addresses need to change.
+
+*Instances (75)*:
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+54:         currencies[1] = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // WETH
+
+55:         currencies[2] = 0xae78736Cd615f374D3085123A210448E74Fc6393; // rETH (Rocket Pool)
+
+56:         currencies[3] = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0; // wstETH (Lido)
+
+59:         currencies[4] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599; // WBTC
+
+60:         currencies[5] = 0x18084fbA666a33d37592fA2633fD49a74DD93a88; // tBTC
+
+63:         currencies[6] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // USDC
+
+64:         currencies[7] = 0xdAC17F958D2ee523a2206206994597C13D831ec7; // USDT
+
+65:         currencies[8] = 0x6B175474E89094C44Da98b954EedeAC495271d0F; // DAI
+
+66:         currencies[9] = 0x5f98805A4E8be255a32880FDeC7F6728C6568bA0; // LUSD
+
+67:         currencies[10] = 0x853d955aCEf822Db058eb8505911ED77F175b99e; // FRAX
+
+68:         currencies[11] = 0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f; // GHO
+
+69:         currencies[12] = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E; // crvUSD
+
+72:         currencies[13] = 0x1aBaEA1f7C830bD89Acc67eC4af516284b1bC33c; // EURC
+
+73:         currencies[14] = 0xdB25f211AB05b1c97D595516F45794528a807ad8; // EURS
+
+74:         currencies[15] = 0xC581b735A1688071A1746c968e0798D642EDE491; // EURT
+
+77:         currencies[16] = 0x70e8dE73cE538DA2bEEd35d14187F6959a8ecA96; // XSGD
+
+78:         currencies[17] = 0x2C537E5624e4af88A7ae4060C022609376C8D0EB; // TRYB (BiLira)
+
+81:         currencies[18] = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984; // UNI
+
+82:         currencies[19] = 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9; // AAVE
+
+83:         currencies[20] = 0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2; // MKR
+
+84:         currencies[21] = 0xc00e94Cb662C3520282E6f5717214004A7f26888; // COMP
+
+85:         currencies[22] = 0xD533a949740bb3306d119CC777fa900bA034cd52; // CRV
+
+86:         currencies[23] = 0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B; // CVX
+
+87:         currencies[24] = 0xC011a73ee8576Fb46F5E1c5751cA3B9Fe0af2a6F; // SNX
+
+88:         currencies[25] = 0x0bc529c00C6401aEF6D220BE8C6Ea1667F6Ad93e; // YFI
+
+89:         currencies[26] = 0x5A98FcBEA516Cf06857215779Fd812CA3beF1B32; // LDO
+
+90:         currencies[27] = 0x111111111117dC0aa78b770fA6A738034120C302; // 1INCH
+
+91:         currencies[28] = 0xba100000625a3754423978a60c9317c58a424e3D; // BAL
+
+92:         currencies[29] = 0x6B3595068778DD592e39A122f4f5a5cF09C90fE2; // SUSHI
+
+93:         currencies[30] = 0xdeFA4e8a7bcBA345F687a2f1456F5Edd9CE97202; // KNC
+
+94:         currencies[31] = 0xE41d2489571d322189246DaFA5ebDe1F4699F498; // ZRX
+
+95:         currencies[32] = 0x6810e776880C02933D47DB1b9fc05908e5386b96; // GNO
+
+96:         currencies[33] = 0x1a7e4e63778B4f12a199C062f3eFdD288afCBce8; // EURA (was FXS)
+
+99:         currencies[34] = 0x514910771AF9Ca656af840dff83E8264EcF986CA; // LINK
+
+100:         currencies[35] = 0xc944E90C64B2c07662A292be6244BDf05Cda44a7; // GRT
+
+101:         currencies[36] = 0x0D8775F648430679A709E98d2b0Cb6250d2887EF; // BAT
+
+102:         currencies[37] = 0x967da4048cD07aB37855c090aAF366e4ce1b9F48; // OCEAN
+
+103:         currencies[38] = 0x6De037ef9aD2725EB40118Bb1702EBb27e4Aeb24; // RENDER
+
+104:         currencies[39] = 0x58b6A8A3302369DAEc383334672404Ee733aB239; // LPT
+
+105:         currencies[40] = 0x7DD9c5Cba05E151C895FDe1CF355C9A1D5DA6429; // GLM
+
+106:         currencies[41] = 0x4a220E6096B25EADb88358cb44068A3248254675; // QNT
+
+107:         currencies[42] = 0x8290333ceF9e6D528dD5618Fb97a76f268f3EDD4; // ANKR
+
+108:         currencies[43] = 0xaea46A60368A7bD060eec7DF8CBa43b7EF41Ad85; // FET
+
+109:         currencies[44] = 0x0b38210ea11411557c13457D4dA7dC6ea731B88a; // API3
+
+110:         currencies[45] = 0x1776e1F26f98b1A5dF9cD347953a26dd3Cb46671; // NMR
+
+111:         currencies[46] = 0x163f8C2467924be0ae7B5347228CABF260318753; // WLD (Worldcoin - AI/Identity)
+
+114:         currencies[47] = 0x4d224452801ACEd8B2F0aebE155379bb5D594381; // APE
+
+115:         currencies[48] = 0x3845badAde8e6dFF049820680d1F14bD3903a5d0; // SAND
+
+116:         currencies[49] = 0x0F5D2fB29fb7d3CFeE444a200298f468908cC942; // MANA
+
+117:         currencies[50] = 0xBB0E17EF65F82Ab018d8EDd776e8DD940327B28b; // AXS
+
+118:         currencies[51] = 0xF629cBd94d3791C9250152BD8dfBDF380E2a3B9c; // ENJ
+
+119:         currencies[52] = 0xF57e7e7C23978C3cAEC3C3548E3D615c346e79fF; // IMX
+
+120:         currencies[53] = 0x3506424F91fD33084466F402d5D97f05F8e3b4AF; // CHZ
+
+121:         currencies[54] = 0x5283D291DBCF85356A21bA090E6db59121208b44; // BLUR
+
+122:         currencies[55] = 0xf4d2888d29D722226FafA5d9B24F9164c092421E; // LOOKS
+
+123:         currencies[56] = 0xba5BDe662c17e2aDFF1075610382B9B691296350; // RARE
+
+124:         currencies[57] = 0xFca59Cd816aB1eaD66534D82bc21E7515cE441CF; // RARI
+
+125:         currencies[58] = 0x767FE9EDC9E0dF98E07454847909b5E959D7ca0E; // ILV
+
+128:         currencies[59] = 0x455e53CBB86018Ac2B8092FdCd39d8444aFFC3F6; // POL
+
+129:         currencies[60] = 0xB50721BCf8d664c30412Cfbc6cf7a15145234ad1; // ARB
+
+130:         currencies[61] = 0x3c3a81e81dc49A522A592e7622A7E711c06bf354; // MNT
+
+131:         currencies[62] = 0xCa14007Eff0dB1f8135f4C25B34De49AB0d42766; // STRK
+
+132:         currencies[63] = 0x9E32b13ce7f2E80A01932B42553652E053D6ed8e; // Metis
+
+133:         currencies[64] = 0xBBbbCA6A901c926F240b89EacB641d8Aec7AEafD; // LRC
+
+134:         currencies[65] = 0x6985884C4392D348587B19cb9eAAf157F13271cd; // ZRO
+
+135:         currencies[66] = 0x467719aD09025FcC6cF6F8311755809d45a5E5f3; // AXL
+
+136:         currencies[67] = 0x66A5cFB2e9c529f14FE6364Ad1075dF3a649C0A5; // ZK
+
+137:         currencies[68] = 0x4F9254C83EB525f9FCf346490bbb3ed28a81C667; // CELR
+
+140:         currencies[69] = 0xa2E3356610840701BDf5611a53974510Ae27E2e1; // WBETH
+
+141:         currencies[70] = 0x8c1BEd5b9a0928467c9B1341Da1D7BD5e10b6549; // LsETH
+
+142:         currencies[71] = 0xf1C9acDc66974dFB6dEcB12aA385b9cD01190E38; // osETH
+
+143:         currencies[72] = 0x9D39A5DE30e57443BfF2A8307A4256c8797A3497; // SUSDe
+
+144:         currencies[73] = 0x68749665FF8D2d112Fa859AA293F07A622782F38; // XAUt (Tether Gold)
+
+145:         currencies[74] = 0xfAbA6f8e4a5E8Ab82F62fe7C39859FA577269BE3; // ONDO
+
+146:         currencies[75] = 0x57e114B691Db790C35207b2e685D4A43181e6061; // ENA
+
+```
+
+### <a name="NC-11"></a>[NC-11] Take advantage of Custom Error's return value property
 An important feature of Custom Error is that values such as address, tokenID, msg.value can be written inside the () sign, this kind of approach provides a serious advantage in debugging and examining the revert details of dapps such as tenderly.
 
 *Instances (57)*:
 ```solidity
-File: IdeationMarketDiamond.sol
+File: src/IdeationMarketDiamond.sol
 
-45:         if (facet == address(0)) revert Diamond__FunctionDoesNotExist();
+42:         if (facet == address(0)) revert Diamond__FunctionDoesNotExist();
 
-56:             case 0 { revert(0, returndatasize()) }
+53:             case 0 { revert(0, returndatasize()) }
 
 ```
-[Link to code](--forceIdeationMarketDiamond.sol)
 
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+41:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+68:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+84:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-76:             revert BuyerWhitelist__ExceedsMaxBatchSize();
+90:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
 
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+103:                 revert BuyerWhitelist__NotAuthorizedOperator();
 
-88:                 revert BuyerWhitelist__NotAuthorizedOperator();
-
-96:             ) revert BuyerWhitelist__NotAuthorizedOperator();
+114:             ) revert BuyerWhitelist__NotAuthorizedOperator();
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-28:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
+33:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
 
-29:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
+34:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
 
-43:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
+49:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
 
-74:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
+81:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/CurrencyWhitelistFacet.sol
 
-135:         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
+36:         if (s.allowedCurrencies[currency]) revert CurrencyWhitelist__AlreadyAllowed();
 
-141:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
-
-185:                     revert IdeationMarket__NotSupportedTokenStandard();
-
-187:                     revert IdeationMarket__WrongQuantityParameter();
-
-193:                 revert IdeationMarket__NotAuthorizedOperator();
-
-198:                 revert IdeationMarket__WrongErc1155HolderParameter();
-
-208:                     revert IdeationMarket__NotSupportedTokenStandard();
-
-210:                     revert IdeationMarket__WrongQuantityParameter();
-
-219:                 revert IdeationMarket__NotAuthorizedOperator();
-
-226:             revert IdeationMarket__PartialBuyNotPossible();
-
-234:                 revert IdeationMarket__InvalidUnitPrice();
-
-237:                 revert IdeationMarket__PartialBuyNotPossible();
-
-243:             revert IdeationMarket__AlreadyListed();
-
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-331:             revert IdeationMarket__ListingTermsChanged();
-
-340:             revert IdeationMarket__InvalidPurchaseQuantity();
-
-343:             revert IdeationMarket__PartialBuyNotPossible();
-
-358:             revert IdeationMarket__WrongErc1155HolderParameter();
-
-362:             revert IdeationMarket__SameBuyerAsSeller();
-
-391:                 if (sellerProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
-
-418:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
-
-423:                     revert IdeationMarket__NotAuthorizedOperator();
-
-451:                     revert IdeationMarket__NotAuthorizedOperator();
-
-587:         revert IdeationMarket__NotAuthorizedToCancel();
-
-613:                 revert IdeationMarket__WrongQuantityParameter();
-
-617:                 revert IdeationMarket__WrongQuantityParameter();
-
-626:                 revert IdeationMarket__NotAuthorizedOperator();
-
-640:                 revert IdeationMarket__NotAuthorizedOperator();
-
-654:             revert IdeationMarket__PartialBuyNotPossible();
-
-662:                 revert IdeationMarket__InvalidUnitPrice();
-
-665:                 revert IdeationMarket__PartialBuyNotPossible();
-
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
-
-713:             revert IdeationMarket__NoProceeds();
-
-719:             revert IdeationMarket__TransferFailed();
-
-815:         revert IdeationMarket__StillApproved();
-
-830:             revert IdeationMarket__NotApprovedForMarketplace();
-
-836:             revert IdeationMarket__NotApprovedForMarketplace();
-
-849:             revert IdeationMarket__NoSwapForSameToken();
-
-853:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-854:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
-
-855:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
-
-858:                 revert IdeationMarket__NotSupportedTokenStandard();
-
-862:                 revert IdeationMarket__NotSupportedTokenStandard();
+53:         if (!s.allowedCurrencies[currency]) revert CurrencyWhitelist__NotAllowed();
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: facets/OwnershipFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-24:             revert Ownership__CallerIsNotThePendingOwner();
+158:         if (LibDiamond.diamondStorage().paused) revert IdeationMarket__ContractPaused();
+
+165:         if (LibAppStorage.appStorage().listings[listingId].seller == address(0)) revert IdeationMarket__NotListed();
+
+173:         if (s.reentrancyLock) revert IdeationMarket__Reentrant();
+
+226:                     revert IdeationMarket__NotSupportedTokenStandard();
+
+228:                     revert IdeationMarket__WrongQuantityParameter();
+
+234:                 revert IdeationMarket__NotAuthorizedOperator();
+
+239:                 revert IdeationMarket__WrongErc1155HolderParameter();
+
+249:                     revert IdeationMarket__NotSupportedTokenStandard();
+
+251:                     revert IdeationMarket__WrongQuantityParameter();
+
+260:                 revert IdeationMarket__NotAuthorizedOperator();
+
+269:             revert IdeationMarket__AlreadyListed();
+
+378:             revert IdeationMarket__ListingTermsChanged();
+
+387:             revert IdeationMarket__InvalidPurchaseQuantity();
+
+390:             revert IdeationMarket__PartialBuyNotPossible();
+
+411:                 revert IdeationMarket__WrongPaymentCurrency();
+
+416:             revert IdeationMarket__WrongErc1155HolderParameter();
+
+420:             revert IdeationMarket__SameBuyerAsSeller();
+
+451:                 if (remainingProceeds < royaltyAmount) revert IdeationMarket__RoyaltyFeeExceedsProceeds();
+
+467:                 if (swapBalance == 0) revert IdeationMarket__WrongErc1155HolderParameter();
+
+472:                     revert IdeationMarket__NotAuthorizedOperator();
+
+497:                     revert IdeationMarket__NotAuthorizedOperator();
+
+628:         revert IdeationMarket__NotAuthorizedToCancel();
+
+665:                 revert IdeationMarket__WrongQuantityParameter();
+
+669:                 revert IdeationMarket__WrongQuantityParameter();
+
+678:                 revert IdeationMarket__NotAuthorizedOperator();
+
+692:                 revert IdeationMarket__NotAuthorizedOperator();
+
+851:         revert IdeationMarket__StillApproved();
+
+862:             revert IdeationMarket__CurrencyNotAllowed();
+
+885:             revert IdeationMarket__PartialBuyNotPossible();
+
+889:             revert IdeationMarket__InvalidUnitPrice();
+
+893:             revert IdeationMarket__PartialBuyNotPossible();
+
+907:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+
+922:             revert IdeationMarket__NotApprovedForMarketplace();
+
+931:             revert IdeationMarket__NotApprovedForMarketplace();
+
+949:             if (desiredTokenId != 0) revert IdeationMarket__InvalidNoSwapParameters();
+
+950:             if (desiredErc1155Quantity != 0) revert IdeationMarket__InvalidNoSwapParameters();
+
+951:             if (price == 0) revert IdeationMarket__FreeListingsNotSupported();
+
+955:                     revert IdeationMarket__NotSupportedTokenStandard();
+
+960:                     revert IdeationMarket__NotSupportedTokenStandard();
+
+964:                 revert IdeationMarket__NoSwapForSameToken();
 
 ```
-[Link to code](--forcefacets/OwnershipFacet.sol)
 
-### <a name="NC-9"></a>[NC-9] Use scientific notation for readability reasons for large multiples of ten
+```solidity
+File: src/facets/OwnershipFacet.sol
+
+33:             revert Ownership__CallerIsNotThePendingOwner();
+
+```
+
+```solidity
+File: src/facets/PauseFacet.sol
+
+32:         if (ds.paused) revert Pause__AlreadyPaused();
+
+42:         if (!ds.paused) revert Pause__NotPaused();
+
+```
+
+### <a name="NC-12"></a>[NC-12] Use scientific notation for readability reasons for large multiples of ten
 The more a number has zeros, the harder it becomes to see with the eyes if it's the intended value. To ease auditing and bug bounty hunting, consider using the scientific notation
 
 *Instances (1)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+439:         uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
-### <a name="NC-10"></a>[NC-10] Avoid the use of sensitive terms
+### <a name="NC-13"></a>[NC-13] Avoid the use of sensitive terms
 Use [alternative variants](https://www.zdnet.com/article/mysql-drops-master-slave-and-blacklist-whitelist-terminology/), e.g. allowlist/denylist instead of whitelist/blacklist
 
-*Instances (119)*:
+*Instances (131)*:
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
 7: import "../interfaces/IBuyerWhitelistFacet.sol";
 
@@ -1409,69 +2110,76 @@ File: facets/BuyerWhitelistFacet.sol
 
 10: error BuyerWhitelist__NotAuthorizedOperator();
 
-11: error BuyerWhitelist__ExceedsMaxBatchSize();
+11: error BuyerWhitelist__ExceedsMaxBatchSize(uint256 batchSize);
 
 12: error BuyerWhitelist__ZeroAddress();
 
 13: error BuyerWhitelist__EmptyCalldata();
 
-15: contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
+14: error BuyerWhitelist__SellerIsNotERC1155Owner(address seller);
 
-16:     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
+15: error BuyerWhitelist__SellerIsNotERC721Owner(address seller, address owner);
 
-17:     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
+21: contract BuyerWhitelistFacet is IBuyerWhitelistFacet {
 
-22:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
+22:     event BuyerWhitelisted(uint128 indexed listingId, address indexed buyer);
 
-26:         validateWhitelistBatch(s, listingId, len);
+23:     event BuyerRemovedFromWhitelist(uint128 indexed listingId, address indexed buyer);
 
-28:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+30:     function addBuyerWhitelistAddresses(uint128 listingId, address[] calldata allowedBuyers) external override {
 
-29:             s.whitelistedBuyersByListingId[listingId];
+34:         validateWhitelistBatch(s, listingId, len);
 
-33:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+36:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
 
-35:             if (!listingWhitelist[allowedBuyer]) {
+37:             s.whitelistedBuyersByListingId[listingId];
 
-36:                 listingWhitelist[allowedBuyer] = true;
+41:             if (allowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-37:                 emit BuyerWhitelisted(listingId, allowedBuyer);
+43:             if (!listingWhitelist[allowedBuyer]) {
 
-48:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
+44:                 listingWhitelist[allowedBuyer] = true;
 
-52:         validateWhitelistBatch(s, listingId, len);
+45:                 emit BuyerWhitelisted(listingId, allowedBuyer);
 
-54:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
+57:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external override {
 
-55:             s.whitelistedBuyersByListingId[listingId];
+61:         validateWhitelistBatch(s, listingId, len);
 
-59:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
+63:         mapping(address buyer => bool isWhitelisted) storage listingWhitelist =
 
-61:             if (listingWhitelist[disallowedBuyer]) {
+64:             s.whitelistedBuyersByListingId[listingId];
 
-62:                 listingWhitelist[disallowedBuyer] = false;
+68:             if (disallowedBuyer == address(0)) revert BuyerWhitelist__ZeroAddress();
 
-63:                 emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
+70:             if (listingWhitelist[disallowedBuyer]) {
 
-73:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
+71:                 listingWhitelist[disallowedBuyer] = false;
 
-74:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
+72:                 emit BuyerRemovedFromWhitelist(listingId, disallowedBuyer);
 
-75:         if (batchSize > s.buyerWhitelistMaxBatchSize) {
+83:     function validateWhitelistBatch(AppStorage storage s, uint128 listingId, uint256 batchSize) internal view {
 
-76:             revert BuyerWhitelist__ExceedsMaxBatchSize();
+84:         if (batchSize == 0) revert BuyerWhitelist__EmptyCalldata();
 
-80:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+85:         if (batchSize > s.buyerWhitelistMaxBatchSize) {
 
-88:                 revert BuyerWhitelist__NotAuthorizedOperator();
+86:             revert BuyerWhitelist__ExceedsMaxBatchSize(batchSize);
 
-96:             ) revert BuyerWhitelist__NotAuthorizedOperator();
+90:         if (seller == address(0)) revert BuyerWhitelist__ListingDoesNotExist();
+
+99:                 revert BuyerWhitelist__SellerIsNotERC1155Owner(seller);
+
+103:                 revert BuyerWhitelist__NotAuthorizedOperator();
+
+109:             if (tokenHolder != seller) revert BuyerWhitelist__SellerIsNotERC721Owner(seller, tokenHolder);
+
+114:             ) revert BuyerWhitelist__NotAuthorizedOperator();
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
 7: error CollectionWhitelist__AlreadyWhitelisted();
 
@@ -1479,169 +2187,185 @@ File: facets/CollectionWhitelistFacet.sol
 
 9: error CollectionWhitelist__ZeroAddress();
 
-11: contract CollectionWhitelistFacet {
+15: contract CollectionWhitelistFacet {
 
-13:     event CollectionAddedToWhitelist(address indexed tokenAddress);
+17:     event CollectionAddedToWhitelist(address indexed tokenAddress);
 
-16:     event CollectionRemovedFromWhitelist(address indexed tokenAddress);
+20:     event CollectionRemovedFromWhitelist(address indexed tokenAddress);
 
-26:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
+31:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-28:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
+33:         if (s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__AlreadyWhitelisted();
 
-29:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
+34:         if (tokenAddress == address(0)) revert CollectionWhitelist__ZeroAddress();
 
-31:         s.whitelistedCollections[tokenAddress] = true;
+36:         s.whitelistedCollections[tokenAddress] = true;
 
-32:         s.whitelistedCollectionsIndex[tokenAddress] = s.whitelistedCollectionsArray.length;
+37:         s.whitelistedCollectionsIndex[tokenAddress] = s.whitelistedCollectionsArray.length;
 
-33:         s.whitelistedCollectionsArray.push(tokenAddress);
+38:         s.whitelistedCollectionsArray.push(tokenAddress);
 
-35:         emit CollectionAddedToWhitelist(tokenAddress);
+40:         emit CollectionAddedToWhitelist(tokenAddress);
 
-41:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
+47:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-43:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
+49:         if (!s.whitelistedCollections[tokenAddress]) revert CollectionWhitelist__NotWhitelisted();
 
-46:         uint256 index = s.whitelistedCollectionsIndex[tokenAddress];
+52:         uint256 index = s.whitelistedCollectionsIndex[tokenAddress];
 
-47:         uint256 lastIndex = s.whitelistedCollectionsArray.length - 1;
+53:         uint256 lastIndex = s.whitelistedCollectionsArray.length - 1;
 
-48:         address lastAddress = s.whitelistedCollectionsArray[lastIndex];
+54:         address lastAddress = s.whitelistedCollectionsArray[lastIndex];
 
-52:             s.whitelistedCollectionsArray[index] = lastAddress;
+58:             s.whitelistedCollectionsArray[index] = lastAddress;
 
-53:             s.whitelistedCollectionsIndex[lastAddress] = index;
+59:             s.whitelistedCollectionsIndex[lastAddress] = index;
 
-57:         s.whitelistedCollectionsArray.pop();
+63:         s.whitelistedCollectionsArray.pop();
 
-58:         delete s.whitelistedCollectionsIndex[tokenAddress];
+64:         delete s.whitelistedCollectionsIndex[tokenAddress];
 
-59:         s.whitelistedCollections[tokenAddress] = false;
+65:         s.whitelistedCollections[tokenAddress] = false;
 
-61:         emit CollectionRemovedFromWhitelist(tokenAddress);
+67:         emit CollectionRemovedFromWhitelist(tokenAddress);
 
-66:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+73:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
-68:         address[] storage arr = s.whitelistedCollectionsArray;
+75:         address[] storage arr = s.whitelistedCollectionsArray;
 
-74:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
+81:             if (addr == address(0)) revert CollectionWhitelist__ZeroAddress();
 
-76:             if (!s.whitelistedCollections[addr]) {
+83:             if (!s.whitelistedCollections[addr]) {
 
-77:                 s.whitelistedCollections[addr] = true;
+84:                 s.whitelistedCollections[addr] = true;
 
-78:                 s.whitelistedCollectionsIndex[addr] = arr.length;
+85:                 s.whitelistedCollectionsIndex[addr] = arr.length;
 
-81:                 emit CollectionAddedToWhitelist(addr);
+88:                 emit CollectionAddedToWhitelist(addr);
 
-93:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+101:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
-95:         address[] storage arr = s.whitelistedCollectionsArray;
+103:         address[] storage arr = s.whitelistedCollectionsArray;
 
-102:             if (s.whitelistedCollections[addr]) {
+110:             if (s.whitelistedCollections[addr]) {
 
-104:                 uint256 index = s.whitelistedCollectionsIndex[addr];
+112:                 uint256 index = s.whitelistedCollectionsIndex[addr];
 
-111:                     s.whitelistedCollectionsIndex[lastAddress] = index;
+119:                     s.whitelistedCollectionsIndex[lastAddress] = index;
 
-116:                 delete s.whitelistedCollectionsIndex[addr];
+124:                 delete s.whitelistedCollectionsIndex[addr];
 
-117:                 s.whitelistedCollections[addr] = false;
+125:                 s.whitelistedCollections[addr] = false;
 
-119:                 emit CollectionRemovedFromWhitelist(addr);
-
-```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
-
-```solidity
-File: facets/GetterFacet.sol
-
-108:     function isCollectionWhitelisted(address collection) external view returns (bool) {
-
-110:         return s.whitelistedCollections[collection];
-
-117:     function getWhitelistedCollections() external view returns (address[] memory) {
-
-119:         return s.whitelistedCollectionsArray;
-
-134:     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
-
-139:         return s.whitelistedBuyersByListingId[listingId][buyer];
-
-144:     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
-
-145:         return LibAppStorage.appStorage().buyerWhitelistMaxBatchSize;
+127:                 emit CollectionRemovedFromWhitelist(addr);
 
 ```
-[Link to code](--forcefacets/GetterFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/CurrencyWhitelistFacet.sol
+
+7: error CurrencyWhitelist__AlreadyAllowed();
+
+8: error CurrencyWhitelist__NotAllowed();
+
+15: contract CurrencyWhitelistFacet {
+
+36:         if (s.allowedCurrencies[currency]) revert CurrencyWhitelist__AlreadyAllowed();
+
+53:         if (!s.allowedCurrencies[currency]) revert CurrencyWhitelist__NotAllowed();
+
+```
+
+```solidity
+File: src/facets/GetterFacet.sol
+
+55:     function isCollectionWhitelisted(address collection) external view returns (bool) {
+
+57:         return s.whitelistedCollections[collection];
+
+63:     function getWhitelistedCollections() external view returns (address[] memory) {
+
+65:         return s.whitelistedCollectionsArray;
+
+79:     function isBuyerWhitelisted(uint128 listingId, address buyer) external view returns (bool) {
+
+84:         return s.whitelistedBuyersByListingId[listingId][buyer];
+
+89:     function getBuyerWhitelistMaxBatchSize() external view returns (uint16 maxBatchSize) {
+
+90:         return LibAppStorage.appStorage().buyerWhitelistMaxBatchSize;
+
+```
+
+```solidity
+File: src/facets/IdeationMarketFacet.sol
 
 10: import "../interfaces/IBuyerWhitelistFacet.sol";
 
-25: error IdeationMarket__CollectionNotWhitelisted(address tokenAddress);
+24: error IdeationMarket__CollectionNotWhitelisted(address tokenAddress);
 
-26: error IdeationMarket__BuyerNotWhitelisted(uint128 listingId, address buyer);
+25: error IdeationMarket__BuyerNotWhitelisted(uint128 listingId, address buyer);
 
-33: error IdeationMarket__WhitelistDisabled();
+31: error IdeationMarket__WhitelistDisabled();
 
-62:         bool buyerWhitelistEnabled,
+80:         bool buyerWhitelistEnabled,
 
-100:         bool buyerWhitelistEnabled,
+120:         bool buyerWhitelistEnabled,
 
-128:     event CollectionWhitelistRevokedCancelTriggered(uint128 indexed listingId, address indexed tokenAddress);
+149:     event CollectionWhitelistRevokedCancelTriggered(uint128 indexed listingId, address indexed tokenAddress);
 
-168:         bool buyerWhitelistEnabled,
+207:         bool buyerWhitelistEnabled,
 
-170:         address[] calldata allowedBuyers // whitelisted Buyers
+209:         address[] calldata allowedBuyers // whitelisted Buyers
 
-175:         if (!s.whitelistedCollections[tokenAddress]) {
+218:         _enforceCollectionWhitelisted(s, tokenAddress);
 
-176:             revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
+297:             buyerWhitelistEnabled: buyerWhitelistEnabled,
 
-270:             buyerWhitelistEnabled: buyerWhitelistEnabled,
+308:         _applyBuyerWhitelist(newListingId, buyerWhitelistEnabled, allowedBuyers);
 
-279:         if (buyerWhitelistEnabled) {
+319:             buyerWhitelistEnabled,
 
-282:                 IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(newListingId, allowedBuyers);
+361:         _enforceCollectionWhitelisted(s, listedItem.tokenAddress);
 
-285:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+364:         if (listedItem.buyerWhitelistEnabled) {
 
-296:             buyerWhitelistEnabled,
+365:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
 
-318:         if (listedItem.buyerWhitelistEnabled) {
+366:                 revert IdeationMarket__BuyerNotWhitelisted(listingId, msg.sender);
 
-319:             if (!s.whitelistedBuyersByListingId[listingId][msg.sender]) {
+655:         bool newBuyerWhitelistEnabled,
 
-320:                 revert IdeationMarket__BuyerNotWhitelisted(listingId, msg.sender);
+699:         if (!s.whitelistedCollections[listedItem.tokenAddress]) {
 
-597:         bool newBuyerWhitelistEnabled,
+701:             emit CollectionWhitelistRevokedCancelTriggered(listingId, listedItem.tokenAddress);
 
-599:         address[] calldata newAllowedBuyers // whitelisted Buyers
+727:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled;
 
-646:         if (!s.whitelistedCollections[tokenAddress]) {
+730:         _applyBuyerWhitelist(listingId, newBuyerWhitelistEnabled, newAllowedBuyers);
 
-648:             emit CollectionWhitelistRevokedCancelTriggered(listingId, tokenAddress);
+741:             newBuyerWhitelistEnabled,
 
-680:         listedItem.buyerWhitelistEnabled = newBuyerWhitelistEnabled; // other than in the createListing function where the buyerWhitelist gets passed withing creating the listing, when setting the buyerWhitelist from originally false to true through the updateListing function, the whitelist has to get filled through additional calling of the addBuyerWhitelistAddresses function
+776:             if (s.whitelistedCollections[listedItem.tokenAddress]) {
 
-683:         if (newBuyerWhitelistEnabled) {
+868:     function _enforceCollectionWhitelisted(AppStorage storage s, address tokenAddress) private view {
 
-686:                 IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, newAllowedBuyers);
+869:         if (!s.whitelistedCollections[tokenAddress]) {
 
-689:             if (newAllowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
+870:             revert IdeationMarket__CollectionNotWhitelisted(tokenAddress);
 
-700:             newBuyerWhitelistEnabled,
+899:     function _applyBuyerWhitelist(uint128 listingId, bool buyerWhitelistEnabled, address[] calldata allowedBuyers)
 
-742:             if (s.whitelistedCollections[listedItem.tokenAddress]) {
+902:         if (buyerWhitelistEnabled) {
+
+904:                 IBuyerWhitelistFacet(address(this)).addBuyerWhitelistAddresses(listingId, allowedBuyers);
+
+907:             if (allowedBuyers.length > 0) revert IdeationMarket__WhitelistDisabled();
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: interfaces/IBuyerWhitelistFacet.sol
+File: src/interfaces/IBuyerWhitelistFacet.sol
 
 6: interface IBuyerWhitelistFacet {
 
@@ -1650,136 +2374,155 @@ File: interfaces/IBuyerWhitelistFacet.sol
 15:     function removeBuyerWhitelistAddresses(uint128 listingId, address[] calldata disallowedBuyers) external;
 
 ```
-[Link to code](--forceinterfaces/IBuyerWhitelistFacet.sol)
 
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/libraries/LibAppStorage.sol
 
-7:     bool buyerWhitelistEnabled; // true means only whitelisted buyers can purchase.
+14:     bool buyerWhitelistEnabled;
 
-23:     uint16 buyerWhitelistMaxBatchSize; // should be 300
+48:     uint16 buyerWhitelistMaxBatchSize;
 
-29:     mapping(address collection => bool isWhitelisted) whitelistedCollections; // whitelisted collection (NFT) Address => true (or false if this collection has not been whitelisted)
+67:     mapping(address collection => bool isWhitelisted) whitelistedCollections;
 
-30:     address[] whitelistedCollectionsArray; // for lookups
+69:     address[] whitelistedCollectionsArray;
 
-31:     mapping(address collection => uint256 index) whitelistedCollectionsIndex; // to make lookups and deletions more efficient
+71:     mapping(address collection => uint256 index) whitelistedCollectionsIndex;
 
-32:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId; // listingId => whitelistedBuyer => true (or false if the buyers adress is not on the whitelist)
+73:     mapping(uint128 listingId => mapping(address buyer => bool isWhitelisted)) whitelistedBuyersByListingId;
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
 ```solidity
-File: upgradeInitializers/DiamondInit.sol
+File: src/upgradeInitializers/DiamondInit.sol
 
-23:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
+26:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
 
-35:         s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
+42:         s.buyerWhitelistMaxBatchSize = buyerWhitelistMaxBatchSize;
+
+152:             s.allowedCurrenciesIndex[currency] = i; // Store actual index (same pattern as whitelistedCollectionsIndex)
 
 ```
-[Link to code](--forceupgradeInitializers/DiamondInit.sol)
 
-### <a name="NC-11"></a>[NC-11] Strings should use double quotes rather than single quotes
+### <a name="NC-14"></a>[NC-14] Strings should use double quotes rather than single quotes
 See the Solidity Style Guide: https://docs.soliditylang.org/en/v0.8.20/style-guide.html#other-recommendations
 
 *Instances (1)*:
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-181:         require(_facetAddress != address(0), "LibDiamondCut: Can't remove function that doesn't exist");
+207:         require(_facetAddress != address(0), "LibDiamondCut: Can't remove function that doesn't exist");
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
 
-### <a name="NC-12"></a>[NC-12] Use Underscores for Number Literals (add an underscore every 3 digits)
+### <a name="NC-15"></a>[NC-15] Use Underscores for Number Literals (add an underscore every 3 digits)
 
-*Instances (2)*:
+*Instances (1)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-381:         uint256 innovationProceeds = ((purchasePrice * listedItem.feeRate) / 100000);
+439:         uint256 innovationFee = ((purchasePrice * listedItem.feeRate) / 100000);
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
+### <a name="NC-16"></a>[NC-16] Constants should be defined rather than using magic numbers
+
+*Instances (1)*:
 ```solidity
-File: libraries/LibAppStorage.sol
+File: src/upgradeInitializers/DiamondInit.sol
 
-22:     uint32 innovationFee; // e.g., 1000 = 1% // this is the innovation/Marketplace fee (excluding gascosts) for each sale
+48:         address[] memory currencies = new address[](76); // 1 ETH + 75 ERC-20 = 76 total
 
 ```
-[Link to code](--forcelibraries/LibAppStorage.sol)
 
-### <a name="NC-13"></a>[NC-13] Variables need not be initialized to zero
+### <a name="NC-17"></a>[NC-17] Variables need not be initialized to zero
 The default value for variables is zero, so initializing them to zero is superfluous.
 
-*Instances (15)*:
+*Instances (23)*:
 ```solidity
-File: facets/BuyerWhitelistFacet.sol
+File: src/facets/BuyerWhitelistFacet.sol
 
-31:         for (uint256 i = 0; i < len;) {
+39:         for (uint256 i = 0; i < len;) {
 
-57:         for (uint256 i = 0; i < len;) {
+66:         for (uint256 i = 0; i < len;) {
 
 ```
-[Link to code](--forcefacets/BuyerWhitelistFacet.sol)
 
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-72:         for (uint256 i = 0; i < len;) {
+79:         for (uint256 i = 0; i < len;) {
 
-99:         for (uint256 i = 0; i < len;) {
+107:         for (uint256 i = 0; i < len;) {
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ```solidity
-File: facets/DiamondLoupeFacet.sol
+File: src/facets/DiamondLoupeFacet.sol
 
-21:         for (uint256 i = 0; i < numFacets;) {
+22:         for (uint256 i = 0; i < numFacets;) {
+
+75:         for (uint256 i = 0; i < facetCount;) {
+
+84:         for (uint256 i = 0; i < facetCount;) {
+
+88:             for (uint256 j = 0; j < selLen;) {
 
 ```
-[Link to code](--forcefacets/DiamondLoupeFacet.sol)
 
 ```solidity
-File: facets/GetterFacet.sol
+File: src/facets/DiamondUpgradeFacet.sol
 
-25:         uint256 activeCount = 0;
+24:         for (uint256 i = 0; i < _addFunctions.length; i++) {
 
-26:         for (uint256 i = 0; i < totalIds;) {
+31:             for (uint256 j = 0; j < selectors.length; j++) {
 
-43:         uint256 arrayIndex = 0;
+43:         for (uint256 i = 0; i < _replaceFunctions.length; i++) {
 
-44:         for (uint256 i = 0; i < totalIds;) {
+50:             for (uint256 j = 0; j < selectors.length; j++) {
+
+64:             for (uint256 i = 0; i < _removeFunctions.length; i++) {
+
+112:         for (uint256 i = 0; i < arr.length; i++) {
 
 ```
-[Link to code](--forcefacets/GetterFacet.sol)
 
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-180:         address seller = address(0);
+221:         address seller = address(0);
 
-411:             address desiredOwner = address(0); // initializing this for cleanup
+442:         address royaltyReceiver = address(0);
 
-412:             address obsoleteSeller = address(0); // initializing this for cleanup
-
-413:             uint256 remainingERC1155Balance = 0; // initializing this for cleanup
+443:         uint256 royaltyAmount = 0;
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-80:         for (uint256 facetIndex = 0; facetIndex < cutLen;) {
-
-111:         for (uint256 selectorIndex = 0; selectorIndex < selLen;) {
+126:         for (uint256 selectorIndex = 0; selectorIndex < selLen;) {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
+
+```solidity
+File: src/upgradeInitializers/DiamondInit.sol
+
+149:         for (uint256 i = 0; i < currencies.length; i++) {
+
+```
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+56:         for (uint256 i = 0; i < facetAddresses.length; i++) {
+
+67:         for (uint256 i = 0; i < length; i++) {
+
+79:         for (uint256 i = 0; i < length; i++) {
+
+83:         for (uint256 i = 0; i < length; i++) {
+
+```
 
 
 ## Low Issues
@@ -1788,45 +2531,49 @@ File: libraries/LibDiamond.sol
 | |Issue|Instances|
 |-|:-|:-:|
 | [L-1](#L-1) | Division by zero not prevented | 1 |
-| [L-2](#L-2) | External call recipient may consume all transaction gas | 1 |
+| [L-2](#L-2) | External call recipient may consume all transaction gas | 4 |
 | [L-3](#L-3) | Initializers could be front-run | 1 |
 | [L-4](#L-4) | Use `Ownable2Step.transferOwnership` instead of `Ownable.transferOwnership` | 2 |
-| [L-5](#L-5) | Upgradeable contract not initialized | 2 |
+| [L-5](#L-5) | Unsafe solidity low-level call can cause gas grief attack | 1 |
+| [L-6](#L-6) | Upgradeable contract not initialized | 6 |
 ### <a name="L-1"></a>[L-1] Division by zero not prevented
 The divisions below take an input parameter which does not have any zero-value checks, which may lead to the functions reverting when zero is passed.
 
 *Instances (1)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-350:             purchasePrice = listedItem.price * erc1155PurchaseQuantity / listedItem.erc1155Quantity;
+397:             uint256 unitPrice = listedItem.price / listedItem.erc1155Quantity;
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ### <a name="L-2"></a>[L-2] External call recipient may consume all transaction gas
 There is no limit specified on the amount of gas used, so the recipient can use up all of the transaction's gas, causing it to revert. Use `addr.call{gas: <amount>}("")` or [this](https://github.com/nomad-xyz/ExcessivelySafeCall) library instead.
 
-*Instances (1)*:
+*Instances (4)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-717:         (bool success,) = payable(msg.sender).call{value: proceeds}("");
+1014:             (bool successFee,) = payable(marketplaceOwner).call{value: innovationFee}("");
+
+1020:                 (bool successRoyalty,) = payable(royaltyReceiver).call{value: royaltyAmount}("");
+
+1026:             (bool successSeller,) = payable(seller).call{value: sellerProceeds}("");
+
+1065:         (bool success, bytes memory returndata) = token.call(data);
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 
 ### <a name="L-3"></a>[L-3] Initializers could be front-run
 Initializers could be front-run, allowing an attacker to either set their own values, take ownership of the contract, and in the best case forcing a re-deployment
 
 *Instances (1)*:
 ```solidity
-File: upgradeInitializers/DiamondInit.sol
+File: src/upgradeInitializers/DiamondInit.sol
 
-23:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
+26:     function init(uint32 innovationFee, uint16 buyerWhitelistMaxBatchSize) external {
 
 ```
-[Link to code](--forceupgradeInitializers/DiamondInit.sol)
 
 ### <a name="L-4"></a>[L-4] Use `Ownable2Step.transferOwnership` instead of `Ownable.transferOwnership`
 Use [Ownable2Step.transferOwnership](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable2Step.sol) which is safer. Use it as it is more secure due to 2-stage ownership transfer.
@@ -1845,34 +2592,57 @@ Use <a href="https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/
 
 *Instances (2)*:
 ```solidity
-File: facets/OwnershipFacet.sol
+File: src/facets/OwnershipFacet.sol
 
-14:     function transferOwnership(address newOwner) external override {
+21:     function transferOwnership(address newOwner) external override {
 
 ```
-[Link to code](--forcefacets/OwnershipFacet.sol)
 
 ```solidity
-File: interfaces/IERC173.sol
+File: src/interfaces/IERC173.sol
 
-18:     function transferOwnership(address _newOwner) external;
+19:     function transferOwnership(address _newOwner) external;
 
 ```
-[Link to code](--forceinterfaces/IERC173.sol)
 
-### <a name="L-5"></a>[L-5] Upgradeable contract not initialized
+### <a name="L-5"></a>[L-5] Unsafe solidity low-level call can cause gas grief attack
+Using the low-level calls of a solidity address can leave the contract open to gas grief attacks. These attacks occur when the called contract returns a large amount of data.
+
+So when calling an external contract, it is necessary to check the length of the return data before reading/copying it (using `returndatasize()`).
+
+*Instances (1)*:
+```solidity
+File: src/facets/IdeationMarketFacet.sol
+
+1065:         (bool success, bytes memory returndata) = token.call(data);
+
+```
+
+### <a name="L-6"></a>[L-6] Upgradeable contract not initialized
 Upgradeable contracts are initialized via an initializer function rather than by a constructor. Leaving such a contract uninitialized may lead to it being taken over by a malicious user
 
-*Instances (2)*:
+*Instances (6)*:
 ```solidity
-File: libraries/LibDiamond.sol
+File: src/libraries/LibDiamond.sol
 
-96:         initializeDiamondCut(_init, _calldata);
-
-212:     function initializeDiamondCut(address _init, bytes memory _calldata) internal {
+240:     function initializeDiamondCut(address _init, bytes memory _calldata) internal {
 
 ```
-[Link to code](--forcelibraries/LibDiamond.sol)
+
+```solidity
+File: src/upgradeInitializers/DummyUpgradeInit.sol
+
+11:     event DummyUpgradeInitialized(uint256 value);
+
+12:     event DummyUpgradeVersionInitialized(string version, bytes32 implementationId, uint256 timestamp);
+
+17:         emit DummyUpgradeInitialized(value);
+
+41:         emit DummyUpgradeInitialized(value);
+
+42:         emit DummyUpgradeVersionInitialized(newVersion, ds.currentImplementationId, block.timestamp);
+
+```
 
 
 ## Medium Issues
@@ -1889,40 +2659,38 @@ Contracts have owners with privileged rights to perform admin tasks and need to 
 
 *Instances (4)*:
 ```solidity
-File: facets/CollectionWhitelistFacet.sol
+File: src/facets/CollectionWhitelistFacet.sol
 
-26:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
+31:     function addWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-41:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
+47:     function removeWhitelistedCollection(address tokenAddress) external onlyOwner {
 
-66:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+73:     function batchAddWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
-93:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
+101:     function batchRemoveWhitelistedCollections(address[] calldata tokenAddresses) external onlyOwner {
 
 ```
-[Link to code](--forcefacets/CollectionWhitelistFacet.sol)
 
 ### <a name="M-2"></a>[M-2] Direct `supportsInterface()` calls may cause caller to revert
 Calling `supportsInterface()` on a contract that doesn't implement the ERC-165 standard will result in the call reverting. Even if the caller does support the function, the contract may be malicious and consume all of the transaction's available gas. Call it via a low-level [staticcall()](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f959d7e4e6ee0b022b41e5b644c79369869d8411/contracts/utils/introspection/ERC165Checker.sol#L119), with a fixed amount of gas, and check the return code, or use OpenZeppelin's [`ERC165Checker.supportsInterface()`](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/f959d7e4e6ee0b022b41e5b644c79369869d8411/contracts/utils/introspection/ERC165Checker.sol#L36-L39).
 
 *Instances (7)*:
 ```solidity
-File: facets/IdeationMarketFacet.sol
+File: src/facets/IdeationMarketFacet.sol
 
-183:             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+224:             if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
 
-184:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+225:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
 
-206:             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+247:             if (!IERC165(tokenAddress).supportsInterface(type(IERC721).interfaceId)) {
 
-207:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+248:                 if (!IERC165(tokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
 
-387:         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
+446:         if (IERC165(listedItem.tokenAddress).supportsInterface(type(IERC2981).interfaceId)) {
 
-857:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
+954:                 if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC1155).interfaceId)) {
 
-861:             if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
+959:                 if (!IERC165(desiredTokenAddress).supportsInterface(type(IERC721).interfaceId)) {
 
 ```
-[Link to code](--forcefacets/IdeationMarketFacet.sol)
 

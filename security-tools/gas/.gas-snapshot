@@ -1,38 +1,8 @@
-IdeationMarketGasTest:testGas_CleanListing_ERC721_underBudget() (gas: 18446744073676120592)
-IdeationMarketGasTest:testGas_Create_ERC1155_underBudget() (gas: 18446744073676243741)
-IdeationMarketGasTest:testGas_Create_ERC721_underBudget() (gas: 18446744073676224058)
-IdeationMarketGasTest:testGas_Purchase_ERC1155_underBudget() (gas: 18446744073676199901)
-IdeationMarketGasTest:testGas_Purchase_ERC721_underBudget() (gas: 18446744073676184178)
-IdeationMarketGasTest:testGas_Purchase_Swap_ERC721_underBudget() (gas: 18446744073676217475)
-IdeationMarketGasTest:testGas_Update_ERC1155_underBudget() (gas: 18446744073676266396)
-IdeationMarketGasTest:testGas_Update_ERC721_underBudget() (gas: 18446744073676246436)
-IdeationMarketGasTest:testGas_WithdrawProceeds_underBudget() (gas: 18446744073676204556)
-
-
-
-<!-- about the large numbers in the snapshot
-The 1844674407... values are artifacts of how Foundry meters gas when you use vm.pauseGasMetering(). Your actual enforced budgets (the ones that matter for CI regression checks) are the constants in your test file (225k, 180k, etc.) which are checked via the assertLe(gasUsed, BUDGET) assertions inside each test.
-
-using the snapshot in CI
-Now you can add this to CI:
-
-forge snapshot --match-contract IdeationMarketGasTest --check
-
-This will fail the build if any test's gas changes from the pinned baseline in .gas-snapshot. Combine with your assertLe budgets for a two-layer defense:
-
-assertLe budgets catch big regressions immediately (hard thresholds)
-snapshot --check catches any change from baseline (sensitive detector) 
-
-
-
-
-How to use both together in CI:
-
-Add both commands to your CI pipeline (or run them locally before merging):
-
-forge test --match-contract IdeationMarketGasTest
-forge snapshot --match-contract IdeationMarketGasTest --check
-
-The first command enforces your hard budgets (assertLe).
-The second command detects any change from your baseline, even if under budget.
--->
+IdeationMarketGasTest:testGas_CleanListing_ERC721_underBudget() (gas: 18446744073676123275)
+IdeationMarketGasTest:testGas_Create_ERC1155_underBudget() (gas: 18446744073676206097)
+IdeationMarketGasTest:testGas_Create_ERC721_underBudget() (gas: 18446744073676208717)
+IdeationMarketGasTest:testGas_Purchase_ERC1155_underBudget() (gas: 18446744073676204483)
+IdeationMarketGasTest:testGas_Purchase_ERC721_underBudget() (gas: 18446744073676191493)
+IdeationMarketGasTest:testGas_Purchase_Swap_ERC721_underBudget() (gas: 18446744073676222511)
+IdeationMarketGasTest:testGas_Update_ERC1155_underBudget() (gas: 18446744073676230149)
+IdeationMarketGasTest:testGas_Update_ERC721_underBudget() (gas: 18446744073676232359)

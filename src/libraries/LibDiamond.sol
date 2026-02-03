@@ -60,7 +60,7 @@ library LibDiamond {
     /// @dev Inline assembly assigns the slot to the returned storage reference.
     function diamondStorage() internal pure returns (DiamondStorage storage ds) {
         bytes32 position = DIAMOND_STORAGE_POSITION;
-        assembly {
+        assembly ("memory-safe") {
             ds.slot := position
         }
     }
@@ -245,7 +245,7 @@ library LibDiamond {
         (bool success, bytes memory error) = _init.delegatecall(_calldata);
         if (!success) {
             if (error.length > 0) {
-                assembly {
+                assembly ("memory-safe") {
                     let returndata_size := mload(error)
                     revert(add(32, error), returndata_size)
                 }
@@ -259,7 +259,7 @@ library LibDiamond {
     /// @dev Uses `extcodesize` to guard against EOAs or undeployed addresses.
     function enforceHasContractCode(address _contract, string memory _errorMessage) internal view {
         uint256 contractSize;
-        assembly {
+        assembly ("memory-safe") {
             contractSize := extcodesize(_contract)
         }
         require(contractSize > 0, _errorMessage);

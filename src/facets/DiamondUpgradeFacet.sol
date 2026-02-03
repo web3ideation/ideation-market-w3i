@@ -95,14 +95,14 @@ contract DiamondUpgradeFacet is IDiamondUpgradeFacet {
 
     function _hasCode(address _addr) internal view returns (bool) {
         uint256 size;
-        assembly {
+        assembly ("memory-safe") {
             size := extcodesize(_addr)
         }
         return size > 0;
     }
 
     function _revertWith(bytes memory revertData) internal pure {
-        assembly {
+        assembly ("memory-safe") {
             revert(add(revertData, 32), mload(revertData))
         }
     }

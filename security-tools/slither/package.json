@@ -1,11 +1,10 @@
 {
-  "name": "audit",
+  "name": "security-tools-slither",
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "compile": "hardhat compile",
-    "audit:diamond": "yarn compile && cd 4naly3er && yarn analyze ../src",
-    "slither": "yarn hardhat clean && yarn hardhat compile --force && slither . --checklist > slither_report.md"
+    "slither:report": "slither ../.. --compile-force-framework foundry --checklist --filter-paths '(lib/|test/|script/|broadcast/|security-tools/)' > slither_report.md",
+    "slither": "slither ../.. --compile-force-framework foundry --filter-paths '(lib/|test/|script/|broadcast/|security-tools/)'"
   },
   "main": "index.js",
   "license": "MIT",

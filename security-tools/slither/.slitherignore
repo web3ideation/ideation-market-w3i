@@ -1,4 +1,4 @@
-4naly3er/
+node_modules/
 cache/
 artifacts/
-test/
+_audit/

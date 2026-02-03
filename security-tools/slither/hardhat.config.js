@@ -12,8 +12,8 @@ module.exports = {
     },
   },
   paths: {
-    sources: "./4naly3er/contracts/src", // ← compile your main code
-    artifacts: "artifacts", // ← keep artifacts local to audit/
+    sources: "../../src", // compile repo contracts (from security-tools/slither)
+    artifacts: "artifacts", // ← keep artifacts local to security-tools/slither/
     cache: "cache",
   },
 };

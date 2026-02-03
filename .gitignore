@@ -21,18 +21,24 @@ docs/
 
 # Node deps
 node_modules/
-audit/node_modules/
+security-tools/**/node_modules/
 
 # Hardhat / compilation artifacts
 artifacts/
 cache/
-audit/artifacts/
-audit/cache/
+security-tools/slither/artifacts/
+security-tools/slither/cache/
 
 # 4nalyz3r output and logs
 *.sarif
 *.log
-audit/diamond-report.sarif
+security-tools/**/diamond-report.sarif
+
+# Security tooling outputs (local)
+security-tools/echidna/crytic-export/
+security-tools/echidna/echidna_corpus/
+security-tools/echidna/src/
+security-tools/slither/_audit/
 
 # Flattened or dist files (if you ever generate them)
 dist/

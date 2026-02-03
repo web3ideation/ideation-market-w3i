@@ -138,6 +138,68 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 
 ---
 
+## Security / Test Tooling
+
+This repo keeps security tooling and generated artifacts under `security-tools/`.
+All tools can be run from the repo root via wrapper scripts in `script/`.
+
+### Slither
+
+Slither is a static analysis tool for Solidity that detects common vulnerability patterns and risky design choices.
+Use it as a fast first-pass security scan and to regression-check that changes do not introduce new classes of findings.
+
+Runs Slither and writes/overwrites the report at `security-tools/slither/slither_report.md`.
+
+```bash
+bash script/run-slither.sh
+```
+
+Note: Slither commonly exits non-zero when it finds issues; the wrapper is intended to still produce the report.
+
+### 4naly3er
+
+4naly3er is an automated smart-contract review tool that flags common security and code-quality issues (and also reports many gas/style opportunities).
+Use it as a broad “lint + audit checklist” to catch obvious problems early and to compare findings across versions.
+
+Runs 4naly3er and writes/overwrites the report at `security-tools/4naly3er/report.md`.
+
+```bash
+bash script/run-4naly3er.sh
+```
+
+### Echidna
+
+Echidna is a property-based fuzzer: you define invariants/properties and it generates sequences of calls trying to break them.
+Use it to stress-test critical invariants and to search for edge cases that unit tests and static analysis may miss.
+
+Runs Echidna fuzzing using the harness/config under `security-tools/echidna/`.
+Coverage/corpus/reproducers are stored under `security-tools/echidna/echidna_corpus/`.
+
+```bash
+# Default run
+bash script/run-echidna.sh
+
+# Example: longer run
+bash script/run-echidna.sh --format text --test-limit 200000
+```
+
+### Gas snapshot
+
+Gas snapshots are a lightweight way to track gas usage over time for selected tests and to enforce budgets.
+Use them to catch unintended gas regressions during refactors and upgrades.
+
+Manages the gas snapshot file at `security-tools/gas/.gas-snapshot`.
+
+```bash
+# Regenerate/update snapshot
+bash script/gas-snapshot-update.sh
+
+# Check against snapshot
+bash script/gas-snapshot-check.sh
+```
+
+---
+
 ## Contracts Overview
 
 ### Core Contracts
