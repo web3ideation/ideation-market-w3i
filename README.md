@@ -1,6 +1,9 @@
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Note: this repo contains third-party dependencies and developer/security tooling that may be
+licensed separately; see [NOTICE](NOTICE) and the respective subdirectories.
  
 ## Third-Party Libraries
 
@@ -9,9 +12,10 @@ This project includes code from the following open-source project(s):
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) - Licensed under the MIT License.
 - [mudgen/diamond](https://github.com/mudgen/diamond) - Licensed under the MIT License.
 - [diamond-3-foundry (Alex Babits)](https://github.com/alexbabits/diamond-3-foundry) - Licensed under the MIT License.
-- further see the "third-party-licenses" folder
 
-Portions of this project are based on and adapted from the Diamonds reference implementations and Alex Babits' diamond-3-foundry educational template. See [NOTICE](NOTICE) for detailed third-party attributions.
+See [NOTICE](NOTICE) for detailed third-party attributions.
+
+Portions of this project are based on and adapted from the Diamonds reference implementations and Alex Babits' diamond-3-foundry educational template.
 
 ## ERC-8109 note
 
@@ -142,6 +146,9 @@ The IdeationMarketDiamond implements a robust diamond structure for managing the
 
 This repo keeps security tooling and generated artifacts under `security-tools/`.
 All tools can be run from the repo root via wrapper scripts in `script/`.
+
+Note: some tooling is vendored under `security-tools/` and is licensed separately (e.g.,
+4naly3er). See [NOTICE](NOTICE) and each tool directory for details.
 
 ### Slither
 

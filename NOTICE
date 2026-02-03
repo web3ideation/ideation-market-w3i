@@ -70,3 +70,24 @@ This project uses the following third-party libraries:
    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
    SOFTWARE.
+
+5. 4naly3er (static analyzer)
+   - Location in this repo: security-tools/4naly3er/
+   - License: GNU GPL v3.0 (see security-tools/4naly3er/LICENSE)
+
+   Note: 4naly3er is a developer/security tool bundled in this repository under
+   security-tools/. It is not part of the deployed smart contracts.
+
+
+Other tooling used (installed separately)
+
+This repository also uses external developer/security tools that are not
+distributed as part of the smart contract codebase itself, and are invoked via
+wrapper scripts under script/:
+
+- Slither (static analysis)
+- Echidna (property-based fuzzing)
+- Foundry (forge/cast/anvil)
+
+These tools are installed separately and remain under their respective upstream
+licenses.
