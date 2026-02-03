@@ -180,7 +180,7 @@ Coverage/corpus/reproducers are stored under `security-tools/echidna/echidna_cor
 bash script/run-echidna.sh
 
 # Example: longer run
-bash script/run-echidna.sh --format text --test-limit 200000
+bash script/run-echidna.sh --format text --seq-len 120 --test-limit 300000
 ```
 
 ### Gas snapshot

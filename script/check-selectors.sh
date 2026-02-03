@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Purpose: Detect selector collisions across facet ABIs (fails fast for CI).
+# Outputs: stdout summary; exit code 0 on success, 1 on collisions.
+
 # ──────────────────── 1) Rebuild all contracts ─────────────────────────────
 forge build --force --silent
 
