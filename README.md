@@ -382,6 +382,18 @@ forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
 
 ---
 
+## Helper Scripts
+
+Small utilities under [script](script) for day-to-day development/ops tasks.
+
+- Selector clash check (facets): `bash script/check-selectors.sh`
+- Compare deployed runtime bytecode (across networks): `bash script/compare-contract-code.sh --rpc-a <RPC_A> --addr-a <ADDR_A> --rpc-b <RPC_B> --addr-b <ADDR_B>`
+- Generate Etherscan Standard-JSON input (manual verification helper):
+  - One contract: `python3 script/make_etherscan_input.py <file.sol:ContractName> [out.json]`
+  - All facets + diamond: `python3 script/make_etherscan_input.py --all [out_dir]`
+
+---
+
 ## Security Tooling
 
 Wrapper scripts live in [script](script) and reports/artifacts are stored under [security-tools](security-tools).
