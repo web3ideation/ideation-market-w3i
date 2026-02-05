@@ -64,7 +64,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     function testUnknownFunctionReverts() public {
         // Generate a random function selector to trigger fallback with no facet
         bytes memory data = abi.encodeWithSelector(bytes4(keccak256("unknown()")));
-        // Expect the custom Diamond__FunctionDoesNotExist error
         // Expect the custom fallback error defined in the diamond
         vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
         (bool ok,) = address(diamond).call(data);
@@ -3653,8 +3652,8 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.isBuyerWhitelisted(999999, buyer);
     }
 
-    /// After collection is removed from whitelist, purchases should still succeed.
-    function testPurchaseAfterCollectionDeWhitelistingStillSucceeds() public {
+    /// After collection is removed from whitelist, purchases should revert.
+    function testPurchaseAfterCollectionDeWhitelistingReverts() public {
         uint128 id = _createListingERC721(false, new address[](0));
         // remove collection
         vm.prank(owner);

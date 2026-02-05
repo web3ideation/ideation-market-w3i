@@ -1,283 +1,294 @@
-## License
+# Ideation Market (Diamond)
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+A curated NFT marketplace built as an **ERC-8109 diamond** (upgrade/inspect surface), using classic EIP-2535-style selector→facet dispatch.
 
-Note: this repo contains third-party dependencies and developer/security tooling that may be
-licensed separately; see [NOTICE](NOTICE) and the respective subdirectories.
- 
-## Third-Party Libraries
+It uses the standard EIP-2535-style selector→facet dispatch pattern, and layers ERC-8109’s `upgradeDiamond(...)` upgrade entrypoint plus `functionFacetPairs()` introspection on top.
 
-This project includes code from the following open-source project(s):
+Supports:
+- ERC-721 and ERC-1155 listings
+- Optional swaps (NFT-for-NFT, with optional ETH or ERC-20 payment)
+- Optional per-listing buyer whitelists
+- Optional ERC-1155 partial buys
+- Collection whitelist (curated NFT contracts)
+- Currency allowlist (curated payment tokens)
 
-- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) - Licensed under the MIT License.
-- [mudgen/diamond](https://github.com/mudgen/diamond) - Licensed under the MIT License.
-- [diamond-3-foundry (Alex Babits)](https://github.com/alexbabits/diamond-3-foundry) - Licensed under the MIT License.
-
-See [NOTICE](NOTICE) for detailed third-party attributions.
-
-Portions of this project are based on and adapted from the Diamonds reference implementations and Alex Babits' diamond-3-foundry educational template.
-
-## ERC-8109 note
-
-This repo originally started from a classic diamond template, but the *upgrade entrypoint* has been migrated to
-**ERC-8109**. The on-chain upgrade function is `upgradeDiamond(...)`.
-
-<br><br><br><br><br>
-
-
-notes: // !!!W check these if they are still up to date and integrate the info in the final readme
- logic	After a collection is de-whitelisted, its already-listed tokens can still be bought. purchaseListing() has no onlyWhitelistedCollection check, so a policy change doesn’t fully take effect. -> i think thats fine. just keep in mind that when revoking a collection from the whitelist to cancel all the listings manually.
- approved operators of erc721 can interact with the marketplacediamond on behalv of the owner, tho approced operators of erc1155 can NOT interact with the marketplacediamond on behalv of the owner because for the isApproved check the Owner address must be known tho it is not so it simply is impossible without offchain tracing. [I could add this funcitonality in the future by: require that users “register” as the controller in your protocol pre-listing]
- listedItem.seller == address(0) means that the listing is inactive
- quantity == 0 means its an erc721
- quantity > 0 means its an erc1155
- royalties don't get sent to the defined receiver but credited to their proceeds -> thus they have to actively withdraw them
- before creating the listing the user needs to approve the marketplace (approveForAll) to handle their Token (the ideationMarket fronten already does that)
- explain how to update the whitelist (since that can be done with updatelisting but also directly with the addBuyerWhitelistAddresses)
- highlight that only curated utility token contracts are whitelisted.
- explain the diamondstructure and where devs can find which functions (for example getters you would expect in the ideationmarketfacet are in the getterFacet)
-
-
-deployment 1 log:
-  Deployed diamondInit contract at address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
-  Deployed diamondLoupeFacet contract at address: 0x84B5151b8258B025284F163650d220b930204A8F
-  Deployed ownershipFacet contract at address: 0x032a247637cD41c675cC82A7149B907a559841aa
-  Deployed ideationMarketFacet contract at address: 0xbDD69f91a78883bf7dD725ed1564278C01642e61
-  Deployed collectionWhitelistFacet contract at address: 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1
-  Deployed buyerWhitelistFacet contract at address: 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1
-  Deployed getterFacet contract at address: 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8
-  Deployed diamondCutFacet contract at address: 0x516817c98DA9A426c51731c7eD71d2Dd4d618783
-  Deployed Diamond contract at address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
-  Diamond cuts complete
-  Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
-https://louper.dev/diamond/0x8cE90712463c87a6d62941D67C3507D090Ea9d79?network=sepolia
-https://sepolia.etherscan.io/address/0x8cE90712463c87a6d62941D67C3507D090Ea9d79
-
-deployment 2 log
-Diamond Address: 0xF422A7779D2feB884CcC1773b88d98494A946604
-Owner: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
-Version: 1.0.0
-Implementation ID: 0x359675c94671bb21ec1b9cdf35889444129ffe792962a68e660b24c9b1eb1fed
-FACETS:
-DiamondInit: 0xc82B382b69cB613703cF6F01ba4867Ff5443a4E4
-DiamondLoupeFacet: 0x64218c3Fa4896be3F596177c1080C59751e013e7
-OwnershipFacet: 0x57db2c739633EF5A050CDB1dBB29f48f092b5078
-IdeationMarketFacet: 0x5Aa7C259D668cf3868b5D1831b760EfB2E9443e8
-CollectionWhitelistFacet: 0x1aF98799D02d1a46123725bDD65b96b2A7FAb2F8
-BuyerWhitelistFacet: 0xf14A6B456B465A38aCF44180B85AA3334F92a1F5
-GetterFacet: 0x80525592f21245EdfdDa6c725AC31c73f04F76D2
-CurrencyWhitelistFacet: 0x827E91DF79357679F9B02690746fa3F0e7dB3C11
-VersionFacet: 0xbd390aD3058E0BA40AcDa61a72ebAEEF58891394
-PauseFacet: 0x4285d039DBDBee9bAa4785b9e1919095Dc030CF6
-DiamondCutFacet: 0x8D6805898180257A38F89d1DFb868C1A8c38E2Fb
-EXPLORERS:
-Louper: https://louper.dev/diamond/0xF422A7779D2feB884CcC1773b88d98494A946604?network=sepolia
-Etherscan: https://sepolia.etherscan.io/address/0xF422A7779D2feB884CcC1773b88d98494A946604
-
-deployment 3 log:
-  Deployed diamondInit contract at address: 0x6ab53B38A5703387e0E2Ee3D1AD99894728e587c
-  Deployed diamondLoupeFacet contract at address: 0x16D2e785ec9f270C8e0CdB6dc0Ca0f0f9646610C
-  Deployed ownershipFacet contract at address: 0x1dEEE0f8e73a19E31c49D51419C47e15f48667f9
-  Deployed ideationMarketFacet contract at address: 0x6f4e8be1EEaF712a3ff85E7FFe992d21794E790E
-  Deployed collectionWhitelistFacet contract at address: 0x1eeDB782151377AC05d61EecC3Bdf4ECCbf3B298
-  Deployed buyerWhitelistFacet contract at address: 0x1b0Dc3BD49A8bd493387bb49376212B9b0A9A64f
-  Deployed getterFacet contract at address: 0xb42c109A61Cb882B11bb7E98B9A0302C3E486327
-  Deployed currencyWhitelistFacet contract at address: 0xf98025444A70391286e15014023758624754d780
-  Deployed versionFacet contract at address: 0xeDD15c75a980da4eD70F609c30F8E73bCDBdd186
-  Deployed pauseFacet contract at address: 0xc39f8c071668Eea19392F1Ea3AC7fe8A5391b4b3
-  Deployed diamondUpgradeFacet contract at address: 0xDA227064DadE08d65d1880488B368B1A73AAA489
-  Deployed Diamond contract at address: 0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
-  Diamond upgrade complete
-  Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
-  Setting version: 1.0.0
-  Version set: 1.0.0
-  Implementation ID:
-  0x94e212f6785d382d4e9f65c8e49dfa69523440374e542ea38617b9fc295a69a4
-EXPLORERS:
-Louper: https://louper.dev/diamond/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC?network=sepolia
-Etherscan: https://sepolia.etherscan.io/address/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
-
-Deployed MockERC20_18: 0xC740Ee33A12c21Fa7F3cdd426D6051e16EaB456e
-Deployed MockUSDC_6: 0xEaefa01B8c4c8126226A8B2DA2cF6Eb0E5B0bD26
-Deployed MockWBTC_8: 0xB1A8786Fd1bBDB7F56f8cEa78A77897a0Aa9fAb2
-Deployed MockEURS_2: 0xe06E78AB6314993FCa9106536aecfE4284aA791a
-Deployed MockUSDTLike_6: 0xd11Db19892F8c9C89A03Ba6EFD636795cbBc0d74
-Minted to: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
-Minted to: 0x8a200122f666af83aF2D4f425aC7A35fa5491ca7
-Minted to: 0xf034e8ad11F249c8081d9da94852bE1734bc11a4
-
-
-for etherscan interaction: // !!!W check these if they are still up to date and integrate the info in the final readme
-add token address to 'collection whitelist'
-approve marketplace to handle the token in the token contract
-empty fields either '0' or '0x0000000000000000000000000000000000000000' or 'false'; erc1155 Quanitity for erc721 '1' empty array '[]', price in Wei, payableAmount in ETH
-
-
-running the sepolia tests: // !!!W check these if they are still up to date and integrate the info in the final readme
-'source .env' to initiate the dot env variables
-'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth' run the diamondhealth testscript against the local forked sepolia testnet
-'forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke' run the MarketSmoke testscript against the local forked sepolia testnet
-'forge script test/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv' run the MarketSmokeBroadcast testscript against the real live sepolia testnet
-'forge script test/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull --rpc-url $SEPOLIA_RPC_URL --broadcast -vvv' run the MarketSmokeBroadcastFull testscript against the real live sepolia testnet
-
-"If you want, I can also update the README section that claims “purchaseListing has no onlyWhitelistedCollection check” — your actual IdeationMarketFacet.sol does enforce collection whitelist in purchaseListing."
-
-
-# IdeationMarketDiamond
-
-A decentralized NFT marketplace built on a diamond architecture with an **ERC-8109** upgrade interface (`upgradeDiamond`).
-It allows users to list, buy, sell, and swap NFTs while keeping the contract modular, upgradeable, and security-auditable.
-
-## Overview
-
-The IdeationMarketDiamond implements a robust diamond structure for managing the marketplace. The diamond pattern enables modular development by splitting the contract's logic into various facets, ensuring efficient use of gas and the ability to upgrade specific components without redeploying the entire system.
-
-### Features
-
-- **ERC-8109 Upgrades:** Modular and upgradable via `upgradeDiamond`.
-- **NFT Marketplace:** List, buy, cancel, and update NFTs.
-- **NFT Swapping:** Swap NFTs directly or with additional ETH.
-- **Marketplace Fee:** Configurable fees for transactions.
-- **Ownership Management:** Transfer ownership securely.
+This README aims to match the code in:
+- [src/IdeationMarketDiamond.sol](src/IdeationMarketDiamond.sol)
+- [src/facets](src/facets)
 
 ---
 
-## Security / Test Tooling
+## License / Attribution
 
-This repo keeps security tooling and generated artifacts under `security-tools/`.
-All tools can be run from the repo root via wrapper scripts in `script/`.
+MIT licensed. See [LICENSE](LICENSE).
 
-Note: some tooling is vendored under `security-tools/` and is licensed separately (e.g.,
-4naly3er). See [NOTICE](NOTICE) and each tool directory for details.
+This repo contains third-party dependencies and developer/security tooling that may be licensed separately. See [NOTICE](NOTICE) and the respective subdirectories.
 
-### Slither
-
-Slither is a static analysis tool for Solidity that detects common vulnerability patterns and risky design choices.
-Use it as a fast first-pass security scan and to regression-check that changes do not introduce new classes of findings.
-
-Runs Slither and writes/overwrites the report at `security-tools/slither/slither_report.md`.
-
-```bash
-bash script/run-slither.sh
-```
-
-Note: Slither commonly exits non-zero when it finds issues; the wrapper is intended to still produce the report.
-
-### 4naly3er
-
-4naly3er is an automated smart-contract review tool that flags common security and code-quality issues (and also reports many gas/style opportunities).
-Use it as a broad “lint + audit checklist” to catch obvious problems early and to compare findings across versions.
-
-Runs 4naly3er and writes/overwrites the report at `security-tools/4naly3er/report.md`.
-
-```bash
-bash script/run-4naly3er.sh
-```
-
-### Echidna
-
-Echidna is a property-based fuzzer: you define invariants/properties and it generates sequences of calls trying to break them.
-Use it to stress-test critical invariants and to search for edge cases that unit tests and static analysis may miss.
-
-Runs Echidna fuzzing using the harness/config under `security-tools/echidna/`.
-Coverage/corpus/reproducers are stored under `security-tools/echidna/echidna_corpus/`.
-
-```bash
-# Default run
-bash script/run-echidna.sh
-
-# Example: longer run
-bash script/run-echidna.sh --format text --seq-len 120 --test-limit 300000
-```
-
-### Gas snapshot
-
-Gas snapshots are a lightweight way to track gas usage over time for selected tests and to enforce budgets.
-Use them to catch unintended gas regressions during refactors and upgrades.
-
-Manages the gas snapshot file at `security-tools/gas/.gas-snapshot`.
-
-```bash
-# Regenerate/update snapshot
-bash script/gas-snapshot-update.sh
-
-# Check against snapshot
-bash script/gas-snapshot-check.sh
-```
+Notable upstream inspirations:
+- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts)
+- [mudgen/diamond](https://github.com/mudgen/diamond)
+- [alexbabits/diamond-3-foundry](https://github.com/alexbabits/diamond-3-foundry)
 
 ---
 
-## Contracts Overview
+## ERC-8109 Note
 
-### Core Contracts
+This repo’s diamond implements the ERC-8109 upgrade entrypoint `DiamondUpgradeFacet.upgradeDiamond(...)` and the ERC-8109 inspect surface via `DiamondLoupeFacet.functionFacetPairs()`.
 
-- **`IdeationMarketDiamond.sol`**
-  The base diamond contract that acts as the central entry point for delegating calls to facets.
+The underlying call routing is still the classic EIP-2535-style selector→facet mapping with `delegatecall`.
 
-- **`DiamondInit.sol`**
-  A contract to initialize state variables during diamond deployment.
+Strict ERC-8109 specifies the fallback “unknown selector” revert as `FunctionNotFound(bytes4)`. This implementation uses a different custom error (`Diamond__FunctionDoesNotExist()`), while still matching the ERC-8109 upgrade + inspect surfaces and emitting the per-selector upgrade events.
 
-### Facets
-
-- **`DiamondUpgradeFacet.sol`**
-  Implements ERC-8109 `upgradeDiamond(...)` to add/replace/remove selectors.
-
-- **`DiamondLoupeFacet.sol`**
-  Provides loupe/introspection and includes the ERC-8109 required `functionFacetPairs()`.
-
-- **`OwnershipFacet.sol`**
-  Manages ownership of the diamond contract.
-
-- **`VersionFacet.sol`**
-  Tracks diamond versioning with cryptographic implementation fingerprints for audit verification.
-
-- **`IdeationMarketFacet.sol`**
-  Core marketplace functionality, including:
-  - Listing NFTs
-  - Buying NFTs
-  - Canceling listings
-  - Updating listings
-  - Setting marketplace fees
-  - Managing proceeds
-
-### Libraries
-
-- **`LibDiamond.sol`**
-  Core library for managing diamond storage and functionality.
-
-- **`LibAppStorage.sol`**
-  Defines the application-specific storage structure for the marketplace.
+The EIP-2535 `diamondCut(...)` entrypoint is not exposed in this repo.
 
 ---
 
-## Diamond Versioning
+## Diamond / Facets Map
 
-The IdeationMarketDiamond implements a comprehensive versioning system designed to provide transparency and verifiability for auditors, users, and integrators.
+The diamond delegates calls to facets. Read-only queries are intentionally separated into `GetterFacet`.
 
-### Overview
+- `IdeationMarketDiamond` — diamond proxy/dispatcher.
+- `DiamondUpgradeFacet` — ERC-8109 `upgradeDiamond(...)` (add/replace/remove selectors, optional initializer delegatecall).
+- `DiamondLoupeFacet` — introspection + ERC-8109-required `functionFacetPairs()`.
+- `OwnershipFacet` — ERC-173 **two-step** ownership (`transferOwnership` + `acceptOwnership`).
+- `IdeationMarketFacet` — marketplace core (create/purchase/update/cancel/clean, payments, swaps, fees).
+- `CollectionWhitelistFacet` — owner-managed NFT collection whitelist.
+- `CurrencyWhitelistFacet` — owner-managed payment currency allowlist.
+- `BuyerWhitelistFacet` — per-listing buyer whitelist mutations (seller or authorized operator).
+- `PauseFacet` — emergency pause/unpause.
+- `VersionFacet` — owner-only version writes.
+- `GetterFacet` — read-only queries (listings, whitelists, version, pause state, etc.).
 
-Each diamond deployment or upgrade is assigned:
-- **Version String:** Semantic version (e.g., "1.0.0", "1.2.1") for human-readable tracking
-- **Implementation ID:** Cryptographic hash uniquely identifying the exact diamond configuration
-- **Timestamp:** When the version was set
 
-### Implementation ID
+---
 
-The `implementationId` is a deterministic `bytes32` hash computed as:
+## Core Concepts (Marketplace Semantics)
+
+### Listings and IDs
+
+- Listings are keyed by an incrementing `listingId` (not by `(tokenAddress, tokenId)`).
+- A listing is created by calling `createListing(...)` as the token owner/holder or an authorized operator (depending on ERC-721 vs ERC-1155).
+- On creation, the contract increments a monotonic counter and assigns the next `listingId` (in creation order, never reused).
+- The listing then persists in the diamond’s storage as a `Listing` struct under `AppStorage.listings[listingId]` until it is canceled/cleaned.
+- Read the current listing terms via `GetterFacet.getListingByListingId(listingId)`.
+- `listing.seller == address(0)` means the listing is **inactive / deleted / nonexistent**.
+- Non-swap listings require `price > 0` (free listings are not supported).
+- Token standard is inferred from `erc1155Quantity`:
+  - `erc1155Quantity == 0` → ERC-721 listing
+  - `erc1155Quantity > 0` → ERC-1155 listing
+- ERC-721 has a single-active-listing guard via `activeListingIdByERC721[tokenAddress][tokenId]`.
+
+### Approvals and Operators
+
+Before listing or swapping, the diamond must be approved to transfer tokens:
+
+- ERC-721: `approve(diamond, tokenId)` or `setApprovalForAll(diamond, true)`
+- ERC-1155: `setApprovalForAll(diamond, true)`
+
+For swap purchases, the holder of the desired NFT must also approve the diamond to transfer the desired token.
+
+Who may create/update/cancel listings:
+
+- ERC-721: token owner, `getApproved(tokenId)`, or `isApprovedForAll(owner, operator)`.
+- ERC-1155: because ERC-1155 has no `ownerOf`, functions take an explicit `erc1155Holder` when needed.
+  - Operators can act on behalf of a holder if `isApprovedForAll(holder, operator)`.
+  - The contract cannot infer the holder on-chain; callers must provide it.
+
+### Buyer Whitelists (Per Listing)
+
+Listings can enable `buyerWhitelistEnabled`.
+
+- If enabled, only addresses in the per-listing whitelist can purchase.
+- Initial whitelist entries can be supplied during `createListing` / `updateListing`.
+- The seller (or an authorized operator) can add/remove addresses via `BuyerWhitelistFacet`.
+- There is a max batch size (`buyerWhitelistMaxBatchSize`) set during initialization.
+
+How to update the whitelist:
+
+- **At listing create/update time:** pass addresses in `allowedBuyers`.
+  - This only *adds* addresses (no removals).
+  - `allowedBuyers` is only accepted when `buyerWhitelistEnabled == true` (otherwise `createListing` / `updateListing` revert).
+- **After the listing exists:** call the dedicated facet methods on the diamond:
+  - `BuyerWhitelistFacet.addBuyerWhitelistAddresses(listingId, allowedBuyers)`
+  - `BuyerWhitelistFacet.removeBuyerWhitelistAddresses(listingId, disallowedBuyers)`
+  These can be used for incremental updates without changing other listing terms.
+
+Note: whitelist storage can be modified even if `buyerWhitelistEnabled == false`; purchases are only restricted when the flag is enabled.
+
+### Swaps
+
+Listings may optionally specify a desired NFT (`desiredTokenAddress`, `desiredTokenId`, `desiredErc1155Quantity`).
+
+- If `desiredTokenAddress == address(0)`, the listing is a normal sale (no swap).
+- If `desiredTokenAddress != address(0)`, `purchaseListing` transfers the desired NFT to the seller as part of the purchase.
+  - ERC-721 desired: transferred from the desired token’s current owner; the caller must be the owner or an authorized operator.
+  - ERC-1155 desired: transferred from `desiredErc1155Holder`; the caller must be that holder or an authorized operator.
+- Same-token swaps are rejected (same contract + same tokenId).
+
+### Curation: Collection Whitelist vs Currency Allowlist
+
+This market is intentionally curated:
+
+- **Collection whitelist** (NFT contracts): enforced for `createListing`, `updateListing`, and `purchaseListing`.
+- **Currency allowlist** (payment currencies): enforced for `createListing` and `updateListing`.
+
+Policy changes take effect immediately:
+
+- If a collection is de-whitelisted after listings exist, `purchaseListing` will revert for those listings.
+- `updateListing` will auto-cancel if the collection was revoked.
+- Anyone can call `cleanListing` to remove listings that fail collection-whitelist, ownership/balance, or marketplace-approval checks.
+
+Currency allowlist changes only affect `createListing` / `updateListing`. Existing listings can still be purchased in their configured currency (and `cleanListing` does not validate the currency allowlist).
+
+### Fees and Royalties
+
+- Fee denominator is **100_000**. Example: `1_000` = 1%.
+- The current fee (`innovationFee`) is snapshotted into each listing at creation time as `Listing.feeRate`.
+- ERC-2981 royalties (when supported) are paid **directly** to the royalty receiver during purchase.
+- If `royaltyReceiver == address(0)`, royalties are skipped.
+
+There is **no** “proceeds mapping” and **no** `withdrawProceeds()` flow in this design.
+
+### Payments
+
+- ETH listings require **exact** `msg.value` (no overpayment).
+- ERC-20 listings require `msg.value == 0`.
+- ERC-20 transfers are executed directly from buyer → recipients using `transferFrom`.
+  The diamond does **not** custody ERC-20 balances.
+
+### ERC-1155 Partial Buys
+
+ERC-1155 listings can enable `partialBuyEnabled`.
+
+- Not allowed for swap listings.
+- `price % erc1155Quantity == 0` is required (stable per-unit price).
+- Purchases specify `erc1155PurchaseQuantity`.
+
+### Pause
+
+When paused:
+- `createListing`, `updateListing`, `purchaseListing` revert
+- `cancelListing` and `cleanListing` remain callable
+
+---
+
+## Key Write Methods (Exact Signatures)
+
+Canonical signatures live in [src/facets/IdeationMarketFacet.sol](src/facets/IdeationMarketFacet.sol).
+
+### `createListing`
+
+```solidity
+function createListing(
+    address tokenAddress,
+    uint256 tokenId,
+    address erc1155Holder,
+    uint256 price,
+    address currency,
+    address desiredTokenAddress,
+    uint256 desiredTokenId,
+    uint256 desiredErc1155Quantity,
+    uint256 erc1155Quantity,
+    bool buyerWhitelistEnabled,
+    bool partialBuyEnabled,
+    address[] calldata allowedBuyers
+) external;
+```
+
+### `purchaseListing`
+
+```solidity
+function purchaseListing(
+    uint128 listingId,
+    uint256 expectedPrice,
+    address expectedCurrency,
+    uint256 expectedErc1155Quantity,
+    address expectedDesiredTokenAddress,
+    uint256 expectedDesiredTokenId,
+    uint256 expectedDesiredErc1155Quantity,
+    uint256 erc1155PurchaseQuantity,
+    address desiredErc1155Holder
+) external payable;
+```
+
+`expected*` arguments provide front-run protection and must match the current listing terms (e.g., read via `GetterFacet.getListingByListingId`).
+
+---
+
+## Etherscan “Write” Cheatsheet
+
+Common flow on a fresh deployment:
+
+1. Owner: whitelist the NFT collection
+   - `CollectionWhitelistFacet.addWhitelistedCollection(collection)`
+2. Owner: allow a payment currency (if not already allowed)
+   - `CurrencyWhitelistFacet.addAllowedCurrency(currency)`
+   - Note: the initializer [src/upgradeInitializers/DiamondInit.sol](src/upgradeInitializers/DiamondInit.sol) seeds `address(0)` (ETH) plus many widely used ERC-20 addresses.
+3. Seller: approve the diamond on the NFT contract
+   - ERC-721: `approve(diamond, tokenId)` or `setApprovalForAll(diamond, true)`
+   - ERC-1155: `setApprovalForAll(diamond, true)`
+4. Seller: call `createListing(...)`
+5. Buyer: read the listing via `GetterFacet.getListingByListingId(listingId)` and pass the returned values as `expected*` when calling `purchaseListing`.
+
+If the listing currency is an ERC-20 token (i.e., `listing.currency != address(0)`):
+
+6. Buyer: approve the diamond to spend that ERC-20 before calling `purchaseListing`.
+  - On the ERC-20 token contract, call `approve(spender = diamond, amount = purchasePrice)` (or a larger allowance).
+
+Parameter conventions for Etherscan writes (common “empty field” values):
+
+- All ETH-denominated amounts are in **wei**.
+- On Etherscan, the transaction **Value** field maps to `msg.value` and must be entered in **wei**.
+- Zero address: `0x0000000000000000000000000000000000000000` (used for “no swap” and for ETH currency)
+- Zero integers: `0`
+- False booleans: `false`
+- Empty arrays: `[]`
+- ERC-721 listings: set `erc1155Quantity = 0` and pass `erc1155Holder = 0x0000000000000000000000000000000000000000`
+- Non-swap listings: set `desiredTokenAddress = 0x0000000000000000000000000000000000000000`, `desiredTokenId = 0`, `desiredErc1155Quantity = 0`
+
+Buying a simple ERC-721 ETH listing (no swap) requires:
+
+- `expectedCurrency = 0x0000000000000000000000000000000000000000`
+- `expectedErc1155Quantity = 0`
+- `expectedDesiredTokenAddress = 0x0000000000000000000000000000000000000000`
+- `expectedDesiredTokenId = 0`
+- `expectedDesiredErc1155Quantity = 0`
+- `erc1155PurchaseQuantity = 0`
+- `desiredErc1155Holder = 0x0000000000000000000000000000000000000000`
+- `msg.value` must equal `expectedPrice`
+
+Buying an ERC-721 ERC-20 listing (no swap) is the same, except:
+
+- Ensure the ERC-20 `approve(...)` is done first
+- `msg.value` must be `0`
+
+ERC-1155 listings and swaps require supplying the correct holder parameters and quantities.
+
+---
+
+## Diamond Versioning (VersionFacet + implementationId)
+
+The diamond tracks:
+- a human-readable `versionString`
+- a deterministic `implementationId` fingerprint
+
+The `implementationId` is computed by scripts by querying facets/selectors via loupe, sorting deterministically, and hashing.
+See [script/DeployDiamond.s.sol](script/DeployDiamond.s.sol) for the canonical computation.
+
+Conceptually:
 
 ```solidity
 keccak256(abi.encode(
-    chainId,           // Network chain ID
-    diamondAddress,    // Diamond contract address
-    facetAddresses[],  // Sorted array of facet addresses
-    selectors[][]      // Sorted array of selectors per facet
-))
+  chainId,
+  diamondAddress,
+  sortedFacetAddresses,
+  sortedSelectorsPerFacet
+));
 ```
 
-This fingerprint guarantees that:
-- Any change to facets or their functions produces a different ID
-- Two diamonds with identical configuration produce the same ID
-- Auditors can verify the deployed diamond matches the audited version
+Why this matters:
+- Any selector/facet change produces a new `implementationId`.
+- Frontends/auditors can check interaction against a known configuration.
 
 ### Querying Version Information
 
@@ -295,246 +306,194 @@ string memory version = GetterFacet(diamond).getVersionString();
 bytes32 id = GetterFacet(diamond).getImplementationId();
 ```
 
-### Setting Versions (Automatic)
+Note: The deployment and upgrade scripts automatically compute and set the version after every upgrade.
 
-The deployment and upgrade scripts automatically compute and set the version after every upgrade.
 
-#### Initial Deployment
+---
+
+## Deploy / Upgrade / Verify (Foundry)
+
+### Deploy
+
+Deployment is driven by [script/DeployDiamond.s.sol](script/DeployDiamond.s.sol).
+
+Env vars used by the script:
+- `SEPOLIA_RPC_URL` (or any chain RPC URL)
+- `DEV_PRIVATE_KEY` (deployer key; becomes initial owner)
+- `VERSION_STRING` (optional; defaults to `1.0.0`)
+- `ETHERSCAN_API_KEY` (optional, for `--verify`)
+
+Example:
 
 ```bash
-# Version defaults to "1.0.0" or set via VERSION_STRING
-VERSION_STRING="1.0.0" forge script script/DeployDiamond.s.sol:DeployDiamond \
-    --rpc-url $RPC_URL --broadcast
+source .env
+forge script script/DeployDiamond.s.sol:DeployDiamond \
+  --rpc-url $SEPOLIA_RPC_URL --broadcast --verify -vvvv
 ```
 
-The script automatically:
-1. Deploys all facets and the diamond
-2. Executes `upgradeDiamond`
-3. **Automatically queries all facets and selectors via DiamondLoupe**
-4. **Computes the implementationId hash deterministically**
-5. **Calls `setVersion()` with the version string and ID**
+### Upgrade example (dummy)
 
-#### Upgrade Workflow
+There is an example upgrade flow in [script/UpgradeDummy.s.sol](script/UpgradeDummy.s.sol) plus initializer logic under [src/upgradeInitializers](src/upgradeInitializers).
 
-```bash
-# Version set via VERSION_STRING
-DIAMOND_ADDRESS=0x... VERSION_STRING="1.1.0" \
-forge script script/UpgradeDiamond.s.sol:UpgradeDiamond \
-    --rpc-url $RPC_URL --broadcast
-```
+This script deploys and installs `DummyUpgradeFacet` as a minimal upgrade target for validating upgrade mechanics; it is not part of the default production facet set.
 
-The upgrade script automatically:
-1. Performs the upgrade (deploy facets, add/replace/remove functions via `upgradeDiamond`)
-2. **Automatically computes and sets the new version**
-3. Shows before/after version information
+### Deploy mocks + mint (optional)
 
-**No separate versioning step needed!** The version is always set automatically after any diamond modification.
-
-#### Manual Version Setting (Owner Only)
-
-If you ever need to manually update the version (e.g., to correct metadata), the diamond owner can call `setVersion()` directly:
-
-```solidity
-// Only the diamond owner can do this
-VersionFacet(diamondAddress).setVersion("1.0.1", computedImplementationId);
-```
-
-### For Auditors
-
-When auditing this diamond:
-
-1. **Record the Version:** Note the `implementationId` at audit time
-2. **Document in Report:** Include version string and implementationId in your audit report
-3. **Verification:** Users can call `getImplementationId()` to verify they're using the audited configuration
-
-### For Frontend Integrators
-
-```javascript
-// Check if diamond matches audited version
-const auditedImplementationId = "0x..."; // From audit report
-const currentId = await getterFacet.getImplementationId();
-
-if (currentId === auditedImplementationId) {
-    // Show: "✓ Audited version 1.0.0"
-} else {
-    // Show: "⚠ Warning: Post-audit upgrade detected"
-    const prevId = await getterFacet.getPreviousVersion();
-    // Check if previous version was audited
-}
-```
-
-### Version History
-
-The `VersionFacet` maintains:
-- **Current version:** Active diamond configuration
-- **Previous version:** Last configuration before most recent upgrade
-- **Events:** Logs every Version update on the EVM Log
-```
-VersionUpdated(string version, bytes32 indexed implementationId, uint256 timestamp);
-```
-
-This provides a minimal audit trail while keeping storage efficient.
+For local/testnet convenience there is [script/DeployMocksAndMint.s.sol](script/DeployMocksAndMint.s.sol).
 
 ---
 
-## Deployment
+## Tests
 
-### Prerequisites
-
-Ensure the following tools are installed:
-
-- [Foundry](https://github.com/foundry-rs/foundry) or [Hardhat](https://hardhat.org/)
-- [Node.js](https://nodejs.org/)
-- [Solidity](https://soliditylang.org/)
-
-### Deployment Steps
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/IdeationMarketDiamond.git
-   cd IdeationMarketDiamond
-   ```
-
-2. Install dependencies:
-   ```bash
-   forge install
-   ```
-
-3. Deploy the diamond:
-   Update the deploy script (`script/deployDiamond.s.sol`) with the desired owner address and fee percentage. Then run:
-   ```bash
-   forge script script/deployDiamond.s.sol --broadcast
-   ```
-
-4. Verify deployment:
-   ```bash
-   forge verify-contract --chain <chain-id> <contract-address>
-   ```
-
----
-
-## Usage
-
-### Core Functions
-
-#### Listing an NFT
-```solidity
-function createListing(
-    address nftAddress,
-    uint256 tokenId,
-    uint256 price,
-    address desiredNftAddress,
-    uint256 desiredTokenId
-) external;
-```
-List an NFT for sale or swap.
-
-#### Buying an NFT
-```solidity
-function purchaseListing(address nftAddress, uint256 tokenId) external payable;
-```
-Buy an NFT by sending the required ETH.
-
-#### Updating a Listing
-```solidity
-function updateListing(
-    address nftAddress,
-    uint256 tokenId,
-    uint256 newPrice,
-    address newDesiredNftAddress,
-    uint256 newDesiredTokenId
-) external;
-```
-Update the price or swap conditions of a listed NFT.
-
-#### Canceling a Listing
-```solidity
-function cancelListing(address nftAddress, uint256 tokenId) external;
-```
-Cancel an active NFT listing.
-
-#### Withdrawing Proceeds
-```solidity
-function withdrawProceeds() external;
-```
-Withdraw accumulated proceeds from sales.
-
-#### Setting Fees
-```solidity
-function innovationFee(uint32 fee) external;
-```
-Update the marketplace/innovation fee (only accessible by the owner).
-
----
-
-## Security Considerations
-
-1. **Reentrancy Protection:**
-   The `nonReentrant` modifier is applied to critical functions to prevent reentrancy attacks.
-
-2. **Upgradability:**
-  Selector/facet upgrades are executed via ERC-8109 `upgradeDiamond`.
-
-3. **Ownership Management:**
-   Ownership functions are secured using the `onlyOwner` modifier.
-
-4. **Approval Validation:**
-   The marketplace ensures that NFTs are approved for transfer before completing transactions.
-
----
-
-## Testing
-
-### Unit Tests
-
-The repository includes unit tests to validate core functionality. To run tests:
+### Unit tests
 
 ```bash
 forge test
 ```
 
-### Areas Tested
+### Sepolia broadcast scripts
 
-- Listing, buying, and canceling NFTs
-- Fee calculations and updates
-- Ownership transfer
-- Reentrancy attacks
+Broadcastable smoke scripts against live Sepolia deployment, live under [test/integration](test/integration).
+
+They expect:
+- `SEPOLIA_RPC_URL`
+- `PRIVATE_KEY_1` / `PRIVATE_KEY_2` (must control the hardcoded accounts inside the scripts)
+- `DIAMOND_ADDRESS` (optional override)
+
+```bash
+source .env
+
+forge script test/integration/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast \
+  --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv
+
+forge script test/integration/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull \
+  --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv
+```
+
+### Optional fork tests (disabled by default)
+
+Fork-style tests exist as `*.soldisabled` under [test/integration](test/integration).
+Running them requires renaming to `.sol` (or copying), then executing:
+
+```bash
+forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth
+forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
+```
 
 ---
 
-## Contributing
+## Security Tooling
 
-Contributions are welcome! Please fork the repository, make changes, and submit a pull request.
+Wrapper scripts live in [script](script) and reports/artifacts are stored under [security-tools](security-tools).
 
----
+- Slither: `bash script/run-slither.sh`
+- 4naly3er: `bash script/run-4naly3er.sh`
+- Echidna: `bash script/run-echidna.sh`
+- Gas snapshots: `bash script/gas-snapshot-update.sh` / `bash script/gas-snapshot-check.sh`
 
-## License
-
-This project is licensed under the MIT License. See the `LICENSE` file for details.
-
----
-
-## Contact
-
-For questions or support, please reach out to [your-email@example.com](mailto:your-email@example.com).
+Echidna notes:
+- The harness is [security-tools/echidna/Harness.sol](security-tools/echidna/Harness.sol).
+- The runner mirrors [src](src) into `security-tools/echidna/src/` for self-contained compilation.
+- Corpus and crytic artifacts are written under `security-tools/echidna/echidna_corpus/` and `security-tools/echidna/crytic-export/`.
 
 ---
 
-## Acknowledgments
+## Known / Accepted Limitations
 
-This project leverages:
+- **No fee cap:** `setInnovationFee` has no upper bound. If `innovationFee > 100_000`, purchases will revert due to underflow in proceeds calculation.
+- **Buyer whitelist storage is mutable regardless of flag:** addresses can be added/removed even when `buyerWhitelistEnabled == false`. This is intended for preparing a listings whitelist despite its state.
+- **Currency allowlist is curated:** `DiamondInit` seeds a curated token list; on testnets those addresses may not exist.
 
-- [mudgen/diamond](https://github.com/mudgen/diamond) (basis for the diamond template)
-- [alexbabits/diamond-3-foundry](https://github.com/alexbabits/diamond-3-foundry) (educational Foundry/AppStorage adaptation)
-- [OpenZeppelin Contracts](https://openzeppelin.com/contracts/)
-- [Foundry](https://github.com/foundry-rs/foundry)
+More follow-ups live in [ToDo.md](ToDo.md) (developer notes).
 
+---
 
+## Sepolia Deployments (Historical) !!!W archive this after golife
 
+Archived deployment logs captured during development.
 
+Note: older logs may mention facets that existed before the ERC-8109 migration (kept as-is for traceability).
 
-known/accepted flaws:
--no fee limit - the owner can also set fees >100%
--when a token contract has a royalty receiver set to zero address the royalty proceeds will be accredited to the zero address
--buyerWhitelist can be edited even when the flag is disabled for the listing
-- more in todo.md "addon projects"
+<details>
+<summary>Deployment log 1</summary>
+
+```
+Deployed diamondInit contract at address: 0x100e67Eb0DCDADEAB6a1258a0b7126bCA4feA709
+Deployed diamondLoupeFacet contract at address: 0x84B5151b8258B025284F163650d220b930204A8F
+Deployed ownershipFacet contract at address: 0x032a247637cD41c675cC82A7149B907a559841aa
+Deployed ideationMarketFacet contract at address: 0xbDD69f91a78883bf7dD725ed1564278C01642e61
+Deployed collectionWhitelistFacet contract at address: 0x36aA6b50b09795c267f66E9580366B6BEa91bcE1
+Deployed buyerWhitelistFacet contract at address: 0x6916B9C69a6ddF63b2638Bc1a6a9910FCDb2ECB1
+Deployed getterFacet contract at address: 0x0e09AD33ddcc746308630F05bF7b71cE03BCfED8
+Deployed diamondCutFacet contract at address: 0x516817c98DA9A426c51731c7eD71d2Dd4d618783
+Deployed Diamond contract at address: 0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+
+Louper:    https://louper.dev/diamond/0x8cE90712463c87a6d62941D67C3507D090Ea9d79?network=sepolia
+Etherscan: https://sepolia.etherscan.io/address/0x8cE90712463c87a6d62941D67C3507D090Ea9d79
+```
+
+</details>
+
+<details>
+<summary>Deployment log 2</summary>
+
+```
+Diamond Address: 0xF422A7779D2feB884CcC1773b88d98494A946604
+Owner: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+Version: 1.0.0
+Implementation ID: 0x359675c94671bb21ec1b9cdf35889444129ffe792962a68e660b24c9b1eb1fed
+
+FACETS:
+DiamondInit: 0xc82B382b69cB613703cF6F01ba4867Ff5443a4E4
+DiamondLoupeFacet: 0x64218c3Fa4896be3F596177c1080C59751e013e7
+OwnershipFacet: 0x57db2c739633EF5A050CDB1dBB29f48f092b5078
+IdeationMarketFacet: 0x5Aa7C259D668cf3868b5D1831b760EfB2E9443e8
+CollectionWhitelistFacet: 0x1aF98799D02d1a46123725bDD65b96b2A7FAb2F8
+BuyerWhitelistFacet: 0xf14A6B456B465A38aCF44180B85AA3334F92a1F5
+GetterFacet: 0x80525592f21245EdfdDa6c725AC31c73f04F76D2
+CurrencyWhitelistFacet: 0x827E91DF79357679F9B02690746fa3F0e7dB3C11
+VersionFacet: 0xbd390aD3058E0BA40AcDa61a72ebAEEF58891394
+PauseFacet: 0x4285d039DBDBee9bAa4785b9e1919095Dc030CF6
+DiamondCutFacet: 0x8D6805898180257A38F89d1DFb868C1A8c38E2Fb
+
+Louper:    https://louper.dev/diamond/0xF422A7779D2feB884CcC1773b88d98494A946604?network=sepolia
+Etherscan: https://sepolia.etherscan.io/address/0xF422A7779D2feB884CcC1773b88d98494A946604
+```
+
+</details>
+
+<details>
+<summary>Deployment log 3</summary>
+
+```
+Deployed diamondInit contract at address: 0x6ab53B38A5703387e0E2Ee3D1AD99894728e587c
+Deployed diamondLoupeFacet contract at address: 0x16D2e785ec9f270C8e0CdB6dc0Ca0f0f9646610C
+Deployed ownershipFacet contract at address: 0x1dEEE0f8e73a19E31c49D51419C47e15f48667f9
+Deployed ideationMarketFacet contract at address: 0x6f4e8be1EEaF712a3ff85E7FFe992d21794E790E
+Deployed collectionWhitelistFacet contract at address: 0x1eeDB782151377AC05d61EecC3Bdf4ECCbf3B298
+Deployed buyerWhitelistFacet contract at address: 0x1b0Dc3BD49A8bd493387bb49376212B9b0A9A64f
+Deployed getterFacet contract at address: 0xb42c109A61Cb882B11bb7E98B9A0302C3E486327
+Deployed currencyWhitelistFacet contract at address: 0xf98025444A70391286e15014023758624754d780
+Deployed versionFacet contract at address: 0xeDD15c75a980da4eD70F609c30F8E73bCDBdd186
+Deployed pauseFacet contract at address: 0xc39f8c071668Eea19392F1Ea3AC7fe8A5391b4b3
+Deployed diamondUpgradeFacet contract at address: 0xDA227064DadE08d65d1880488B368B1A73AAA489
+Deployed Diamond contract at address: 0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
+Owner of Diamond: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+
+Louper:    https://louper.dev/diamond/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC?network=sepolia
+Etherscan: https://sepolia.etherscan.io/address/0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC
+
+ERC20 Mocks:
+
+Deployed MockERC20_18: 0xC740Ee33A12c21Fa7F3cdd426D6051e16EaB456e
+Deployed MockUSDC_6: 0xEaefa01B8c4c8126226A8B2DA2cF6Eb0E5B0bD26
+Deployed MockWBTC_8: 0xB1A8786Fd1bBDB7F56f8cEa78A77897a0Aa9fAb2
+Deployed MockEURS_2: 0xe06E78AB6314993FCa9106536aecfE4284aA791a
+Deployed MockUSDTLike_6: 0xd11Db19892F8c9C89A03Ba6EFD636795cbBc0d74
+Minted to: 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D
+Minted to: 0x8a200122f666af83aF2D4f425aC7A35fa5491ca7
+Minted to: 0xf034e8ad11F249c8081d9da94852bE1734bc11a4
+```
+
+</details>
