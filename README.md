@@ -360,6 +360,10 @@ They expect:
 - `PRIVATE_KEY_1` / `PRIVATE_KEY_2` (must control the hardcoded accounts inside the scripts)
 - `DIAMOND_ADDRESS` (optional override)
 
+Additional requirements:
+- The two hardcoded accounts must hold the expected NFTs used by the smoke flow (seller/buyer token assumptions in the script).
+- If you cannot use those exact accounts/NFTs, adapt the script constants (accounts, token contract, token IDs, prices) to assets you control on the target network.
+
 ```bash
 source .env
 
@@ -372,13 +376,22 @@ forge script test/integration/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcas
 
 ### Optional fork tests (disabled by default)
 
-Fork-style tests exist as `*.soldisabled` under [test/integration](test/integration).
+Fork-style tests exist as `*.sol.disabled` under [test/integration](test/integration).
 Running them requires renaming to `.sol` (or copying), then executing:
 
 ```bash
 forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth
 forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
 ```
+
+Requirements / assumptions for fork tests:
+- `SEPOLIA_RPC_URL` is required.
+- `DIAMOND_ADDRESS` can be overridden; otherwise the default address hardcoded in the test is used.
+- `MarketSmoke` assumes specific account and NFT ownership state on Sepolia (hardcoded addresses and token IDs in the test constants).
+
+Note:
+- Unlike broadcast scripts, fork tests do not require private keys, but they still require the expected on-chain ownership assumptions to be true.
+- If those assumptions are not accessible in your environment, adapt the test constants (accounts, token contract, token IDs, prices) to accounts/NFTs you can use.
 
 ---
 

@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "forge-std/Test.sol";
+
+// Diamond loupe (subset)
+interface IDiamondLoupe {
+    struct Facet {
+        address facetAddress;
+        bytes4[] functionSelectors;
+    }
+
+    function facets() external view returns (Facet[] memory facets_);
+    function facetAddress(bytes4 _selector) external view returns (address facetAddress_);
+    function facetAddresses() external view returns (address[] memory facetAddresses_);
+    function facetFunctionSelectors(address _facet) external view returns (bytes4[] memory facetFunctionSelectors_);
+}
+
+// ERC165 + ERC173
+interface IERC165 {
+    function supportsInterface(bytes4 iid) external view returns (bool);
+}
+
+interface IOwnershipFacet {
+    function owner() external view returns (address);
+}
+
+interface IGetterFacet {
+    function getContractOwner() external view returns (address);
+    function getWhitelistedCollections() external view returns (address[] memory);
+}
+
+contract DiamondHealth is Test {
+    // live diamond (Sepolia)
+    // Set DIAMOND_ADDRESS to override.
+    address diamond;
+
+    bytes4 constant IID_ERC165 = 0x01ffc9a7;
+    bytes4 constant IID_ERC173 = 0x7f5828d0; // ownership
+    bytes4 constant IID_RANDOM = 0x12345678;
+
+    function setUp() public {
+        // Run on a Sepolia fork so we inspect live state via RPC:
+        // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth
+        string memory url = vm.envString("SEPOLIA_RPC_URL");
+        vm.createSelectFork(url);
+
+        diamond = vm.envOr("DIAMOND_ADDRESS", address(0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC));
+    }
+
+    function test_DiamondLoupeAndInterfaces() public {
+        IDiamondLoupe loupe = IDiamondLoupe(diamond);
+
+        // 1) Facets and facet addresses must be non-empty and consistent
+        IDiamondLoupe.Facet[] memory fs = loupe.facets();
+        address[] memory addrs = loupe.facetAddresses();
+        assertTrue(fs.length > 0, "no facets");
+        assertEq(addrs.length, fs.length, "facets() / facetAddresses() length mismatch");
+
+        uint256 totalSelectors;
+        for (uint256 i = 0; i < fs.length; i++) {
+            assertTrue(fs[i].facetAddress != address(0), "zero facet");
+            assertTrue(fs[i].facetAddress.code.length > 0, "facet has no code");
+            assertTrue(fs[i].functionSelectors.length > 0, "no selectors");
+
+            // facetAddresses() must contain each facets()[i].facetAddress exactly once
+            uint256 seenFacetAddr;
+            for (uint256 j = 0; j < addrs.length; j++) {
+                if (addrs[j] == fs[i].facetAddress) seenFacetAddr++;
+            }
+            assertEq(seenFacetAddr, 1, "facet address missing/duplicated in facetAddresses()");
+
+            // facetFunctionSelectors(facet) must match facets()[i].functionSelectors (same set)
+            bytes4[] memory byFacetAddr = loupe.facetFunctionSelectors(fs[i].facetAddress);
+            assertEq(byFacetAddr.length, fs[i].functionSelectors.length, "selector length mismatch for facet");
+
+            for (uint256 j = 0; j < fs[i].functionSelectors.length; j++) {
+                bytes4 sel = fs[i].functionSelectors[j];
+                assertTrue(sel != bytes4(0), "zero selector");
+
+                // Selector routes back to the same facet
+                assertEq(loupe.facetAddress(sel), fs[i].facetAddress, "selector routed to wrong facet");
+
+                // No duplicate selectors within same facet
+                for (uint256 k = j + 1; k < fs[i].functionSelectors.length; k++) {
+                    assertTrue(sel != fs[i].functionSelectors[k], "duplicate selector within facet");
+                }
+
+                // Selector must be present in facetFunctionSelectors(facet)
+                bool found;
+                for (uint256 k = 0; k < byFacetAddr.length; k++) {
+                    if (byFacetAddr[k] == sel) {
+                        found = true;
+                        break;
+                    }
+                }
+                assertTrue(found, "selector missing from facetFunctionSelectors");
+            }
+
+            totalSelectors += fs[i].functionSelectors.length;
+        }
+
+        // 2) No selector may appear in more than one facet
+        bytes4[] memory allSelectors = new bytes4[](totalSelectors);
+        uint256 idx;
+        for (uint256 i = 0; i < fs.length; i++) {
+            for (uint256 j = 0; j < fs[i].functionSelectors.length; j++) {
+                allSelectors[idx++] = fs[i].functionSelectors[j];
+            }
+        }
+        for (uint256 i = 0; i < allSelectors.length; i++) {
+            for (uint256 j = i + 1; j < allSelectors.length; j++) {
+                assertTrue(allSelectors[i] != allSelectors[j], "duplicate selector across facets");
+            }
+        }
+
+        // 3) Critical selectors must resolve to live facets
+        assertTrue(loupe.facetAddress(IDiamondLoupe.facets.selector) != address(0), "facets selector not routed");
+        assertTrue(
+            loupe.facetAddress(IDiamondLoupe.facetAddresses.selector) != address(0), "facetAddresses selector not routed"
+        );
+        assertTrue(
+            loupe.facetAddress(IDiamondLoupe.facetFunctionSelectors.selector) != address(0),
+            "facetFunctionSelectors selector not routed"
+        );
+        assertTrue(loupe.facetAddress(IERC165.supportsInterface.selector) != address(0), "supportsInterface selector not routed");
+        assertTrue(loupe.facetAddress(IOwnershipFacet.owner.selector) != address(0), "owner selector not routed");
+        assertTrue(
+            loupe.facetAddress(IGetterFacet.getContractOwner.selector) != address(0), "getContractOwner selector not routed"
+        );
+
+        // 4) Interface support checks via ERC165
+        (bool ok, bytes memory ret) =
+            diamond.staticcall(abi.encodeWithSelector(IERC165.supportsInterface.selector, IID_ERC165));
+        assertTrue(ok && ret.length >= 32 && abi.decode(ret, (bool)), "ERC165 not supported");
+
+        (ok, ret) = diamond.staticcall(abi.encodeWithSelector(IERC165.supportsInterface.selector, IID_ERC173));
+        assertTrue(ok && ret.length >= 32 && abi.decode(ret, (bool)), "ERC173 not supported via ERC165");
+
+        (ok, ret) = diamond.staticcall(abi.encodeWithSelector(IERC165.supportsInterface.selector, IID_RANDOM));
+        assertTrue(ok && ret.length >= 32 && !abi.decode(ret, (bool)), "random interface unexpectedly supported");
+    }
+
+    function test_ContractOwnerMatchesDeploymentLog() public {
+        // GetterFacet exposes getContractOwner.
+        // NOTE: Ownership can change after deployment; this test is written to be resilient.
+        IGetterFacet getter = IGetterFacet(diamond);
+        address contractOwner = getter.getContractOwner();
+
+        // If the diamond implements ERC-173, ensure both views of ownership agree.
+        (bool ok, bytes memory ret) = diamond.staticcall(abi.encodeWithSelector(IOwnershipFacet.owner.selector));
+        if (ok && ret.length >= 32) {
+            address erc173Owner = abi.decode(ret, (address));
+            assertEq(contractOwner, erc173Owner, "getContractOwner != owner() (ERC-173)");
+        } else {
+            emit log("NOTE: owner() not available/decodable on diamond (acceptable)");
+        }
+
+        // Optional pin: set EXPECTED_DIAMOND_OWNER to assert a specific owner.
+        address expected = vm.envOr("EXPECTED_DIAMOND_OWNER", address(0));
+        if (expected != address(0)) {
+            assertEq(contractOwner, expected, "owner mismatch with EXPECTED_DIAMOND_OWNER");
+        } else {
+            emit log_named_address("Diamond owner", contractOwner);
+        }
+    }
+}

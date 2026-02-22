@@ -10,7 +10,7 @@ This project uses the following third-party libraries:
    - License: MIT
    - Repository: https://github.com/foundry-rs/forge-std
 
-3. EIP-2535 Diamonds (Nick Mudge reference implementation)
+3. EIP-2535/8109 Diamonds (Nick Mudge reference implementation)
    - License: MIT
    - Repositories:
      - https://github.com/mudgen/diamond
