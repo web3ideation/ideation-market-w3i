@@ -100,7 +100,7 @@ contract Mock1155 {
     }
 }
 
-contract MarketSmoke is Test {
+contract MarketSmokeForkTest is Test {
     // ---- Live addresses (from your README + deployment log) ----
     // Set DIAMOND_ADDRESS to override.
     address diamond;
@@ -131,7 +131,7 @@ contract MarketSmoke is Test {
 
     function setUp() public {
         // Run on a Sepolia *fork* tied to live state:
-        // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
+        // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmokeForkTest
         string memory url = vm.envString("SEPOLIA_RPC_URL");
         vm.createSelectFork(url);
 

@@ -64,6 +64,10 @@ interface IIdeationMarketFacet {
     function cancelListing(uint128 listingId) external;
 }
 
+error IdeationMarket__BuyerNotWhitelisted(uint128 listingId, address buyer);
+error IdeationMarket__CollectionNotWhitelisted(address tokenAddress);
+error IdeationMarket__ListingTermsChanged();
+
 // Minimal 1155 used for the live partial-fill flow
 contract Mock1155 {
     mapping(address => mapping(uint256 => uint256)) public balanceOf;
@@ -92,12 +96,12 @@ contract Mock1155 {
     }
 }
 
-contract MarketSmokeBroadcastFull is Script {
+contract MarketSmokeBroadcastTest is Script {
     // Set DIAMOND_ADDRESS to override.
     address diamond;
     address constant TOKEN721 = 0x41655AE49482de69eEC8F6875c34A8Ada01965e2;
 
-    // EOAs (you control these)
+    // Flow accounts expected by this script (override by editing constants or script inputs)
     address constant ACCOUNT1 = 0xE8dF60a93b2B328397a8CBf73f0d732aaa11e33D; // holds tokenId 16
     address constant ACCOUNT2 = 0x8a200122f666af83aF2D4f425aC7A35fa5491ca7; // holds tokenId 534
 
@@ -121,9 +125,14 @@ contract MarketSmokeBroadcastFull is Script {
     IIdeationMarketFacet market;
     ICollectionWhitelistFacet cwl;
     IERC721 erc721 = IERC721(TOKEN721);
+    bool strictMode;
 
     function run() external {
         diamond = vm.envOr("DIAMOND_ADDRESS", address(0x1107Eb26D47A5bF88E9a9F97cbC7EA38c3E1D7EC));
+        strictMode = vm.envOr("STRICT_BROADCAST", true);
+        require(diamond.code.length > 0, "diamond has no code");
+        require(block.chainid == 11155111, "not Sepolia");
+
         getter = IGetterFacet(diamond);
         market = IIdeationMarketFacet(diamond);
         cwl = ICollectionWhitelistFacet(diamond);
@@ -164,24 +173,12 @@ contract MarketSmokeBroadcastFull is Script {
 
         require(!getter.isPaused(), "diamond is paused");
 
-        // Strong guard: setup steps require diamond owner privileges.
+        // Strong guard: admin-sensitive steps in this flow require owner privileges.
         require(getter.getContractOwner() == ACCOUNT1, "diamond owner is not ACCOUNT1");
 
-        // Whitelist ETH as currency if not yet (non-custodial multi-currency requirement)
-        if (!getter.isCurrencyAllowed(address(0))) {
-            vm.startBroadcast(pk1);
-            (bool success,) = diamond.call(abi.encodeWithSignature("addAllowedCurrency(address)", address(0)));
-            require(success, "ETH whitelisting failed - CurrencyWhitelistFacet may need to be deployed");
-            vm.stopBroadcast();
-            console.log("ETH whitelisted as currency");
-        }
-
-        // Whitelist the 721 collection if needed (owner is ACCOUNT1)
-        if (!getter.isCollectionWhitelisted(TOKEN721)) {
-            vm.startBroadcast(pk1);
-            cwl.addWhitelistedCollection(TOKEN721);
-            vm.stopBroadcast();
-        }
+        // Strict preflight: do not self-heal deployment state.
+        require(getter.isCurrencyAllowed(address(0)), "ETH not allowlisted on deployment");
+        require(getter.isCollectionWhitelisted(TOKEN721), "TOKEN721 not whitelisted on deployment");
 
         // === A) 721 list -> buy -> cleanup ===
         if (erc721.ownerOf(TOKEN1) == ACCOUNT1) {
@@ -212,6 +209,7 @@ contract MarketSmokeBroadcastFull is Script {
             erc721.safeTransferFrom(ACCOUNT2, ACCOUNT1, TOKEN1); // cleanup
             vm.stopBroadcast();
         } else {
+            require(!strictMode, "TOKEN1 not owned by ACCOUNT1");
             console.log("SKIP A: TOKEN1 not owned by ACCOUNT1 on live Sepolia");
         }
 
@@ -243,6 +241,7 @@ contract MarketSmokeBroadcastFull is Script {
             market.cancelListing(idB);
             vm.stopBroadcast();
         } else {
+            require(!strictMode, "TOKEN2 not owned by ACCOUNT2");
             console.log("SKIP B: TOKEN2 not owned by ACCOUNT2 on live Sepolia");
         }
 
@@ -266,7 +265,43 @@ contract MarketSmokeBroadcastFull is Script {
             erc721.safeTransferFrom(ACCOUNT2, ACCOUNT1, TOKEN1); // cleanup
             vm.stopBroadcast();
         } else {
+            require(!strictMode, "TOKEN1 not owned by ACCOUNT1 for whitelist flow");
             console.log("SKIP C: TOKEN1 not owned by ACCOUNT1 (cannot whitelist-purchase)");
+        }
+
+        // === D) 721 whitelist negative (A1 excludes A2; A2 purchase must revert) ===
+        if (erc721.ownerOf(TOKEN1) == ACCOUNT1) {
+            _approve721IfNeeded(pk1, ACCOUNT1, TOKEN1);
+            uint128 idD = getter.getNextListingId();
+
+            vm.startBroadcast(pk1);
+            {
+                address[] memory allowOnlyA1 = new address[](1);
+                allowOnlyA1[0] = ACCOUNT1;
+                market.createListing(
+                    TOKEN721, TOKEN1, address(0), PRICE1, address(0), address(0), 0, 0, 0, true, false, allowOnlyA1
+                );
+            }
+            vm.stopBroadcast();
+
+            vm.startBroadcast(pk2);
+            (bool okD, bytes memory retD) = address(market).call{value: PRICE1}(
+                abi.encodeCall(
+                    IIdeationMarketFacet.purchaseListing, (idD, PRICE1, address(0), 0, address(0), 0, 0, 0, address(0))
+                )
+            );
+            vm.stopBroadcast();
+
+            _requireRevertSelector(
+                okD, retD, IdeationMarket__BuyerNotWhitelisted.selector, "D: expected BuyerNotWhitelisted"
+            );
+
+            vm.startBroadcast(pk1);
+            market.cancelListing(idD);
+            vm.stopBroadcast();
+        } else {
+            require(!strictMode, "TOKEN1 not owned by ACCOUNT1 for negative whitelist flow");
+            console.log("SKIP D: TOKEN1 not owned by ACCOUNT1 (cannot whitelist-negative)");
         }
 
         // === E) ERC1155 partial 3 + 7 (deploy + whitelist mock, then cleanup) ===
@@ -334,6 +369,68 @@ contract MarketSmokeBroadcastFull is Script {
         vm.startBroadcast(pk2);
         token1155.safeTransferFrom(ACCOUNT2, ACCOUNT1, ID1155, QTY1155, "");
         vm.stopBroadcast();
+
+        // === F) Non-whitelisted collection creation must revert ===
+        {
+            address notWhitelistedToken = address(0xDeaD);
+            vm.startBroadcast(pk1);
+            (bool okF, bytes memory retF) = address(market).call(
+                abi.encodeCall(
+                    IIdeationMarketFacet.createListing,
+                    (
+                        notWhitelistedToken,
+                        1,
+                        address(0),
+                        1,
+                        address(0),
+                        address(0),
+                        0,
+                        0,
+                        0,
+                        false,
+                        false,
+                        new address[](0)
+                    )
+                )
+            );
+            vm.stopBroadcast();
+
+            _requireRevertSelector(
+                okF, retF, IdeationMarket__CollectionNotWhitelisted.selector, "F: expected CollectionNotWhitelisted"
+            );
+        }
+
+        // === G) Stale expected terms must revert ===
+        if (erc721.ownerOf(TOKEN1) == ACCOUNT1) {
+            _approve721IfNeeded(pk1, ACCOUNT1, TOKEN1);
+            uint128 idG = getter.getNextListingId();
+
+            vm.startBroadcast(pk1);
+            market.createListing(
+                TOKEN721, TOKEN1, address(0), PRICE1, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+            );
+            vm.stopBroadcast();
+
+            vm.startBroadcast(pk2);
+            (bool okG, bytes memory retG) = address(market).call{value: PRICE1}(
+                abi.encodeCall(
+                    IIdeationMarketFacet.purchaseListing,
+                    (idG, PRICE1 + 1, address(0), 0, address(0), 0, 0, 0, address(0))
+                )
+            );
+            vm.stopBroadcast();
+
+            _requireRevertSelector(
+                okG, retG, IdeationMarket__ListingTermsChanged.selector, "G: expected ListingTermsChanged"
+            );
+
+            vm.startBroadcast(pk1);
+            market.cancelListing(idG);
+            vm.stopBroadcast();
+        } else {
+            require(!strictMode, "TOKEN1 not owned by ACCOUNT1 for stale-terms flow");
+            console.log("SKIP G: TOKEN1 not owned by ACCOUNT1 (cannot stale-terms flow)");
+        }
     }
 
     function _approve721IfNeeded(uint256 pk, address owner, uint256 tokenId) internal {
@@ -342,5 +439,11 @@ contract MarketSmokeBroadcastFull is Script {
             erc721.approve(diamond, tokenId);
         }
         vm.stopBroadcast();
+    }
+
+    function _requireRevertSelector(bool ok, bytes memory ret, bytes4 selector, string memory err) internal pure {
+        require(!ok, err);
+        require(ret.length >= 4, "revert data too short");
+        require(bytes4(ret) == selector, "unexpected revert selector");
     }
 }

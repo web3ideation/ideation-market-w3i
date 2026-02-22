@@ -30,7 +30,7 @@ interface IGetterFacet {
     function getWhitelistedCollections() external view returns (address[] memory);
 }
 
-contract DiamondHealth is Test {
+contract DiamondHealthTest is Test {
     // live diamond (Sepolia)
     // Set DIAMOND_ADDRESS to override.
     address diamond;
@@ -41,7 +41,7 @@ contract DiamondHealth is Test {
 
     function setUp() public {
         // Run on a Sepolia fork so we inspect live state via RPC:
-        // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth
+        // forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealthTest
         string memory url = vm.envString("SEPOLIA_RPC_URL");
         vm.createSelectFork(url);
 

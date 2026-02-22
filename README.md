@@ -362,15 +362,17 @@ They expect:
 
 Additional requirements:
 - The two hardcoded accounts must hold the expected NFTs used by the smoke flow (seller/buyer token assumptions in the script).
+- The hardened broadcast flow is fail-fast on admin assumptions: it expects the configured admin account to be the current on-chain diamond owner.
 - If you cannot use those exact accounts/NFTs, adapt the script constants (accounts, token contract, token IDs, prices) to assets you control on the target network.
+
+Owner-change note:
+- If ownership has changed on Sepolia, the script can revert early with an owner mismatch.
+- In that case, update the script/account configuration to the current owner context before broadcasting.
 
 ```bash
 source .env
 
-forge script test/integration/MarketSmokeBroadcast.s.sol:MarketSmokeBroadcast \
-  --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv
-
-forge script test/integration/MarketSmokeBroadcastFull.s.sol:MarketSmokeBroadcastFull \
+forge script test/integration/MarketSmokeBroadcastTest.s.sol:MarketSmokeBroadcastTest \
   --rpc-url $SEPOLIA_RPC_URL --broadcast -vvvv
 ```
 
@@ -380,14 +382,14 @@ Fork-style tests exist as `*.sol.disabled` under [test/integration](test/integra
 Running them requires renaming to `.sol` (or copying), then executing:
 
 ```bash
-forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealth
-forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmoke
+forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract DiamondHealthTest
+forge test --fork-url $SEPOLIA_RPC_URL -vvv --match-contract MarketSmokeForkTest
 ```
 
 Requirements / assumptions for fork tests:
 - `SEPOLIA_RPC_URL` is required.
 - `DIAMOND_ADDRESS` can be overridden; otherwise the default address hardcoded in the test is used.
-- `MarketSmoke` assumes specific account and NFT ownership state on Sepolia (hardcoded addresses and token IDs in the test constants).
+- `MarketSmokeForkTest` assumes specific account and NFT ownership state on Sepolia (hardcoded addresses and token IDs in the test constants).
 
 Note:
 - Unlike broadcast scripts, fork tests do not require private keys, but they still require the expected on-chain ownership assumptions to be true.
