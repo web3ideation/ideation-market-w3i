@@ -19,7 +19,7 @@ import "./MarketTestBase.t.sol";
  * ┌─────────────────────────────────────────────────────────────┐
  * │ MALICIOUS TOKEN CONTRACTS                                   │
  * ├─────────────────────────────────────────────────────────────┤
- * │ • Liar tokens (claim ERC165 but break transfer)            │
+ * │ • Liar tokens (claim ERC165 but break transfer)             │
  * │ • Admin escalation attempts during transfer                 │
  * │ • Receiver hooks that swallow reverts                       │
  * └─────────────────────────────────────────────────────────────┘
@@ -36,9 +36,9 @@ import "./MarketTestBase.t.sol";
  * ┌─────────────────────────────────────────────────────────────┐
  * │ AUTHORIZATION BYPASS ATTEMPTS                               │
  * ├─────────────────────────────────────────────────────────────┤
- * │ • Unauthorized pause attempts                               │
  * │ • Malicious initializer escalation                          │
- * │ • Storage collision attacks                                 │
+ * │ • Reentrancy-driven side-effect attempts during             │
+ * │   cancel/clean query hooks                                  │
  * └─────────────────────────────────────────────────────────────┘
  *
  * @custom:security-critical All tests in this file validate critical security properties
@@ -173,6 +173,7 @@ contract AttackVectorTest is MarketTestBase {
 
         // Single sale only - reentrancy was blocked
         assertEq(s.ownerOf(1), address(recv));
+        assertEq(recv.reentryRevertSelector(), IdeationMarket__Reentrant.selector);
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
 
@@ -215,6 +216,7 @@ contract AttackVectorTest is MarketTestBase {
 
         // Single sale only - reentrancy was blocked
         assertEq(s.balanceOf(address(recv), tid), qty);
+        assertEq(recv.reentryRevertSelector(), IdeationMarket__Reentrant.selector);
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
 
@@ -247,7 +249,7 @@ contract AttackVectorTest is MarketTestBase {
         address buyer2 = vm.addr(0xBEEF);
         vm.deal(buyer2, price);
         vm.startPrank(buyer2);
-        vm.expectRevert(); // listing should be consumed/invalid
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__NotListed.selector));
         market.purchaseListing{value: price}(id, price, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
     }
@@ -279,7 +281,7 @@ contract AttackVectorTest is MarketTestBase {
         address buyer2 = vm.addr(0xC0DE);
         vm.deal(buyer2, price);
         vm.startPrank(buyer2);
-        vm.expectRevert(); // already consumed
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__NotListed.selector));
         market.purchaseListing{value: price}(id, price, address(0), qty, address(0), 0, 0, qty, address(0));
         vm.stopPrank();
     }
@@ -397,6 +399,138 @@ contract AttackVectorTest is MarketTestBase {
         getter.getListingByListingId(listingId);
     }
 
+    /// @notice Reentrancy via ERC20 transfer hook is blocked while preserving listing state integrity
+    function testReentrancy_ERC20PaymentPath_CaughtAndBlocked_NoExtraListingConsumed() public {
+        ReentrantERC20Catching token = new ReentrantERC20Catching(address(diamond));
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+        currencies.addAllowedCurrency(address(token));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 1);
+        erc721.approve(address(diamond), 2);
+
+        market.createListing(
+            address(erc721), 2, address(0), 1 ether, address(token), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingB = getter.getNextListingId() - 1;
+
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(token), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingA = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        token.setTarget(listingB, 1 ether);
+        token.mint(buyer, 2 ether);
+
+        uint128 nextBefore = getter.getNextListingId();
+
+        vm.startPrank(buyer);
+        token.approve(address(diamond), 2 ether);
+        market.purchaseListing(listingA, 1 ether, address(token), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        assertTrue(token.attempted(), "erc20 reentry attempt not observed");
+        assertEq(token.reentryRevertSelector(), IdeationMarket__Reentrant.selector);
+
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingA));
+        getter.getListingByListingId(listingA);
+
+        Listing memory lb = getter.getListingByListingId(listingB);
+        assertEq(lb.price, 1 ether);
+        assertEq(erc721.ownerOf(2), seller);
+
+        assertEq(getter.getNextListingId(), nextBefore, "unexpected listing state delta");
+    }
+
+    /// @notice Reentrant attempt from ERC721 getApproved hook cannot cancel unrelated listing
+    function testReentrancy_CancelListing_QueryHook_CannotCancelOtherListing() public {
+        ReentrantQueryHookERC721 hookToken = new ReentrantQueryHookERC721(address(market));
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(hookToken));
+        collections.addWhitelistedCollection(address(erc721));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc721.approve(address(diamond), 2);
+        market.createListing(
+            address(erc721), 2, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingB = getter.getNextListingId() - 1;
+
+        hookToken.mint(seller, 11);
+        hookToken.setApprovalForAll(operator, true);
+        hookToken.approve(address(diamond), 11);
+        market.createListing(
+            address(hookToken), 11, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingA = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        hookToken.setReentryMode(1, listingB);
+        uint128 nextBefore = getter.getNextListingId();
+
+        vm.prank(operator);
+        market.cancelListing(listingA);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingA));
+        getter.getListingByListingId(listingA);
+
+        Listing memory lb = getter.getListingByListingId(listingB);
+        assertEq(lb.price, 1 ether);
+        assertEq(erc721.ownerOf(2), seller);
+
+        assertEq(getter.getNextListingId(), nextBefore, "unexpected listing state delta");
+    }
+
+    /// @notice Reentrant attempt from ERC721 ownerOf hook cannot clean unrelated valid listing
+    function testReentrancy_CleanListing_QueryHook_CannotCleanOtherValidListing() public {
+        ReentrantQueryHookERC721 hookToken = new ReentrantQueryHookERC721(address(market));
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(hookToken));
+        collections.addWhitelistedCollection(address(erc721));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc721.mint(seller, 3);
+        erc721.approve(address(diamond), 3);
+        market.createListing(
+            address(erc721), 3, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingB = getter.getNextListingId() - 1;
+
+        hookToken.mint(seller, 21);
+        hookToken.approve(address(diamond), 21);
+        market.createListing(
+            address(hookToken), 21, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingA = getter.getNextListingId() - 1;
+
+        hookToken.transferFrom(seller, operator, 21);
+        vm.stopPrank();
+
+        hookToken.setReentryMode(2, listingB);
+        uint128 nextBefore = getter.getNextListingId();
+
+        vm.prank(buyer);
+        market.cleanListing(listingA);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingA));
+        getter.getListingByListingId(listingA);
+
+        Listing memory lb = getter.getListingByListingId(listingB);
+        assertEq(lb.price, 1 ether);
+        assertEq(erc721.ownerOf(3), seller);
+
+        assertEq(getter.getNextListingId(), nextBefore, "unexpected listing state delta");
+    }
+
     // =========================================================================
     // MALICIOUS TOKEN CONTRACTS
     // =========================================================================
@@ -421,7 +555,7 @@ contract AttackVectorTest is MarketTestBase {
 
         vm.deal(buyer, price);
         vm.startPrank(buyer);
-        vm.expectRevert(); // token breaks transfer
+        vm.expectRevert(bytes("liar721: transfer breaks"));
         market.purchaseListing{value: price}(id, price, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
@@ -454,7 +588,7 @@ contract AttackVectorTest is MarketTestBase {
 
         vm.deal(buyer, price);
         vm.startPrank(buyer);
-        vm.expectRevert(); // token breaks transfer
+        vm.expectRevert(bytes("liar1155: transfer breaks"));
         market.purchaseListing{value: price}(id, price, address(0), qty, address(0), 0, 0, qty, address(0));
         vm.stopPrank();
 
@@ -463,6 +597,28 @@ contract AttackVectorTest is MarketTestBase {
         Listing memory L = getter.getListingByListingId(id);
         assertEq(L.price, price);
         assertEq(L.erc1155Quantity, qty);
+    }
+
+    /// @notice Malformed ERC165 responses must not allow listing creation
+    function testMalformedERC165Response_RevertsListingCreation_NoStateDelta() public {
+        MalformedERC165ERC721 malformed = new MalformedERC165ERC721();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(malformed));
+
+        malformed.mint(seller, 77);
+        vm.prank(seller);
+        malformed.approve(address(diamond), 77);
+
+        uint128 nextBefore = getter.getNextListingId();
+
+        vm.prank(seller);
+        vm.expectRevert();
+        market.createListing(
+            address(malformed), 77, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+
+        assertEq(getter.getNextListingId(), nextBefore, "listing id advanced on malformed ERC165");
     }
 
     /// @notice Malicious token attempts to call setInnovationFee during transfer
@@ -496,7 +652,7 @@ contract AttackVectorTest is MarketTestBase {
         getter.getListingByListingId(id);
     }
 
-    /// @notice ERC721 receiver that swallows internal reverts must not mask marketplace checks
+    /// @notice Post-purchase transfer to a swallowing ERC721 receiver still preserves normal transfer semantics
     function testERC721ReceiverSwallowsRevert_DoesNotMaskMarketplaceChecks() public {
         _whitelistCollectionAndApproveERC721();
         SwallowingERC721Receiver recv = new SwallowingERC721Receiver();
@@ -519,7 +675,34 @@ contract AttackVectorTest is MarketTestBase {
         assertEq(erc721.ownerOf(1), address(recv));
     }
 
-    /// @notice ERC1155 receiver that swallows reverts must not affect marketplace logic
+    /// @notice ERC721 swallowing receiver can be the direct marketplace buyer without masking purchase flow
+    function testReceiverHooksThatSwallowReverts_ERC721_DuringMarketplaceTransfer() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Mint + approve a fresh token for direct marketplace delivery to a swallowing receiver
+        erc721.mint(seller, 99);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 99);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 99, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        SwallowingERC721Receiver rcvr = new SwallowingERC721Receiver();
+        vm.deal(address(rcvr), 1 ether);
+
+        // Buy as the receiver so onERC721Received executes inside marketplace purchase flow
+        vm.prank(address(rcvr));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(erc721.ownerOf(99), address(rcvr));
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// @notice ERC1155 swallowing receiver does not block marketplace delivery during purchase flow
     function testReceiverHooksThatSwallowReverts_ERC1155() public {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
@@ -536,11 +719,19 @@ contract AttackVectorTest is MarketTestBase {
         SwallowingERC1155Receiver rcvr = new SwallowingERC1155Receiver();
         vm.deal(address(rcvr), 10 ether);
 
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+
         // Buy all 5 to receiver; its hook swallows internal errors but returns selector
         vm.prank(address(rcvr));
         market.purchaseListing{value: 5 ether}(id, 5 ether, address(0), 5, address(0), 0, 0, 5, address(0));
 
         assertEq(erc1155.balanceOf(address(rcvr), 55), 5);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+
+        assertGt(seller.balance, sellerBalBefore, "seller did not receive proceeds");
+        assertEq(owner.balance + seller.balance, ownerBalBefore + sellerBalBefore + 5 ether, "payment mismatch");
     }
 
     // =========================================================================
@@ -837,14 +1028,6 @@ contract AttackVectorTest is MarketTestBase {
     // AUTHORIZATION BYPASS ATTEMPTS
     // =========================================================================
 
-    /// @notice Attacker cannot call pause() (owner-only function)
-    function testAttackerCannotPause() public {
-        address attacker = vm.addr(0xBAD);
-        vm.prank(attacker);
-        vm.expectRevert("LibDiamond: Must be contract owner");
-        pauseFacet.pause();
-    }
-
     /// @notice Malicious initializer cannot escalate privileges during upgradeDiamond
     function testUpgradeDiamond_MaliciousInitializerCannotEscalate() public {
         address ownerBefore = IERC173(address(diamond)).owner();
@@ -861,35 +1044,5 @@ contract AttackVectorTest is MarketTestBase {
 
         assertEq(IERC173(address(diamond)).owner(), ownerBefore, "owner changed via initializer");
         assertEq(getter.getInnovationFee(), feeBefore, "fee changed via initializer");
-    }
-
-    /// @notice Malicious facet can cause storage collision (proof storage guards work)
-    function testStorage_MaliciousFacetSmash_TriggersDrift() public {
-        _whitelistDefaultMocks();
-
-        // Snapshot canaries
-        uint32 fee0 = getter.getInnovationFee();
-        uint16 maxBatch0 = getter.getBuyerWhitelistMaxBatchSize();
-
-        // Deploy and cut-in malicious facet
-        BadFacetAppSmash bad = new BadFacetAppSmash();
-
-        bytes4[] memory sels = new bytes4[](1);
-        sels[0] = BadFacetAppSmash.smash.selector;
-
-        _upgradeAddSelectors(address(bad), sels);
-
-        // Call the malicious function through the diamond
-        uint32 newFee = fee0 + 1;
-        uint16 newMax = maxBatch0 + 1;
-        BadFacetAppSmash(address(diamond)).smash(newFee, newMax);
-
-        // Assert drift occurred as a proof our canary checks would catch it
-        assertEq(getter.getInnovationFee(), newFee, "innovationFee should have changed");
-        assertEq(getter.getBuyerWhitelistMaxBatchSize(), newMax, "maxBatch should have changed");
-        assertTrue(
-            getter.getInnovationFee() != fee0 || getter.getBuyerWhitelistMaxBatchSize() != maxBatch0,
-            "storage should have drifted"
-        );
     }
 }

@@ -1260,6 +1260,7 @@ contract ReenteringReceiver721 {
     uint128 public listingId;
     uint256 public price;
     bool internal attacked;
+    bytes4 public reentryRevertSelector;
 
     constructor(address _market, uint128 _id, uint256 _price) {
         market = IdeationMarketFacet(_market);
@@ -1275,7 +1276,11 @@ contract ReenteringReceiver721 {
             // If this ever succeeds, fail the whole test.
             try market.purchaseListing{value: price}(listingId, price, address(0), 0, address(0), 0, 0, 0, address(0)) {
                 revert("reentrant 721 purchase succeeded");
-            } catch { /* expected to fail */ }
+            } catch (bytes memory reason) {
+                if (reason.length >= 4) {
+                    reentryRevertSelector = bytes4(reason);
+                }
+            }
         }
         return this.onERC721Received.selector;
     }
@@ -1288,6 +1293,7 @@ contract ReenteringReceiver1155 {
     uint256 public price;
     uint256 public qty;
     bool internal attacked;
+    bytes4 public reentryRevertSelector;
 
     constructor(address _market, uint128 _id, uint256 _price, uint256 _qty) {
         market = IdeationMarketFacet(_market);
@@ -1306,7 +1312,11 @@ contract ReenteringReceiver1155 {
                 listingId, price, address(0), qty, address(0), 0, 0, qty, address(0)
             ) {
                 revert("reentrant 1155 purchase succeeded");
-            } catch { /* expected to fail */ }
+            } catch (bytes memory reason) {
+                if (reason.length >= 4) {
+                    reentryRevertSelector = bytes4(reason);
+                }
+            }
         }
         return IERC1155ReceiverLike.onERC1155Received.selector;
     }
@@ -1976,6 +1986,212 @@ contract ReentrantERC20 {
         }
 
         return true;
+    }
+}
+
+contract ReentrantERC20Catching {
+    mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    address public marketplace;
+    uint128 public targetListingId;
+    uint256 public targetPrice;
+    bool public attempted;
+    bytes4 public reentryRevertSelector;
+
+    constructor(address _marketplace) {
+        marketplace = _marketplace;
+    }
+
+    function setTarget(uint128 listingId, uint256 price) external {
+        targetListingId = listingId;
+        targetPrice = price;
+        attempted = false;
+        reentryRevertSelector = bytes4(0);
+    }
+
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 amount) external returns (bool) {
+        require(allowance[from][msg.sender] >= amount, "insufficient allowance");
+        require(balanceOf[from] >= amount, "insufficient balance");
+
+        allowance[from][msg.sender] -= amount;
+        balanceOf[from] -= amount;
+        balanceOf[to] += amount;
+
+        if (!attempted && targetListingId != 0 && to != from) {
+            attempted = true;
+            try IdeationMarketFacet(marketplace).purchaseListing(
+                targetListingId, targetPrice, address(this), 0, address(0), 0, 0, 0, address(0)
+            ) {
+                revert("reentrant erc20 purchase succeeded");
+            } catch (bytes memory reason) {
+                if (reason.length >= 4) {
+                    reentryRevertSelector = bytes4(reason);
+                }
+            }
+        }
+
+        return true;
+    }
+}
+
+contract ReentrantQueryHookERC721 {
+    mapping(uint256 => address) internal _owner;
+    mapping(uint256 => address) internal _tokenApproval;
+    mapping(address => mapping(address => bool)) internal _op;
+
+    IdeationMarketFacet public market;
+
+    enum HookMode {
+        None,
+        Cancel,
+        Clean
+    }
+
+    HookMode public mode;
+    uint128 public targetListingId;
+
+    constructor(address _market) {
+        market = IdeationMarketFacet(_market);
+    }
+
+    function setReentryMode(uint8 _mode, uint128 _targetListingId) external {
+        mode = HookMode(_mode);
+        targetListingId = _targetListingId;
+    }
+
+    function supportsInterface(bytes4 iid) external pure returns (bool) {
+        return iid == 0x01ffc9a7 || iid == 0x80ac58cd;
+    }
+
+    function mint(address to, uint256 id) external {
+        _owner[id] = to;
+    }
+
+    function ownerOf(uint256 id) external returns (address) {
+        address currentOwner = _owner[id];
+        require(currentOwner != address(0), "not minted");
+
+        if (mode == HookMode.Clean && targetListingId != 0) {
+            (bool ok,) =
+                address(market).call(abi.encodeWithSelector(IdeationMarketFacet.cleanListing.selector, targetListingId));
+            if (ok) {
+                revert("reentrant cleanListing succeeded");
+            }
+        }
+
+        return currentOwner;
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return account == address(0) ? 0 : 1;
+    }
+
+    function approve(address to, uint256 id) external {
+        require(msg.sender == _owner[id], "not owner");
+        _tokenApproval[id] = to;
+    }
+
+    function getApproved(uint256 id) external returns (address) {
+        if (mode == HookMode.Cancel && targetListingId != 0) {
+            (bool ok,) = address(market).call(
+                abi.encodeWithSelector(IdeationMarketFacet.cancelListing.selector, targetListingId)
+            );
+            if (ok) {
+                revert("reentrant cancelListing succeeded");
+            }
+        }
+
+        return _tokenApproval[id];
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _op[msg.sender][operator] = approved;
+    }
+
+    function isApprovedForAll(address a, address operator) external view returns (bool) {
+        return _op[a][operator];
+    }
+
+    function transferFrom(address from, address to, uint256 id) public {
+        require(from == _owner[id], "wrong from");
+        require(msg.sender == from || msg.sender == _tokenApproval[id] || _op[from][msg.sender], "not auth");
+        _tokenApproval[id] = address(0);
+        _owner[id] = to;
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id) external {
+        transferFrom(from, to, id);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+        transferFrom(from, to, id);
+    }
+}
+
+contract MalformedERC165ERC721 {
+    mapping(uint256 => address) internal _owner;
+    mapping(uint256 => address) internal _tokenApproval;
+    mapping(address => mapping(address => bool)) internal _op;
+
+    function supportsInterface(bytes4) external pure returns (bool) {
+        assembly {
+            mstore(0x00, 0x01)
+            return(0x1f, 0x01)
+        }
+    }
+
+    function mint(address to, uint256 id) external {
+        _owner[id] = to;
+    }
+
+    function ownerOf(uint256 id) external view returns (address) {
+        return _owner[id];
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return account == address(0) ? 0 : 1;
+    }
+
+    function approve(address to, uint256 id) external {
+        require(msg.sender == _owner[id], "not owner");
+        _tokenApproval[id] = to;
+    }
+
+    function getApproved(uint256 id) external view returns (address) {
+        return _tokenApproval[id];
+    }
+
+    function setApprovalForAll(address operator, bool approved) external {
+        _op[msg.sender][operator] = approved;
+    }
+
+    function isApprovedForAll(address a, address operator) external view returns (bool) {
+        return _op[a][operator];
+    }
+
+    function transferFrom(address from, address to, uint256 id) public {
+        require(from == _owner[id], "wrong from");
+        require(msg.sender == from || msg.sender == _tokenApproval[id] || _op[from][msg.sender], "not auth");
+        _tokenApproval[id] = address(0);
+        _owner[id] = to;
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id) external {
+        transferFrom(from, to, id);
+    }
+
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata) external {
+        transferFrom(from, to, id);
     }
 }
 
