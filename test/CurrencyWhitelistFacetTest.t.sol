@@ -9,6 +9,16 @@ import {
 } from "../src/facets/CurrencyWhitelistFacet.sol";
 import {IdeationMarket__CurrencyNotAllowed} from "../src/facets/IdeationMarketFacet.sol";
 
+/**
+ * @title CurrencyWhitelistFacetTest
+ * @notice Unit tests for currency allowlist administration and listing/payment behavior under allowlist changes.
+ * @dev Coverage groups:
+ * - Owner-only add/remove + duplicate/non-allowed guards and emitted events.
+ * - Getter and swap-and-pop integrity of `allowedCurrencies` storage.
+ * - ETH allowlist baseline and ETH removal/re-add behavior.
+ * - Listing creation gate for disallowed currencies.
+ * - Existing listing settlement correctness after a currency is later de-allowlisted.
+ */
 contract CurrencyWhitelistFacetTest is MarketTestBase {
     MockERC20 internal tokenA;
     MockERC20 internal tokenB;
@@ -114,6 +124,16 @@ contract CurrencyWhitelistFacetTest is MarketTestBase {
         vm.stopPrank();
 
         _addCurrency(address(0));
+        assertTrue(getter.isCurrencyAllowed(address(0)));
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+
+        uint128 listingId = getter.getNextListingId() - 1;
+        Listing memory listing = getter.getListingByListingId(listingId);
+        assertEq(listing.currency, address(0));
     }
 
     // ----------------------------------------------------------
@@ -195,6 +215,28 @@ contract CurrencyWhitelistFacetTest is MarketTestBase {
             address(0),
             1 ether,
             address(tokenA),
+            address(0),
+            0,
+            0,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
+    function testCannotCreateListingWithNeverAllowlistedERC20() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__CurrencyNotAllowed.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            1 ether,
+            address(tokenD),
             address(0),
             0,
             0,
