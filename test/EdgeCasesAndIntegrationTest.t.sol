@@ -3,11 +3,24 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 import {Listing} from "../src/libraries/LibAppStorage.sol";
+import {Getter__ListingNotFound} from "../src/facets/GetterFacet.sol";
+import {
+    IdeationMarket__ListingTermsChanged,
+    IdeationMarket__CurrencyNotAllowed,
+    IdeationMarket__BuyerNotWhitelisted,
+    IdeationMarket__CollectionNotWhitelisted,
+    IdeationMarket__NotListed
+} from "../src/facets/IdeationMarketFacet.sol";
 
 /**
  * @title EdgeCasesAndIntegrationTest
- * @notice Phase 6: Edge cases and integration scenarios
- * @dev Tests complex interactions, tiny amounts, multiple currencies, whitelists, and partial buys
+ * @notice Integration-focused tests for cross-feature marketplace behavior under realistic edge scenarios.
+ * @dev Coverage groups:
+ * - Mixed ETH/ERC20 settlement sequencing and multi-currency isolation.
+ * - Listing update/front-run expectation checks and currency allowlist transitions.
+ * - Tiny-amount rounding, buyer-whitelist enforcement, and collection de-whitelist cleanup flows.
+ * - ERC1155 partial-buy accounting, NFT swap + ERC20 payment, and ERC2981 royalty distribution.
+ * - Getter accuracy for large allowlist arrays after add/remove operations.
  */
 contract EdgeCasesAndIntegrationTest is MarketTestBase {
     MockERC20 internal usdc;
@@ -107,9 +120,9 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         assertGt(sellerUsdcReceived, 0, "Seller must receive USDC proceeds");
 
         // Verify both listings deleted (getter reverts for non-existent listings)
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId1));
         getter.getListingByListingId(listingId1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId2));
         getter.getListingByListingId(listingId2);
 
         // Verify diamond balance = 0 for USDC
@@ -251,7 +264,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
 
         // Buyer attempts purchase with expectedCurrency = USDC
         vm.prank(buyer);
-        vm.expectRevert(); // Should revert due to currency mismatch
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector); // Should revert due to currency mismatch
         market.purchaseListing(listingId, 1000e18, address(usdc), 0, address(0), 0, 0, 0, address(0));
 
         // Verify listing still exists
@@ -304,7 +317,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
 
         // Attempt to create NEW listing with removed token → should REVERT
         vm.startPrank(seller);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__CurrencyNotAllowed.selector);
         market.createListing(
             address(erc721),
             41,
@@ -430,7 +443,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         usdc.mint(buyer2, 500e18);
         vm.startPrank(buyer2);
         usdc.approve(address(market), 500e18);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, listingId, buyer2));
         market.purchaseListing(listingId, 500e18, address(usdc), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
@@ -500,7 +513,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         usdc.mint(buyer, 100e18);
         vm.startPrank(buyer);
         usdc.approve(address(market), 100e18);
-        vm.expectRevert(); // Should revert: collection not whitelisted
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
         market.purchaseListing(listingId1, 100e18, address(usdc), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
@@ -511,16 +524,16 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         market.cleanListing(listingId2);
 
         // Verify both listings deleted (reverts when accessing)
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId1));
         getter.getListingByListingId(listingId1);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId2));
         getter.getListingByListingId(listingId2);
 
         // Attempt to purchase deleted listing → should REVERT
         usdc.mint(buyer, 100e18);
         vm.startPrank(buyer);
         usdc.approve(address(market), 100e18);
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__NotListed.selector);
         market.purchaseListing(listingId1, 100e18, address(usdc), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
@@ -598,7 +611,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         assertEq(erc1155.balanceOf(seller, 99), 0, "Seller should have 0 ERC1155 tokens left");
 
         // Verify listing deleted after full purchase
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, listingId));
         getter.getListingByListingId(listingId);
 
         // Verify diamond balance still 0
