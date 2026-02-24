@@ -3,6 +3,15 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
+/**
+ * @title BuyerWhitelistFacetTest
+ * @notice Unit tests for buyer-whitelist mutation rules on listings.
+ * @dev Coverage groups:
+ * - Batch validation: nonexistent listing, zero address, max-batch cap, empty calldata.
+ * - Authorization: seller/operator permissions for ERC721 and ERC1155 listings.
+ * - Ownership/balance drift: whitelist edits blocked after off-market transfer or insufficient ERC1155 balance.
+ * - Enable/disable semantics: whitelist entries can be prefilled while disabled and are enforced once enabled.
+ */
 contract BuyerWhitelistFacetTest is MarketTestBase {
     function testBuyerWhitelist_AddNonexistentListingReverts() public {
         address[] memory addrs = new address[](1);
@@ -37,6 +46,66 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         vm.prank(operator);
         vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, max + 1));
         buyers.addBuyerWhitelistAddresses(listingId, addrs);
+    }
+
+    function testBuyerWhitelist_AddEmptyCalldataReverts() public {
+        _whitelistDefaultMocks();
+        uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
+
+        address[] memory addrs = new address[](0);
+
+        vm.prank(operator);
+        vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
+        buyers.addBuyerWhitelistAddresses(listingId, addrs);
+    }
+
+    function testBuyerWhitelist_RemoveEmptyCalldataReverts() public {
+        _whitelistDefaultMocks();
+        uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
+
+        address[] memory addrs = new address[](0);
+
+        vm.prank(operator);
+        vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
+        buyers.removeBuyerWhitelistAddresses(listingId, addrs);
+    }
+
+    function testBuyerWhitelist_RemoveZeroAddressReverts() public {
+        _whitelistDefaultMocks();
+        uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
+
+        address[] memory addrs = new address[](1);
+        addrs[0] = address(0);
+
+        vm.prank(operator);
+        vm.expectRevert(BuyerWhitelist__ZeroAddress.selector);
+        buyers.removeBuyerWhitelistAddresses(listingId, addrs);
+    }
+
+    function testBuyerWhitelist_AddUnauthorizedOperatorReverts_ERC721() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+        uint128 listingId = _createListingERC721(true, allowed);
+
+        address[] memory addrs = new address[](1);
+        addrs[0] = vm.addr(0xBEEF);
+
+        vm.prank(vm.addr(0xBAD));
+        vm.expectRevert(BuyerWhitelist__NotAuthorizedOperator.selector);
+        buyers.addBuyerWhitelistAddresses(listingId, addrs);
+    }
+
+    function testBuyerWhitelist_RemoveUnauthorizedOperatorReverts_ERC721() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+        uint128 listingId = _createListingERC721(true, allowed);
+
+        address[] memory addrs = new address[](1);
+        addrs[0] = buyer;
+
+        vm.prank(vm.addr(0xBAD));
+        vm.expectRevert(BuyerWhitelist__NotAuthorizedOperator.selector);
+        buyers.removeBuyerWhitelistAddresses(listingId, addrs);
     }
 
     function testBuyerWhitelist_AddRemove_ByERC1155OperatorForAll() public {
@@ -94,7 +163,8 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         // Stored correctly
         assertTrue(getter.isBuyerWhitelisted(listingId, buyer));
 
-        // Optional: enable later without re-supplying the list; the prefilled entry should gate purchases.
+        // In this same test, enable whitelist via updateListing (without re-supplying the list);
+        // prefilled entries must then be enforced by purchase gating.
         vm.prank(seller);
         market.updateListing(
             listingId,
@@ -108,8 +178,18 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
             false, // partialBuy
             new address[](0) // no new entries
         );
-        // Now enforcement is on; a non-whitelisted address would be blocked.
-        // (You already have tests for purchase gating—no need to duplicate here.)
+
+        address notWhitelisted = vm.addr(0xCAFE);
+        vm.deal(notWhitelisted, 1 ether);
+        vm.prank(notWhitelisted);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, listingId, notWhitelisted));
+        market.purchaseListing{value: 1 ether}(listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(erc721.ownerOf(1), buyer);
     }
 
     // ERC721: seller cannot edit whitelist once token is transferred off-market
