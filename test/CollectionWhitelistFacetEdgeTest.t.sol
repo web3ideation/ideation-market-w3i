@@ -102,13 +102,51 @@ contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
         assertFalse(getter.isCollectionWhitelisted(address(b)));
     }
 
+    function testOnlyOwner_BatchAddRemove_RevertsForNonOwner() public {
+        MockERC721 a = _new721();
+
+        address[] memory addrs = new address[](1);
+        addrs[0] = address(a);
+
+        vm.startPrank(buyer);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        collections.batchAddWhitelistedCollections(addrs);
+        vm.stopPrank();
+
+        vm.startPrank(buyer);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        collections.batchRemoveWhitelistedCollections(addrs);
+        vm.stopPrank();
+    }
+
+    function testBatchRemove_IgnoresNonWhitelistedAndZeroAddress() public {
+        MockERC721 a = _new721();
+        MockERC1155 b = _new1155();
+
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(a));
+        collections.addWhitelistedCollection(address(b));
+        vm.stopPrank();
+
+        address[] memory rem = new address[](3);
+        rem[0] = address(0);
+        rem[1] = vm.addr(0xBADA55);
+        rem[2] = address(a);
+
+        vm.prank(owner);
+        collections.batchRemoveWhitelistedCollections(rem);
+
+        assertFalse(getter.isCollectionWhitelisted(address(a)));
+        assertTrue(getter.isCollectionWhitelisted(address(b)));
+    }
+
     /* --------------------------------------------------------------------- */
     /* zero address input                                                     */
     /* --------------------------------------------------------------------- */
 
     function testAddZeroAddress_Reverts() public {
         vm.startPrank(owner);
-        vm.expectRevert(); // robust to exact error type/name
+        vm.expectRevert(CollectionWhitelist__ZeroAddress.selector);
         collections.addWhitelistedCollection(address(0));
         vm.stopPrank();
     }
@@ -121,7 +159,7 @@ contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
         addrs[1] = address(a);
 
         vm.startPrank(owner);
-        vm.expectRevert(); // if any element is invalid, whole call should revert
+        vm.expectRevert(CollectionWhitelist__ZeroAddress.selector);
         collections.batchAddWhitelistedCollections(addrs);
         vm.stopPrank();
 
