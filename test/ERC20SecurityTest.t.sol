@@ -3,12 +3,23 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 import {
+    IdeationMarket__ContractPaused,
     IdeationMarket__ERC20TransferFailed,
     IdeationMarket__ERC20TokenAddressIsNotAContract,
     IdeationMarket__ListingTermsChanged,
     IdeationMarket__WrongPaymentCurrency
 } from "../src/facets/IdeationMarketFacet.sol";
 
+/**
+ * @title ERC20SecurityTest
+ * @notice Unit tests for adversarial ERC20 behaviors and security-critical ERC20 purchase paths.
+ * @dev Coverage groups:
+ * - Malicious token behaviors (revert/false return, fee-on-transfer loss profile, reentrancy attempt, high-gas token impact).
+ * - Buyer balance/allowance and token-contract validity guards.
+ * - Front-running protection via expected-currency checks across ETH/ERC20 transitions.
+ * - Atomicity guarantees when payment distribution legs fail.
+ * - Decimal/rounding stress cases and mixed-scenario integration checks (paused state, wrong payment currency, multi-token usage).
+ */
 contract ERC20SecurityTest is MarketTestBase {
     MaliciousERC20Reverting internal revertingToken;
     MaliciousERC20ReturnsFalse internal falseToken;
@@ -154,7 +165,9 @@ contract ERC20SecurityTest is MarketTestBase {
 
         // Purchase listing 1 - token will attempt reentrancy during transfer
         // nonReentrant modifier should block it, causing the entire transaction to revert
-        vm.expectRevert();
+        vm.expectRevert(
+            abi.encodeWithSelector(IdeationMarket__ERC20TransferFailed.selector, address(reentrantToken), owner)
+        );
         market.purchaseListing(listingId1, 1000 ether, address(reentrantToken), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
@@ -575,7 +588,7 @@ contract ERC20SecurityTest is MarketTestBase {
         vm.startPrank(buyer);
         token18Dec.approve(address(diamond), 1000 ether);
 
-        vm.expectRevert();
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
         market.purchaseListing(listingId, 1000 ether, address(token18Dec), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
 
