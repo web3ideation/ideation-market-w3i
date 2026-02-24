@@ -3,6 +3,16 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
+/**
+ * @title DiamondUpgradeFacetTest
+ * @notice Unit tests for ERC-8109 `upgradeDiamond` behavior and loupe/selector-set invariants after upgrades.
+ * @dev Coverage groups:
+ * - Per-selector add/replace/remove event emission and upgrade-level metadata/delegatecall events.
+ * - Batch atomicity and owner-only authorization of upgrade execution.
+ * - Functional selector replacement/removal behavior and facet pruning semantics.
+ * - Init-only upgrades and storage-layout guard initializer behavior.
+ * - Cross-view loupe consistency (`facets`, `facetAddresses`, `facetFunctionSelectors`, `facetAddress`) and inspect parity.
+ */
 contract DiamondUpgradeFacetTest is MarketTestBase {
     // ---------------------------------------------------------------------
     // 1) ERC-8109 per-selector events emitted on upgrade
