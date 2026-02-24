@@ -5,6 +5,15 @@ import "./MarketTestBase.t.sol";
 import {IdeationMarket__RoyaltyFeeExceedsProceeds} from "../src/facets/IdeationMarketFacet.sol";
 import {IERC2981} from "../src/interfaces/IERC2981.sol";
 
+/**
+ * @title ERC20PaymentDistributionTest
+ * @notice Unit tests for ERC20/ETH payment splitting invariants across marketplace fee, seller proceeds, and royalties.
+ * @dev Coverage groups:
+ * - Core ERC20 settlement accounting (buyer spend, owner fee, seller proceeds, non-custodial zero-balance invariant).
+ * - Royalty flows including zero royalty, zero-address royalty receiver skip behavior, and royalty-exceeds-proceeds revert.
+ * - Precision edge cases (micro amounts, truncation behavior, decimal extremes, fee snapshot semantics).
+ * - Non-standard ERC20 compatibility (USDT-like no-return transfer behavior).
+ */
 contract ERC20PaymentDistributionTest is MarketTestBase {
     MockERC20Ext internal tokenA;
     MockERC20Ext internal tokenB;
