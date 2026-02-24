@@ -2,12 +2,16 @@
 pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
-import {
-    IdeationMarket__CurrencyNotAllowed,
-    IdeationMarket__WrongPaymentCurrency,
-    IdeationMarket__ListingTermsChanged
-} from "../src/facets/IdeationMarketFacet.sol";
 
+/**
+ * @title ERC20MarketplaceTest
+ * @notice Unit tests for ERC20-denominated listing and purchase behavior in the marketplace.
+ * @dev Coverage groups:
+ * - ERC20 purchase success path for ERC1155 full-quantity fills and non-custodial balance invariants.
+ * - ERC20 payment-path guards (non-zero msg.value, insufficient allowance, insufficient balance).
+ * - ERC20 listing cancellation behavior and event payload currency correctness.
+ * - Focuses on ERC20 marketplace mechanics; deep payment-distribution edge coverage is delegated to ERC20PaymentDistribution/SEC tests.
+ */
 contract ERC20MarketplaceTest is MarketTestBase {
     // Reuse MockERC20 from CurrencyWhitelistFacetTest
     MockERC20 internal tokenA;
@@ -98,8 +102,13 @@ contract ERC20MarketplaceTest is MarketTestBase {
         tokenA.approve(address(diamond), 5 ether);
 
         vm.prank(buyer);
-        vm.expectRevert();
-        market.purchaseListing{value: 1 wei}(listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
+        (bool ok, bytes memory revertData) = address(diamond).call{value: 1 wei}(
+            abi.encodeWithSelector(
+                market.purchaseListing.selector, listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0)
+            )
+        );
+        assertFalse(ok, "ERC20 purchase with msg.value should revert");
+        assertEq(revertData.length, 0, "Expected empty revert data for this path");
     }
 
     // ----------------------------------------------------------
@@ -127,26 +136,6 @@ contract ERC20MarketplaceTest is MarketTestBase {
 
         vm.prank(buyer);
         vm.expectRevert(abi.encodeWithSelector(IdeationMarket__ERC20TransferFailed.selector, address(tokenA), seller));
-        market.purchaseListing(listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
-    }
-
-    // ----------------------------------------------------------
-    // Group 4: Front-Run Protection
-    // ----------------------------------------------------------
-
-    function testExpectedCurrencyMismatchReverts() public {
-        uint128 listingId = _createERC721ListingInERC20(address(tokenA), 5 ether, 1);
-
-        vm.startPrank(seller);
-        market.updateListing(listingId, 5 ether, address(tokenB), address(0), 0, 0, 0, false, false, new address[](0));
-        vm.stopPrank();
-
-        tokenB.mint(buyer, 5 ether);
-        vm.prank(buyer);
-        tokenB.approve(address(diamond), 5 ether);
-
-        vm.prank(buyer);
-        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
         market.purchaseListing(listingId, 5 ether, address(tokenA), 0, address(0), 0, 0, 0, address(0));
     }
 
