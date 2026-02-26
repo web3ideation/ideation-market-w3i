@@ -3,13 +3,20 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-/* ---------- tests ---------- */
-
-/// @title LibDiamondEdgesTest
-/// @notice Edge-case tests around upgradeDiamond & loupe, built on MarketTestBase
+/**
+ * @title LibDiamondEdgesTest
+ * @notice Scope/category: diamond-cut and loupe edge semantics for ERC-8109
+ * upgrade flows and LibDiamond selector/facet bookkeeping behavior.
+ *
+ * Covered categories:
+ * - Add/replace/remove selector lifecycle via `upgradeDiamond`
+ * - Guard rails for invalid inputs (zero facet, no code, empty selectors, duplicate selectors)
+ * - Removal mechanics (nonexistent selector, swap-and-pop across facets, swap within same facet)
+ * - Loupe consistency for unknown selectors and post-cut facet visibility
+ */
 contract LibDiamondEdgesTest is MarketTestBase {
     /* ------------------------------------------------------------------------
-       add → replace → remove a custom selector (version())
+         add → replace → remove a custom selector (dummyFunction())
        uses VersionFacetV1 / VersionFacetV2 already provided by MarketTestBase
     ------------------------------------------------------------------------ */
     function testCut_AddReplaceRemove_Flow() public {

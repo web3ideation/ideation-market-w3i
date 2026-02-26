@@ -5,9 +5,18 @@ import "./MarketTestBase.t.sol";
 import {Listing} from "../src/libraries/LibAppStorage.sol";
 import {IdeationMarket__ContractPaused} from "../src/facets/IdeationMarketFacet.sol";
 
-/// @title PauseFacetTest
-/// @notice Comprehensive tests for emergency pause functionality
-/// @dev Tests pause/unpause access control, paused function behavior, and non-paused function access during pause
+/**
+ * @title PauseFacetTest
+ * @notice Scope/category: emergency pause circuit-breaker behavior and permissions
+ * across marketplace, admin, and recovery operations.
+ *
+ * Covered categories:
+ * - Selector routing and owner-only access control for pause/unpause
+ * - Pause state transitions, events, and repeat-cycle stability
+ * - `whenNotPaused` enforcement on create/purchase/update
+ * - Allowed operations while paused (cancel/clean/admin/getters/upgrade/ownership transfer)
+ * - Integration/fuzz checks for emergency response and state consistency
+ */
 contract PauseFacetTest is MarketTestBase {
     address user1;
     address user2;
