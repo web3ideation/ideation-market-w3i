@@ -4,9 +4,17 @@ pragma solidity ^0.8.28;
 import "./MarketTestBase.t.sol";
 import "../src/libraries/LibAppStorage.sol"; // for Listing struct
 
-/// @title IdeationMarketGasTest
-/// @notice Focused, deterministic gas benchmarks for hottest paths.
-///         Setup is excluded from measurement via pause/resume metering.
+/**
+ * @title IdeationMarketGasTest
+ * @notice Scope/category: deterministic gas-regression guardrails for hottest
+ * protocol paths in `IdeationMarketFacet`, excluding setup from metering.
+ *
+ * Covered categories:
+ * - ERC721 lifecycle costs: create, purchase, update
+ * - ERC1155 lifecycle costs: create, full purchase, update
+ * - Swap path cost: ERC721 listing purchased with desired ERC721 fulfillment
+ * - Cleanup path cost: clean invalid ERC721 listing after off-market ownership change
+ */
 contract IdeationMarketGasTest is MarketTestBase {
     // ---------------------------------------------------------------------
     // Gas budgets (tighten after your first snapshot on your machine/CI)
@@ -52,6 +60,13 @@ contract IdeationMarketGasTest is MarketTestBase {
 
         vm.pauseGasMetering();
         vm.stopPrank();
+
+        uint128 listingId = getter.getNextListingId() - 1;
+        Listing memory created = getter.getListingByListingId(listingId);
+        assertEq(created.seller, seller);
+        assertEq(created.tokenAddress, address(erc721));
+        assertEq(created.tokenId, 1);
+        assertEq(created.erc1155Quantity, 0);
 
         assertLe(gasUsed, CREATE_721_BUDGET, "ERC721 createListing gas regression");
         vm.resumeGasMetering();
@@ -113,6 +128,10 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.stopPrank();
 
         vm.pauseGasMetering();
+        assertEq(erc721.ownerOf(1), buyer);
+        assertEq(erc721.ownerOf(3), seller);
+        vm.expectRevert();
+        getter.getListingByListingId(listingId);
         assertLe(gasUsed, SWAP_721_PURCHASE_BUDGET, "ERC721 swap purchase gas regression");
         vm.resumeGasMetering();
     }
@@ -136,6 +155,8 @@ contract IdeationMarketGasTest is MarketTestBase {
         uint256 gasUsed = gasBefore - gasleft();
 
         vm.pauseGasMetering();
+        vm.expectRevert();
+        getter.getListingByListingId(listingId);
         assertLe(gasUsed, CLEAN_721_BUDGET, "cleanListing ERC721 gas regression");
         vm.resumeGasMetering();
     }
@@ -167,6 +188,9 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.stopPrank();
 
         vm.pauseGasMetering();
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert();
+        getter.getListingByListingId(listingId);
         assertLe(gasUsed, PURCHASE_721_BUDGET, "ERC721 purchaseListing gas regression");
         vm.resumeGasMetering();
     }
@@ -197,6 +221,10 @@ contract IdeationMarketGasTest is MarketTestBase {
         uint256 gasUsed = gasBefore - gasleft();
         vm.pauseGasMetering();
         vm.stopPrank();
+
+        Listing memory updated = getter.getListingByListingId(listingId);
+        assertEq(updated.price, 0.9 ether);
+        assertEq(updated.erc1155Quantity, 0);
 
         assertLe(gasUsed, UPDATE_721_BUDGET, "ERC721 updateListing gas regression");
         vm.resumeGasMetering();
@@ -231,6 +259,13 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.pauseGasMetering();
         vm.stopPrank();
 
+        uint128 listingId = getter.getNextListingId() - 1;
+        Listing memory created = getter.getListingByListingId(listingId);
+        assertEq(created.seller, seller);
+        assertEq(created.tokenAddress, address(erc1155));
+        assertEq(created.tokenId, 1);
+        assertEq(created.erc1155Quantity, 5);
+
         assertLe(gasUsed, CREATE_1155_BUDGET, "ERC1155 createListing gas regression");
         vm.resumeGasMetering();
     }
@@ -262,6 +297,9 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.stopPrank();
 
         vm.pauseGasMetering();
+        assertEq(erc1155.balanceOf(buyer, 1), 5);
+        vm.expectRevert();
+        getter.getListingByListingId(listingId);
         assertLe(gasUsed, PURCHASE_1155_BUDGET, "ERC1155 purchaseListing gas regression");
         vm.resumeGasMetering();
     }
@@ -292,6 +330,10 @@ contract IdeationMarketGasTest is MarketTestBase {
         uint256 gasUsed = gasBefore - gasleft();
         vm.pauseGasMetering();
         vm.stopPrank();
+
+        Listing memory updated = getter.getListingByListingId(listingId);
+        assertEq(updated.price, 0.8 ether);
+        assertEq(updated.erc1155Quantity, 5);
 
         assertLe(gasUsed, UPDATE_1155_BUDGET, "ERC1155 updateListing gas regression");
         vm.resumeGasMetering();
