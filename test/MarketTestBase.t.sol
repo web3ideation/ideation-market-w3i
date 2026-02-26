@@ -2092,7 +2092,7 @@ contract ReentrantQueryHookERC721 {
         return currentOwner;
     }
 
-    function balanceOf(address account) external view returns (uint256) {
+    function balanceOf(address account) external pure returns (uint256) {
         return account == address(0) ? 0 : 1;
     }
 
@@ -2158,7 +2158,7 @@ contract MalformedERC165ERC721 {
         return _owner[id];
     }
 
-    function balanceOf(address account) external view returns (uint256) {
+    function balanceOf(address account) external pure returns (uint256) {
         return account == address(0) ? 0 : 1;
     }
 
@@ -2465,6 +2465,7 @@ contract InvariantHandler {
 
     MockERC721Royalty public immutable erc721Roy;
     MockERC1155 public immutable erc1155;
+    MockERC20 public immutable erc20;
 
     address public immutable owner;
     address public immutable seller;
@@ -2473,6 +2474,7 @@ contract InvariantHandler {
     address public royaltyReceiver;
 
     uint128[] internal _listingIds;
+    uint256 public successfulERC20Purchases;
 
     mapping(address => bool) internal _seen;
     address[] internal _actors;
@@ -2488,6 +2490,7 @@ contract InvariantHandler {
         address _collections,
         address _erc721Roy,
         address _erc1155,
+        address _erc20,
         address _owner,
         address _seller,
         address[] memory _buyers
@@ -2497,6 +2500,7 @@ contract InvariantHandler {
         collections = CollectionWhitelistFacet(_collections);
         erc721Roy = MockERC721Royalty(_erc721Roy);
         erc1155 = MockERC1155(_erc1155);
+        erc20 = MockERC20(_erc20);
         owner = _owner;
         seller = _seller;
         buyers = _buyers;
@@ -2649,36 +2653,102 @@ contract InvariantHandler {
         _pushListing(id);
     }
 
+    function list721ERC20(uint256 priceSeed) external {
+        uint256 tokenId = ++_next721Id;
+
+        vm.prank(seller);
+        erc721Roy.mint(seller, tokenId);
+        vm.prank(seller);
+        erc721Roy.approve(address(market), tokenId);
+
+        uint256 price = 1e16 + (priceSeed % 1 ether);
+        uint256 royaltyBps = priceSeed % 5_000;
+        erc721Roy.setRoyalty(royaltyReceiver, royaltyBps);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721Roy),
+            tokenId,
+            address(0),
+            price,
+            address(erc20),
+            address(0),
+            0,
+            0,
+            0,
+            false,
+            false,
+            new address[](0)
+        );
+
+        uint128 id = getter.getNextListingId() - 1;
+        _pushListing(id);
+    }
+
     function purchase(uint256 pickSeed, uint256 qtySeed, uint256 buyerSeed) external {
         uint128 id = _randomListing(pickSeed);
         if (id == 0) return;
 
-        Listing memory listing = getter.getListingByListingId(id);
-        if (listing.seller == address(0) || listing.desiredTokenAddress != address(0)) return;
+        try getter.getListingByListingId(id) returns (Listing memory listing) {
+            if (listing.seller == address(0) || listing.desiredTokenAddress != address(0)) return;
 
-        address buyer = buyers[buyerSeed % buyers.length];
+            address buyer = buyers[buyerSeed % buyers.length];
 
-        uint256 buyQty = (listing.erc1155Quantity == 0) ? 0 : (1 + (qtySeed % listing.erc1155Quantity));
-        if (!listing.partialBuyEnabled && listing.erc1155Quantity > 0) buyQty = listing.erc1155Quantity;
+            uint256 buyQty = (listing.erc1155Quantity == 0) ? 0 : (1 + (qtySeed % listing.erc1155Quantity));
+            if (!listing.partialBuyEnabled && listing.erc1155Quantity > 0) buyQty = listing.erc1155Quantity;
 
-        uint256 purchasePrice = listing.price;
-        if (buyQty > 0 && buyQty != listing.erc1155Quantity) {
-            purchasePrice = listing.price * buyQty / listing.erc1155Quantity;
+            uint256 purchasePrice = listing.price;
+            if (buyQty > 0 && buyQty != listing.erc1155Quantity) {
+                purchasePrice = listing.price * buyQty / listing.erc1155Quantity;
+            }
+
+            vm.deal(buyer, buyer.balance + purchasePrice);
+
+            vm.prank(buyer);
+            market.purchaseListing{value: purchasePrice}(
+                id,
+                listing.price,
+                address(0),
+                listing.erc1155Quantity,
+                listing.desiredTokenAddress,
+                listing.desiredTokenId,
+                listing.desiredErc1155Quantity,
+                buyQty,
+                address(0)
+            );
+        } catch {
+            return;
         }
+    }
 
-        vm.deal(buyer, buyer.balance + purchasePrice);
+    function purchaseERC20(uint256 pickSeed, uint256 buyerSeed) external {
+        uint128 id = _randomListing(pickSeed);
+        if (id == 0) return;
 
-        vm.prank(buyer);
-        market.purchaseListing{value: purchasePrice}(
-            id,
-            listing.price,
-            address(0),
-            listing.erc1155Quantity,
-            listing.desiredTokenAddress,
-            listing.desiredTokenId,
-            listing.desiredErc1155Quantity,
-            buyQty,
-            address(0)
-        );
+        try getter.getListingByListingId(id) returns (Listing memory listing) {
+            if (listing.seller == address(0) || listing.desiredTokenAddress != address(0)) return;
+            if (listing.currency != address(erc20)) return;
+            if (listing.erc1155Quantity != 0) return;
+
+            address buyer = buyers[buyerSeed % buyers.length];
+            if (buyer == listing.seller) return;
+            if (erc20.balanceOf(buyer) < listing.price) return;
+
+            vm.prank(buyer);
+            market.purchaseListing(
+                id,
+                listing.price,
+                listing.currency,
+                listing.erc1155Quantity,
+                listing.desiredTokenAddress,
+                listing.desiredTokenId,
+                listing.desiredErc1155Quantity,
+                0,
+                address(0)
+            );
+            successfulERC20Purchases++;
+        } catch {
+            return;
+        }
     }
 }
