@@ -130,7 +130,7 @@ contract IdeationMarketGasTest is MarketTestBase {
         vm.pauseGasMetering();
         assertEq(erc721.ownerOf(1), buyer);
         assertEq(erc721.ownerOf(3), seller);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Getter__ListingNotFound(uint128)", listingId));
         getter.getListingByListingId(listingId);
         assertLe(gasUsed, SWAP_721_PURCHASE_BUDGET, "ERC721 swap purchase gas regression");
         vm.resumeGasMetering();
@@ -155,7 +155,7 @@ contract IdeationMarketGasTest is MarketTestBase {
         uint256 gasUsed = gasBefore - gasleft();
 
         vm.pauseGasMetering();
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Getter__ListingNotFound(uint128)", listingId));
         getter.getListingByListingId(listingId);
         assertLe(gasUsed, CLEAN_721_BUDGET, "cleanListing ERC721 gas regression");
         vm.resumeGasMetering();
@@ -189,7 +189,7 @@ contract IdeationMarketGasTest is MarketTestBase {
 
         vm.pauseGasMetering();
         assertEq(erc721.ownerOf(1), buyer);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Getter__ListingNotFound(uint128)", listingId));
         getter.getListingByListingId(listingId);
         assertLe(gasUsed, PURCHASE_721_BUDGET, "ERC721 purchaseListing gas regression");
         vm.resumeGasMetering();
@@ -298,7 +298,7 @@ contract IdeationMarketGasTest is MarketTestBase {
 
         vm.pauseGasMetering();
         assertEq(erc1155.balanceOf(buyer, 1), 5);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSignature("Getter__ListingNotFound(uint128)", listingId));
         getter.getListingByListingId(listingId);
         assertLe(gasUsed, PURCHASE_1155_BUDGET, "ERC1155 purchaseListing gas regression");
         vm.resumeGasMetering();
