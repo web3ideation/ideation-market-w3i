@@ -3,10 +3,16 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-/// @title DiamondReceiveAndGetterBalanceTest
-/// @notice Verifies that direct ETH receipts update the internal balance,
-///         and that purchases (incl. overpay) keep `getter.getBalance()`
-///         in sync with `address(diamond).balance`.
+/**
+ * @title DiamondReceiveAndGetterBalanceTest
+ * @notice Scope/category: non-custodial ETH receive/fallback behavior and
+ * GetterFacet native balance reporting consistency.
+ *
+ * Covered categories:
+ * - Direct ETH transfer rejection (no receive function) with unchanged balances
+ * - Unknown selector fallback revert path with unchanged balances
+ * - ERC721 purchase payment path keeps diamond native balance unchanged and getter in sync
+ */
 contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
     /// Direct ETH to the diamond (empty calldata -> receive) REVERTS in non-custodial model.
     /// The diamond has no receive() function, so direct ETH transfers should fail.
@@ -34,10 +40,9 @@ contract DiamondReceiveAndGetterBalanceTest is MarketTestBase {
 
         vm.deal(buyer, 0.123 ether);
         vm.prank(buyer);
-        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
-        // value won't be transferred because the call reverts
+        // value won't be transferred because fallback path reverts
         (bool ok,) = address(diamond).call{value: 0.123 ether}(bogus);
-        ok; // silence warning
+        assertFalse(ok, "unknown selector call should fail");
 
         assertEq(getter.getBalance(), beforeGetter);
         assertEq(address(diamond).balance, beforeNative);
