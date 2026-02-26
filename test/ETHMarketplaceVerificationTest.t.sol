@@ -2,13 +2,18 @@
 pragma solidity ^0.8.20;
 
 import "./MarketTestBase.t.sol";
-import {IdeationMarket__WrongPaymentCurrency} from "../src/facets/IdeationMarketFacet.sol";
+import {
+    IdeationMarket__WrongPaymentCurrency, IdeationMarket__PriceNotMet
+} from "../src/facets/IdeationMarketFacet.sol";
 
 /**
  * @title ETHMarketplaceVerificationTest
- * @notice Phase 5: FOCUSED tests for ETH+ERC20 mixed scenarios ONLY
- * @dev REMOVED all tests redundant with existing 331 ETH tests
- * @dev Focuses on: (1) ETH-ERC20 interaction edge cases, (2) Currency isolation, (3) New exact-payment requirement
+ * @notice Unit tests for ETH payment-path correctness and ETH/ERC20 interaction boundaries.
+ * @dev Coverage groups:
+ * - Exact ETH payment enforcement (overpayment must revert with PriceNotMet).
+ * - Currency-path isolation for mixed ETH/ERC20 listings in the same marketplace.
+ * - Cross-path sequencing safety (ERC20 purchase followed by ETH purchase).
+ * - Wrong-currency protection when sending ETH to ERC20 listings.
  */
 contract ETHMarketplaceVerificationTest is MarketTestBase {
     MockERC20 internal tokenA;
@@ -63,7 +68,7 @@ contract ETHMarketplaceVerificationTest is MarketTestBase {
         // Buyer attempts to send 1.5 ETH for 1 ETH listing (overpayment)
         vm.deal(buyer, 1.5 ether);
         vm.prank(buyer);
-        vm.expectRevert(); // Should revert with IdeationMarket__PriceNotMet
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, listingId, 1 ether, 1.5 ether));
         market.purchaseListing{value: 1.5 ether}(listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
 
         // Assert: Transaction reverted, no state changes

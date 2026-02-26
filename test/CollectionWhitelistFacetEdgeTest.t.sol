@@ -3,10 +3,15 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-/// @title CollectionWhitelistFacetEdgeTest
-/// @notice Edge cases for add/remove + batch ops on the collection whitelist.
-/// @dev Uses fresh mock contracts per test to avoid interference with
-///      MarketTestBase's default whitelisted mocks.
+/**
+ * @title CollectionWhitelistFacetEdgeTest
+ * @notice Unit tests for collection allowlist edge behavior and ownership guards.
+ * @dev Coverage groups:
+ * - Single add/remove success and duplicate/non-whitelisted revert paths.
+ * - Owner-only enforcement for single and batch mutation entrypoints.
+ * - Batch add/remove semantics including duplicate handling, zero-address rejection, and ignore behavior on remove.
+ * - Getter consistency after sequential allowlist mutations.
+ */
 contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
     /* --------------------------------------------------------------------- */
     /* single add/remove                                                      */
