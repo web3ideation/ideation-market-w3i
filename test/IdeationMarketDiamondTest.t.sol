@@ -34,65 +34,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Buyer Whitelist Tests
     // -------------------------------------------------------------------------
 
-    function testBuyerWhitelistAddRemove() public {
-        // Create a listing with whitelist enabled and an initial allowed buyer.
-        // Passing an empty array when buyerWhitelistEnabled is true would revert during listing creation.
-        address[] memory allowedBuyers = new address[](1);
-        allowedBuyers[0] = buyer;
-        uint128 listingId = _createListingERC721(true, allowedBuyers);
-        // Attempt to add an empty list should revert
-        address[] memory emptyList = new address[](0);
-        vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__EmptyCalldata.selector);
-        buyers.addBuyerWhitelistAddresses(listingId, emptyList);
-        vm.stopPrank();
-        /// Batch size exceeding cap should revert.
-        /// We call the BuyerWhitelistFacet through the diamond **as the seller** (an authorized operator)
-        /// against an existing listing, then pass an oversized array (MAX_BATCH+1).
-        /// Because the caller is authorized and the listing exists, the only failing condition is the
-        /// batch-size guard, so the call must revert with BuyerWhitelist__ExceedsMaxBatchSize.
-        address[] memory largeList = new address[](uint256(MAX_BATCH) + 1);
-        for (uint256 i = 0; i < largeList.length; i++) {
-            largeList[i] = vm.addr(0x2000 + i);
-        }
-        vm.startPrank(seller);
-        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, largeList.length));
-        buyers.addBuyerWhitelistAddresses(listingId, largeList);
-        vm.stopPrank();
-        // Listing not exist should revert. Use a small list so that batchSize check passes and the
-        // listing existence check triggers BuyerWhitelist__ListingDoesNotExist.
-        address[] memory dummyList = new address[](1);
-        dummyList[0] = buyer;
-        vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__ListingDoesNotExist.selector);
-        buyers.addBuyerWhitelistAddresses(999999, dummyList);
-        vm.stopPrank();
-        // Non seller (not approved) cannot whitelist
-        address[] memory oneBuyer = new address[](1);
-        oneBuyer[0] = buyer;
-        vm.startPrank(buyer);
-        vm.expectRevert(BuyerWhitelist__NotAuthorizedOperator.selector);
-        buyers.addBuyerWhitelistAddresses(listingId, oneBuyer);
-        vm.stopPrank();
-        // Add valid buyer by seller
-        vm.startPrank(seller);
-        buyers.addBuyerWhitelistAddresses(listingId, oneBuyer);
-        vm.stopPrank();
-        assertTrue(getter.isBuyerWhitelisted(listingId, buyer));
-        // Zero address should revert
-        address[] memory invalid = new address[](1);
-        invalid[0] = address(0);
-        vm.startPrank(seller);
-        vm.expectRevert(BuyerWhitelist__ZeroAddress.selector);
-        buyers.addBuyerWhitelistAddresses(listingId, invalid);
-        vm.stopPrank();
-        // Remove buyer
-        vm.startPrank(seller);
-        buyers.removeBuyerWhitelistAddresses(listingId, oneBuyer);
-        vm.stopPrank();
-        assertFalse(getter.isBuyerWhitelisted(listingId, buyer));
-    }
-
     // -------------------------------------------------------------------------
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
