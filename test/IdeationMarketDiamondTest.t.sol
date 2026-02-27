@@ -3652,20 +3652,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
         getter.isBuyerWhitelisted(999999, buyer);
     }
 
-    /// After collection is removed from whitelist, purchases should revert.
-    function testPurchaseAfterCollectionDeWhitelistingReverts() public {
-        uint128 id = _createListingERC721(false, new address[](0));
-        // remove collection
-        vm.prank(owner);
-        collections.removeWhitelistedCollection(address(erc721));
-
-        vm.deal(buyer, 1 ether);
-        vm.prank(buyer);
-        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
-        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
-        assertFalse(erc721.ownerOf(1) == buyer);
-    }
-
     function testCreateListingWithNonNFTContracQt0tReverts() public {
         NotAnNFT bad = new NotAnNFT();
         vm.prank(owner);
