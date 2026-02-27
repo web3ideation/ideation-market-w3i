@@ -2,10 +2,19 @@
 pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
-import "forge-std/console.sol";
 
-/// @title VersionFacetTest
-/// @notice Tests for the diamond versioning functionality in full marketplace context
+/**
+ * @title VersionFacetTest
+ * @notice Scope/category: diamond versioning and implementation-id lifecycle
+ * semantics across owner updates, getter routing, and upgrade context.
+ *
+ * Covered categories:
+ * - Selector routing between VersionFacet writes and GetterFacet reads
+ * - Owner-only version mutation and event emission guarantees
+ * - Current/previous version rollover semantics across multiple updates
+ * - Deterministic implementation-id computation and persistence through marketplace ops
+ * - Version update behavior after facet upgrade changes
+ */
 contract VersionFacetTest is MarketTestBase {
     address user;
 
