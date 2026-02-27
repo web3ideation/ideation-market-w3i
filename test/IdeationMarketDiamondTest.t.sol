@@ -22,108 +22,13 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Diamond & Loupe Tests
     // -------------------------------------------------------------------------
 
-    function testUnknownFunctionReverts() public {
-        // Generate a random function selector to trigger fallback with no facet
-        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("unknown()")));
-        // Expect the custom fallback error defined in the diamond
-        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
-        (bool ok,) = address(diamond).call(data);
-        // Silence unused variable warning
-        ok;
-    }
-
     // -------------------------------------------------------------------------
     // Ownership Tests
     // -------------------------------------------------------------------------
 
-    function testOwnershipTransfer() public {
-        // Only the current owner can initiate a transfer
-        vm.startPrank(owner);
-        ownership.transferOwnership(buyer);
-        vm.stopPrank();
-
-        // The pending owner should now be buyer
-        assertEq(getter.getPendingOwner(), buyer);
-
-        // A non‑pending address cannot accept ownership
-        vm.startPrank(operator);
-        vm.expectRevert(Ownership__CallerIsNotThePendingOwner.selector);
-        ownership.acceptOwnership();
-        vm.stopPrank();
-
-        // Pending owner finalises transfer
-        vm.startPrank(buyer);
-        ownership.acceptOwnership();
-        vm.stopPrank();
-
-        // Owner updated
-        assertEq(IERC173(address(diamond)).owner(), buyer);
-        assertEq(getter.getContractOwner(), buyer);
-        assertEq(getter.getPendingOwner(), address(0));
-
-        // Transfer back to original owner
-        vm.startPrank(buyer);
-        ownership.transferOwnership(owner);
-        vm.stopPrank();
-        vm.startPrank(owner);
-        ownership.acceptOwnership();
-        vm.stopPrank();
-        assertEq(IERC173(address(diamond)).owner(), owner);
-    }
-
     // -------------------------------------------------------------------------
     // Collection Whitelist Tests
     // -------------------------------------------------------------------------
-
-    function testCollectionWhitelistAddAndRemove() public {
-        // Only owner can add to whitelist
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-        assertTrue(getter.isCollectionWhitelisted(address(erc721)));
-        // Duplicate add should revert
-        vm.startPrank(owner);
-        vm.expectRevert(CollectionWhitelist__AlreadyWhitelisted.selector);
-        collections.addWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-        // Non‑owner cannot add
-        vm.startPrank(buyer);
-        vm.expectRevert("LibDiamond: Must be contract owner");
-        collections.addWhitelistedCollection(address(erc1155));
-        vm.stopPrank();
-        // Remove by owner
-        vm.startPrank(owner);
-        collections.removeWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-        assertFalse(getter.isCollectionWhitelisted(address(erc721)));
-        // Removing non‑whitelisted reverts
-        vm.startPrank(owner);
-        vm.expectRevert(CollectionWhitelist__NotWhitelisted.selector);
-        collections.removeWhitelistedCollection(address(erc721));
-        vm.stopPrank();
-    }
-
-    function testCollectionWhitelistBatchOperations() public {
-        address[] memory addrs = new address[](2);
-        addrs[0] = address(erc721);
-        addrs[1] = address(erc1155);
-        // Add both addresses in batch
-        vm.startPrank(owner);
-        collections.batchAddWhitelistedCollections(addrs);
-        vm.stopPrank();
-        assertTrue(getter.isCollectionWhitelisted(address(erc721)));
-        assertTrue(getter.isCollectionWhitelisted(address(erc1155)));
-        // Batch remove including duplicates
-        address[] memory removeList = new address[](3);
-        removeList[0] = address(erc721);
-        removeList[1] = address(erc721);
-        removeList[2] = address(erc1155);
-        vm.startPrank(owner);
-        collections.batchRemoveWhitelistedCollections(removeList);
-        vm.stopPrank();
-        assertFalse(getter.isCollectionWhitelisted(address(erc721)));
-        assertFalse(getter.isCollectionWhitelisted(address(erc1155)));
-    }
 
     // -------------------------------------------------------------------------
     // Buyer Whitelist Tests

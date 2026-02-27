@@ -321,4 +321,57 @@ contract LibDiamondEdgesTest is MarketTestBase {
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC1155).interfaceId));
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC2981).interfaceId));
     }
+
+    /**
+     * @notice Unknown selectors must fail through the diamond dispatcher fallback.
+     * @dev Preserves the original semantic check: selector is unregistered, so
+     * fallback reverts with `Diamond__FunctionDoesNotExist`.
+     */
+    function testUnknownFunctionReverts() public {
+        bytes memory data = abi.encodeWithSelector(bytes4(keccak256("unknown()")));
+
+        vm.expectRevert(Diamond__FunctionDoesNotExist.selector);
+        (bool ok,) = address(diamond).call(data);
+        ok;
+    }
+
+    /**
+     * @notice Verifies ERC-173 two-step ownership transfer wiring through diamond facets.
+     * @dev Covers nomination, pending-owner guard, acceptance, getter parity, and
+     * a round-trip transfer back to the original owner.
+     */
+    function testOwnershipTransfer() public {
+        // Current owner nominates buyer as pending owner.
+        vm.startPrank(owner);
+        ownership.transferOwnership(buyer);
+        vm.stopPrank();
+
+        assertEq(getter.getPendingOwner(), buyer);
+
+        // Non-pending address must not be able to accept.
+        vm.startPrank(operator);
+        vm.expectRevert(Ownership__CallerIsNotThePendingOwner.selector);
+        ownership.acceptOwnership();
+        vm.stopPrank();
+
+        // Pending owner accepts and becomes effective owner.
+        vm.startPrank(buyer);
+        ownership.acceptOwnership();
+        vm.stopPrank();
+
+        assertEq(IERC173(address(diamond)).owner(), buyer);
+        assertEq(getter.getContractOwner(), buyer);
+        assertEq(getter.getPendingOwner(), address(0));
+
+        // Round trip: transfer ownership back to original owner.
+        vm.startPrank(buyer);
+        ownership.transferOwnership(owner);
+        vm.stopPrank();
+
+        vm.startPrank(owner);
+        ownership.acceptOwnership();
+        vm.stopPrank();
+
+        assertEq(IERC173(address(diamond)).owner(), owner);
+    }
 }
