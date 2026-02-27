@@ -282,4 +282,43 @@ contract LibDiamondEdgesTest is MarketTestBase {
         address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
         assertEq(upgradeAddr, diamondUpgradeFacetAddr);
     }
+
+    /**
+     * @notice Verifies loupe deployment shape immediately after base setup.
+     * @dev Ensures the expected number of facets is present, and core selectors
+     * route to concrete facet implementations rather than falling through.
+     */
+    function testDiamondLoupeFacets() public view {
+        // MarketTestBase installs 1 constructor facet (upgrade) + 9 added facets.
+        IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
+        assertEq(facetInfo.length, 10);
+
+        // Upgrade selector must remain mapped to the original deployed upgrade facet.
+        address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
+        assertEq(upgradeAddr, diamondUpgradeFacetAddr);
+
+        // Loupe selectors and ERC165 support selector must be wired to a facet.
+        assertTrue(loupe.facetAddress(IDiamondLoupeFacet.facets.selector) != address(0));
+        assertTrue(loupe.facetAddress(IDiamondLoupeFacet.facetAddresses.selector) != address(0));
+        assertTrue(loupe.facetAddress(IERC165.supportsInterface.selector) != address(0));
+    }
+
+    /**
+     * @notice Confirms which ERC-165 interface IDs the deployed diamond reports.
+     * @dev Positive IDs are registered in `DiamondInit`; negative IDs verify we
+     * do not accidentally claim unrelated NFT interfaces at the diamond level.
+     */
+    function testSupportsInterface() public view {
+        // Diamond supports ERC165, upgrade, loupe/inspect and ownership interfaces set in initializer.
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC165).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondUpgradeFacet).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondLoupeFacet).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IDiamondInspectFacet).interfaceId));
+        assertTrue(IERC165(address(diamond)).supportsInterface(type(IERC173).interfaceId));
+
+        // Diamond itself must not claim token-standard interfaces.
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC721).interfaceId));
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC1155).interfaceId));
+        assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC2981).interfaceId));
+    }
 }
