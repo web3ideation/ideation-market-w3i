@@ -260,4 +260,26 @@ contract LibDiamondEdgesTest is MarketTestBase {
     function testLoupe_FacetAddressUnknownSelectorIsZero() public view {
         assertEq(loupe.facetAddress(bytes4(0xDEADBEEF)), address(0));
     }
+
+    /**
+     * @notice Deployment-time initialization invariants for the base diamond.
+     * @dev Verifies that constructor + `DiamondInit` wiring is reflected through
+     * IERC173 ownership, GetterFacet views, and loupe selector routing.
+     */
+    function testDiamondInitialization() public view {
+        // IERC173 owner must be the deploy-time owner configured by MarketTestBase.
+        assertEq(IERC173(address(diamond)).owner(), owner);
+
+        // Initial protocol constants are persisted by initializer storage writes.
+        assertEq(getter.getInnovationFee(), INNOVATION_FEE);
+        assertEq(getter.getBuyerWhitelistMaxBatchSize(), MAX_BATCH);
+
+        // Getter ownership mirrors IERC173 and no transfer is pending at deploy.
+        assertEq(getter.getContractOwner(), owner);
+        assertEq(getter.getPendingOwner(), address(0));
+
+        // Core upgrade selector must resolve to the configured upgrade facet.
+        address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
+        assertEq(upgradeAddr, diamondUpgradeFacetAddr);
+    }
 }

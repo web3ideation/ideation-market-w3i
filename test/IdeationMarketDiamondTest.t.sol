@@ -22,21 +22,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Diamond & Loupe Tests
     // -------------------------------------------------------------------------
 
-    function testDiamondInitialization() public view {
-        // Owner should be set correctly via IERC173
-        assertEq(IERC173(address(diamond)).owner(), owner);
-        // Innovation fee and max batch size set in initializer
-        assertEq(getter.getInnovationFee(), INNOVATION_FEE);
-        assertEq(getter.getBuyerWhitelistMaxBatchSize(), MAX_BATCH);
-        // Contract owner from getter matches owner
-        assertEq(getter.getContractOwner(), owner);
-        // Initially there is no pending owner
-        assertEq(getter.getPendingOwner(), address(0));
-        // Verify that the upgradeDiamond selector maps to the original upgrade facet
-        address upgradeAddr = loupe.facetAddress(IDiamondUpgradeFacet.upgradeDiamond.selector);
-        assertEq(upgradeAddr, diamondUpgradeFacetAddr);
-    }
-
     function testDiamondLoupeFacets() public view {
         // The diamond should have the cut facet plus six additional facets = 7
         IDiamondLoupeFacet.Facet[] memory facetInfo = loupe.facets();
