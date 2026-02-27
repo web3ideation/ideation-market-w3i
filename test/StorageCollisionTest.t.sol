@@ -3,10 +3,18 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 
-/// ==========================================================================
-///  Storage-collision safety tests + malicious-facet simulation + invariants
-/// ==========================================================================
-
+/**
+ * @title StorageCollisionTest
+ * @notice Scope/category: storage-layout isolation checks between LibDiamond and
+ * AppStorage domains, plus drift-detection guards across normal facet flows.
+ *
+ * Covered categories:
+ * - Canonical slot separation sanity (`diamond.storage` vs `app.storage`)
+ * - Cross-facet operation sequences preserve unrelated canary state
+ * - Buyer whitelist cross-facet write/read consistency and listing field integrity
+ * - Invariant-driven non-drift checks under randomized handler operations
+ * - Controlled malicious facet simulation proving canary drift detection efficacy
+ */
 contract StorageCollisionTest is MarketTestBase {
     /// -----------------------------------------------------------------------
     /// 1) Slots must be distinct (quick compile-time sanity guard)
