@@ -38,40 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testPurchaseListingERC721() public {
-        // Create listing with no whitelist
-        uint128 id = _createListingERC721(false, new address[](0));
-        // Give the buyer an ether balance for the purchase
-        vm.deal(buyer, 10 ether);
-        // Buyer attempts purchase with insufficient value
-        vm.startPrank(buyer);
-        // Expect revert because the sent value does not cover the price.
-        // Expect revert due to insufficient payment; the price is 1 ETH but only 0.5 ETH is sent.
-        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, id, 1 ether, 0.5 ether));
-        market.purchaseListing{value: 0.5 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
-        vm.stopPrank();
-        // Attempt a full purchase. This should succeed and transfer the token to the buyer.
-        vm.startPrank(buyer);
-
-        uint32 feeSnap = getter.getListingByListingId(id).feeRate;
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingPurchased(
-            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
-        );
-
-        uint256 sellerBalanceBefore = seller.balance;
-        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
-        vm.stopPrank();
-        // The listing should be removed after purchase.
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-        // Ownership of the token should now be with the buyer.
-        assertEq(erc721.ownerOf(1), buyer);
-        // Seller's balance should increase by sale price minus the innovation fee (1% of 1 ether).
-        uint256 sellerBalanceAfter = seller.balance;
-        assertEq(sellerBalanceAfter - sellerBalanceBefore, 0.99 ether);
-    }
-
     function testUpdateListing() public {
         // Create listing with whitelist disabled
         uint128 id = _createListingERC721(false, new address[](0));

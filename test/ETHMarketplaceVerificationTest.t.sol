@@ -100,6 +100,36 @@ contract ETHMarketplaceVerificationTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    function testPurchaseListingERC721() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.deal(buyer, 10 ether);
+
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, id, 1 ether, 0.5 ether));
+        market.purchaseListing{value: 0.5 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        vm.startPrank(buyer);
+
+        uint32 feeSnap = getter.getListingByListingId(id).feeRate;
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingPurchased(
+            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
+        );
+
+        uint256 sellerBalanceBefore = seller.balance;
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+        assertEq(erc721.ownerOf(1), buyer);
+
+        uint256 sellerBalanceAfter = seller.balance;
+        assertEq(sellerBalanceAfter - sellerBalanceBefore, 0.99 ether);
+    }
+
     /**
      * @notice Test overpayment is rejected (NEW behavior - exact payment required)
      * @dev UNIQUE: Tests that marketplace requires msg.value == purchasePrice
