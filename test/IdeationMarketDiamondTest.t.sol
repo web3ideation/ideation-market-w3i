@@ -38,23 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testCleanListing_WhileStillApproved_ERC721_Reverts() public {
-        // Whitelist + approve + create a valid ERC721 listing
-        _whitelistCollectionAndApproveERC721();
-        vm.prank(seller);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Anyone can call cleanListing, but since the listing is still valid, it must revert
-        address rando = vm.addr(0xC1EA11);
-        vm.startPrank(rando);
-        vm.expectRevert(IdeationMarket__StillApproved.selector);
-        market.cleanListing(id);
-        vm.stopPrank();
-    }
-
     /// -----------------------------------------------------------------------
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------

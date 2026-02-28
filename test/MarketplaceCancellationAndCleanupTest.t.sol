@@ -31,4 +31,19 @@ contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
     }
+
+    function testCleanListing_WhileStillApproved_ERC721_Reverts() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        address rando = vm.addr(0xC1EA11);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__StillApproved.selector);
+        market.cleanListing(id);
+        vm.stopPrank();
+    }
 }
