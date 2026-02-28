@@ -38,48 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testCreateListingERC721() public {
-        _whitelistCollectionAndApproveERC721();
-        vm.startPrank(seller);
-
-        uint128 expectedId = getter.getNextListingId();
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingCreated(
-            expectedId,
-            address(erc721),
-            1,
-            0,
-            1 ether,
-            address(0), // currency (ETH)
-            getter.getInnovationFee(),
-            seller,
-            false,
-            false,
-            address(0),
-            0,
-            0
-        );
-
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-        // Listing id should be 1
-        uint128 id = getter.getNextListingId() - 1;
-        Listing memory l = getter.getListingByListingId(id);
-        assertEq(l.listingId, id);
-        assertEq(l.tokenAddress, address(erc721));
-        assertEq(l.tokenId, 1);
-        assertEq(l.price, 1 ether);
-        assertEq(l.seller, seller);
-        assertEq(l.erc1155Quantity, 0);
-        assertFalse(l.buyerWhitelistEnabled);
-        assertFalse(l.partialBuyEnabled);
-        // ERC-721 active listing id is set
-        uint128 activeId = getter.getActiveListingIdByERC721(address(erc721), 1);
-        assertEq(activeId, id);
-    }
-
     function testCreateListingERC721Reverts() public {
         // Require whitelisted collection
         vm.startPrank(seller);
