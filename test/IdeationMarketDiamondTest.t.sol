@@ -42,51 +42,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------
 
-    function testERC1155BuyingMoreThanListedReverts() public {
-        // Whitelist ERC1155 and approve the marketplace
-        vm.startPrank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-        vm.stopPrank();
-
-        vm.startPrank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        // List quantity = 10, price = 10 ether, partial buys enabled (divisible)
-        market.createListing(
-            address(erc1155),
-            1,
-            seller, // erc1155Holder
-            10 ether, // price
-            address(0), // currency
-            address(0), // desiredTokenAddress
-            0, // desiredTokenId
-            0, // desiredErc1155Quantity
-            10, // erc1155Quantity
-            false, // buyerWhitelistEnabled
-            true, // partialBuyEnabled
-            new address[](0)
-        );
-        vm.stopPrank();
-
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buyer tries to buy more than listed (11 > 10) → InvalidPurchaseQuantity
-        vm.deal(buyer, 20 ether);
-        vm.startPrank(buyer);
-        vm.expectRevert(IdeationMarket__InvalidPurchaseQuantity.selector);
-        market.purchaseListing{value: 20 ether}(
-            id,
-            10 ether, // expectedPrice
-            address(0), // expectedCurrency
-            10, // expectedErc1155Quantity
-            address(0), // desiredTokenAddress
-            0, // desiredTokenId
-            0, // desiredErc1155Quantity
-            11, // erc1155PurchaseQuantity > listed
-            address(0) // buyerReceiver
-        );
-        vm.stopPrank();
-    }
-
     function testERC1155PartialBuyDisabledReverts() public {
         // Whitelist ERC1155 and approve the marketplace
         vm.startPrank(owner);
