@@ -9,7 +9,9 @@ import {
     IdeationMarket__CurrencyNotAllowed,
     IdeationMarket__BuyerNotWhitelisted,
     IdeationMarket__CollectionNotWhitelisted,
-    IdeationMarket__NotListed
+    IdeationMarket__NotListed,
+    IdeationMarket__NotAuthorizedOperator,
+    IdeationMarketFacet
 } from "../src/facets/IdeationMarketFacet.sol";
 
 /**
@@ -271,6 +273,35 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         Listing memory listing = getter.getListingByListingId(listingId);
         assertEq(listing.erc1155Quantity, 0, "Listing should still exist (ERC721)");
         assertEq(listing.currency, address(dai), "Listing currency should be DAI");
+    }
+
+    function testUpdateListing() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
+        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        uint32 feeNow = getter.getInnovationFee();
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingUpdated(
+            id, address(erc721), 1, 0, 2 ether, address(0), feeNow, seller, false, false, address(0), 0, 0
+        );
+        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
+        vm.stopPrank();
+
+        Listing memory updated = getter.getListingByListingId(id);
+        assertEq(updated.price, 2 ether);
+
+        address[] memory newBuyers = new address[](1);
+        newBuyers[0] = buyer;
+        vm.startPrank(seller);
+        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, true, false, newBuyers);
+        vm.stopPrank();
+
+        assertTrue(getter.isBuyerWhitelisted(id, buyer));
     }
 
     /**

@@ -38,35 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testUpdateListing() public {
-        // Create listing with whitelist disabled
-        uint128 id = _createListingERC721(false, new address[](0));
-        // Attempt update by non owner
-        vm.startPrank(buyer);
-        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
-        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
-        vm.stopPrank();
-        // Update price by seller
-        vm.startPrank(seller);
-        uint32 feeNow = getter.getInnovationFee(); // update refreshes to current fee
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingUpdated(
-            id, address(erc721), 1, 0, 2 ether, address(0), feeNow, seller, false, false, address(0), 0, 0
-        );
-        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
-        vm.stopPrank();
-        Listing memory updated = getter.getListingByListingId(id);
-        assertEq(updated.price, 2 ether);
-        // Enable whitelist on update and add buyer
-        address[] memory newBuyers = new address[](1);
-        newBuyers[0] = buyer;
-        vm.startPrank(seller);
-        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, true, false, newBuyers);
-        vm.stopPrank();
-        // Buyer should now be whitelisted
-        assertTrue(getter.isBuyerWhitelisted(id, buyer));
-    }
-
     function testCancelListing() public {
         uint128 id = _createListingERC721(false, new address[](0));
         // An unauthorized caller should revert with the NotAuthorizedToCancel error.
