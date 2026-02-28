@@ -5,6 +5,8 @@ import "./MarketTestBase.t.sol";
 import {
     IdeationMarket__WrongPaymentCurrency,
     IdeationMarket__PriceNotMet,
+    IdeationMarket__CollectionNotWhitelisted,
+    IdeationMarket__AlreadyListed,
     IdeationMarketFacet
 } from "../src/facets/IdeationMarketFacet.sol";
 
@@ -76,6 +78,26 @@ contract ETHMarketplaceVerificationTest is MarketTestBase {
 
         uint128 activeId = getter.getActiveListingIdByERC721(address(erc721), 1);
         assertEq(activeId, id);
+    }
+
+    function testCreateListingERC721Reverts() public {
+        vm.startPrank(seller);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
+
+        _whitelistCollectionAndApproveERC721();
+        vm.startPrank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.expectRevert(IdeationMarket__AlreadyListed.selector);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
     }
 
     /**

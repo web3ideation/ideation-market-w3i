@@ -38,31 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testCreateListingERC721Reverts() public {
-        // Require whitelisted collection
-        vm.startPrank(seller);
-        // Expect a revert because the collection is not whitelisted. The createListing
-        // function will revert with IdeationMarket__CollectionNotWhitelisted(tokenAddress).
-        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(erc721)));
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-        // Now whitelist and test double listing
-        _whitelistCollectionAndApproveERC721();
-        vm.startPrank(seller);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        // Second time should revert because the NFT has already been listed.
-        // The createListing function will revert with IdeationMarket__AlreadyListed().
-        vm.expectRevert(IdeationMarket__AlreadyListed.selector);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        vm.stopPrank();
-    }
-
     function testPurchaseListingERC721() public {
         // Create listing with no whitelist
         uint128 id = _createListingERC721(false, new address[](0));
