@@ -38,32 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testCleanListing721() public {
-        // Create listing
-        uint128 id = _createListingERC721(false, new address[](0));
-        // With approvals still present, cleanListing should revert with the StillApproved error.
-        vm.startPrank(operator);
-        vm.expectRevert(IdeationMarket__StillApproved.selector);
-        market.cleanListing(id);
-        vm.stopPrank();
-
-        // Remove approval and call cleanListing again. This should succeed and remove the listing.
-        vm.startPrank(seller);
-        erc721.approve(address(0), 1);
-        vm.stopPrank();
-        vm.startPrank(operator);
-
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(id, address(erc721), 1, seller, operator);
-
-        market.cleanListing(id);
-        vm.stopPrank();
-        // After cleaning, the listing should no longer exist. Expect the
-        // GetterFacet to revert with Getter__ListingNotFound(listingId).
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
     function testCleanListing_WhileStillApproved_ERC721_Reverts() public {
         // Whitelist + approve + create a valid ERC721 listing
         _whitelistCollectionAndApproveERC721();
