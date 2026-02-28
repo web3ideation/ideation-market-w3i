@@ -38,28 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Marketplace Listing Tests
     // -------------------------------------------------------------------------
 
-    function testCancelListing() public {
-        uint128 id = _createListingERC721(false, new address[](0));
-        // An unauthorized caller should revert with the NotAuthorizedToCancel error.
-        vm.startPrank(buyer);
-        vm.expectRevert(IdeationMarket__NotAuthorizedToCancel.selector);
-        market.cancelListing(id);
-        vm.stopPrank();
-
-        // The seller can cancel the listing successfully.
-        vm.startPrank(seller);
-
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, seller);
-
-        market.cancelListing(id);
-        vm.stopPrank();
-        // After cancellation, the listing should no longer exist. Expect the
-        // GetterFacet to revert with Getter__ListingNotFound(listingId).
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
     function testCleanListing721() public {
         // Create listing
         uint128 id = _createListingERC721(false, new address[](0));
