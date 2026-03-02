@@ -17,6 +17,26 @@ import {
  * @dev Keep only core happy/revert flow coverage here; specialized edge/security/integration cases stay in topical suites.
  */
 contract MarketplaceCoreFlowTest is MarketTestBase {
+    // whitelist of exactly MAX_BATCH succeeds on create; >MAX_BATCH reverts
+    function testCreateWithWhitelistExactlyMaxBatchSucceeds() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory buyersList = new address[](MAX_BATCH);
+        for (uint256 i = 0; i < buyersList.length; i++) {
+            buyersList[i] = vm.addr(10_000 + i);
+        }
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, buyersList
+        );
+
+        uint128 id = getter.getNextListingId() - 1;
+        // Spot check a couple of entries made it in
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[0]));
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[buyersList.length - 1]));
+    }
+
     // update keeps same listingId even with other activity in between
     function testUpdateKeepsListingId() public {
         _whitelistCollectionAndApproveERC721();
