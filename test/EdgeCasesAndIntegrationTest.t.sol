@@ -54,6 +54,28 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         collections.addWhitelistedCollection(address(royaltyNFT));
     }
 
+    function testListingIdIncrements() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.startPrank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+
+        erc721.approve(address(diamond), 2);
+
+        market.createListing(
+            address(erc721), 2, address(0), 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        vm.stopPrank();
+
+        assertEq(getter.getNextListingId(), 3);
+        Listing memory l1 = getter.getListingByListingId(1);
+        Listing memory l2 = getter.getListingByListingId(2);
+        assertEq(l1.listingId, 1);
+        assertEq(l2.listingId, 2);
+    }
+
     // =========================================================================
     // Group 1: Mixed Currency Sequencing (2 tests)
     // =========================================================================
