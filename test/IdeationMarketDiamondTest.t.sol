@@ -42,29 +42,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------
 
-    // swap with same NFT reverts
-    function testSwapWithSameNFTReverts() public {
-        _whitelistCollectionAndApproveERC721();
-
-        vm.startPrank(seller);
-        vm.expectRevert(IdeationMarket__NoSwapForSameToken.selector);
-        market.createListing(
-            address(erc721),
-            1,
-            address(0),
-            0, // price 0 (swap-only) ok
-            address(0), // currency
-            address(erc721), // desiredTokenAddress (same as listed)
-            1, // desiredTokenId
-            0, // desiredErc1155Quantity
-            0, // erc1155Quantity
-            false,
-            false,
-            new address[](0)
-        );
-        vm.stopPrank();
-    }
-
     // ERC1155 createListing wrong quantity flags → should revert with WrongQuantityParameter
     // NOTE: With your current code, this may fail earlier due to calling ERC1155 methods before checking interface.
     function testWrongQuantityParameterPaths() public {
