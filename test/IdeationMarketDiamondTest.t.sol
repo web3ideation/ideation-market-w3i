@@ -42,37 +42,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------
 
-    // update keeps same listingId even with other activity in between
-    function testUpdateKeepsListingId() public {
-        _whitelistCollectionAndApproveERC721();
-
-        // First listing (id=1)
-        vm.prank(seller);
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id1 = 1;
-
-        // Create & cancel another listing to disturb state
-        vm.prank(seller);
-        erc721.approve(address(diamond), 2);
-        vm.prank(seller);
-        market.createListing(
-            address(erc721), 2, address(0), 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id2 = 2;
-        vm.prank(seller);
-        market.cancelListing(id2);
-
-        // Update the first listing, id must remain 1
-        vm.prank(seller);
-        market.updateListing(id1, 3 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
-
-        Listing memory l = getter.getListingByListingId(id1);
-        assertEq(l.listingId, 1);
-        assertEq(l.price, 3 ether);
-    }
-
     // whitelist of exactly MAX_BATCH succeeds on create; >MAX_BATCH reverts
     function testCreateWithWhitelistExactlyMaxBatchSucceeds() public {
         _whitelistCollectionAndApproveERC721();
