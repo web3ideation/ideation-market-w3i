@@ -46,4 +46,17 @@ contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
         market.cleanListing(id);
         vm.stopPrank();
     }
+
+    function testOwnerCanCancelAnyListing() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.startPrank(owner);
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, owner);
+        market.cancelListing(id);
+        vm.stopPrank();
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
 }

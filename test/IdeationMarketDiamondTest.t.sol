@@ -42,23 +42,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------
 
-    // owner (diamond owner) can cancel any listing
-    function testOwnerCanCancelAnyListing() public {
-        uint128 id = _createListingERC721(false, new address[](0));
-
-        // Owner cancels although not token owner nor approved
-        vm.startPrank(owner);
-
-        vm.expectEmit(true, true, true, true, address(diamond));
-        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, owner);
-
-        market.cancelListing(id);
-        vm.stopPrank();
-
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
     // purchase fails if approval revoked between listing and purchase
     function testPurchaseRevertsIfApprovalRevokedBeforeBuy() public {
         uint128 id = _createListingERC721(false, new address[](0));
