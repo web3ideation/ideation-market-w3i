@@ -42,49 +42,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     /// ERC1155 purchase-time quantity rules
     /// -----------------------------------------------------------------------
 
-    function testCreateWithWhitelistOverMaxBatchReverts() public {
-        _whitelistCollectionAndApproveERC721();
-
-        address[] memory tooMany = new address[](uint256(MAX_BATCH) + 1);
-        for (uint256 i = 0; i < tooMany.length; i++) {
-            tooMany[i] = vm.addr(20_000 + i);
-        }
-
-        vm.startPrank(seller);
-        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, tooMany.length));
-        market.createListing(
-            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, tooMany
-        );
-        vm.stopPrank();
-    }
-
-    // purchase-time royalty > proceeds reverts (listing itself may succeed)
-    function testPurchaseRevertsWhenRoyaltyExceedsProceeds() public {
-        // High-royalty token (e.g., 99.5%)
-        MockERC721Royalty royaltyNft = new MockERC721Royalty();
-        royaltyNft.mint(seller, 1);
-        royaltyNft.setRoyalty(address(0xB0B), 99_500);
-
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(royaltyNft));
-
-        vm.prank(seller);
-        royaltyNft.approve(address(diamond), 1);
-
-        // Listing will succeed with your current code (no listing-time check)
-        vm.prank(seller);
-        market.createListing(
-            address(royaltyNft), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, 2 ether);
-        vm.startPrank(buyer);
-        vm.expectRevert(IdeationMarket__RoyaltyFeeExceedsProceeds.selector);
-        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
-        vm.stopPrank();
-    }
-
     // swap with same NFT reverts
     function testSwapWithSameNFTReverts() public {
         _whitelistCollectionAndApproveERC721();

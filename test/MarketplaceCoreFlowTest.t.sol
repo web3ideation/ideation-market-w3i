@@ -37,6 +37,22 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         assertTrue(getter.isBuyerWhitelisted(id, buyersList[buyersList.length - 1]));
     }
 
+    function testCreateWithWhitelistOverMaxBatchReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory tooMany = new address[](uint256(MAX_BATCH) + 1);
+        for (uint256 i = 0; i < tooMany.length; i++) {
+            tooMany[i] = vm.addr(20_000 + i);
+        }
+
+        vm.startPrank(seller);
+        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, tooMany.length));
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, tooMany
+        );
+        vm.stopPrank();
+    }
+
     // update keeps same listingId even with other activity in between
     function testUpdateKeepsListingId() public {
         _whitelistCollectionAndApproveERC721();
