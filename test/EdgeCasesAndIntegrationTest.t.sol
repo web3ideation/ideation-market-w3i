@@ -9,7 +9,8 @@ import {
     IdeationMarket__CurrencyNotAllowed,
     IdeationMarket__BuyerNotWhitelisted,
     IdeationMarket__CollectionNotWhitelisted,
-    IdeationMarket__NotListed
+    IdeationMarket__NotListed,
+    IdeationMarket__WrongQuantityParameter
 } from "../src/facets/IdeationMarketFacet.sol";
 
 /**
@@ -74,6 +75,54 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         Listing memory l2 = getter.getListingByListingId(2);
         assertEq(l1.listingId, 1);
         assertEq(l2.listingId, 2);
+    }
+
+    // ERC1155 createListing wrong quantity flags → should revert with WrongQuantityParameter
+    // NOTE: With your current code, this may fail earlier due to calling ERC1155 methods before checking interface.
+    function testWrongQuantityParameterPaths() public {
+        // Try to list ERC721 but with erc1155Quantity > 0
+        _whitelistCollectionAndApproveERC721();
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            seller,
+            1 ether,
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            5, // wrongly treating ERC721 as ERC1155
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
+
+        // List ERC1155 but with erc1155Quantity == 0
+        vm.startPrank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.stopPrank();
+
+        vm.startPrank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            1 ether,
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            0, // wrongly treating ERC1155 as ERC721
+            false,
+            false,
+            new address[](0)
+        );
+        vm.stopPrank();
     }
 
     // =========================================================================

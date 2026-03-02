@@ -7,6 +7,7 @@ import {
     IdeationMarket__CollectionNotWhitelisted,
     IdeationMarket__AlreadyListed,
     IdeationMarket__PriceNotMet,
+    IdeationMarket__BuyerNotWhitelisted,
     IdeationMarket__NotAuthorizedToCancel,
     IdeationMarketFacet
 } from "../src/facets/IdeationMarketFacet.sol";
@@ -50,6 +51,28 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, tooMany
         );
+        vm.stopPrank();
+    }
+
+    // buyer not on whitelist cannot purchase when whitelist enabled
+    function testWhitelistPreventsPurchase() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Whitelist someone else (not the buyer) so creation succeeds
+
+        address[] memory allowed = new address[](1);
+        allowed[0] = operator;
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, buyer));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
     }
 
