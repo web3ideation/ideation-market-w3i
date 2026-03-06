@@ -8,6 +8,17 @@ import "./MarketTestBase.t.sol";
  * @notice ERC721/ERC1155 swap-path behavior and swap-related guardrails.
  */
 contract MarketplaceSwapFlowTest is MarketTestBase {
+    // no-swap listing with zero price must revert
+    function testCreatePriceZeroWithoutSwapReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__FreeListingsNotSupported.selector);
+        market.createListing(
+            address(erc721), 1, address(0), 0, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
     // swap with same NFT reverts
     function testSwapWithSameNFTReverts() public {
         _whitelistCollectionAndApproveERC721();

@@ -54,6 +54,97 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    // create with whitelist enabled and empty list should succeed, with no buyer pre-whitelisted
+    function testCreateWithWhitelistEnabledEmptyArrayOK() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, new address[](0)
+        );
+
+        uint128 id = getter.getNextListingId() - 1;
+        Listing memory ls = getter.getListingByListingId(id);
+        assertTrue(ls.buyerWhitelistEnabled);
+
+        // Sanity: no addresses are whitelisted yet
+        assertFalse(getter.isBuyerWhitelisted(id, buyer));
+        assertFalse(getter.isBuyerWhitelisted(id, seller));
+    }
+
+    // update can enable whitelist with an empty list and should not auto-whitelist anyone
+    function testUpdateEnableWhitelistWithEmptyArrayOK() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, true, false, new address[](0));
+
+        Listing memory ls = getter.getListingByListingId(id);
+        assertTrue(ls.buyerWhitelistEnabled);
+
+        // Sanity: no addresses are whitelisted yet
+        assertFalse(getter.isBuyerWhitelisted(id, buyer));
+        assertFalse(getter.isBuyerWhitelisted(id, seller));
+    }
+
+    // disabling whitelist on update should re-open purchase access
+    function testUpdateDisableWhitelistThenOpenPurchase() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory allowed = new address[](1);
+        allowed[0] = operator;
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Disable whitelist on update
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
+
+        // Now anyone can buy
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        assertEq(erc721.ownerOf(1), buyer);
+    }
+
+    function testCreateWithWhitelistDisabledNonEmptyListReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory bogus = new address[](1);
+        bogus[0] = buyer;
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WhitelistDisabled.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0),
+            1 ether,
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            0, // erc1155Quantity
+            false, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            bogus // non-empty -> must revert per facet
+        );
+        vm.stopPrank();
+    }
+
+    function testCreateWithZeroTokenAddressReverts() public {
+        // No whitelist entry can exist for address(0), expect revert
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__CollectionNotWhitelisted.selector, address(0)));
+        market.createListing(
+            address(0), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
     // buyer not on whitelist cannot purchase when whitelist enabled
     function testWhitelistPreventsPurchase() public {
         _whitelistCollectionAndApproveERC721();

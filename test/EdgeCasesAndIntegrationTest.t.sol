@@ -55,6 +55,13 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         collections.addWhitelistedCollection(address(royaltyNFT));
     }
 
+    function testBuyNonexistentListingIdReverts() public {
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__NotListed.selector);
+        market.purchaseListing{value: 1 ether}(999_999, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+    }
+
     function testListingIdIncrements() public {
         _whitelistCollectionAndApproveERC721();
 
