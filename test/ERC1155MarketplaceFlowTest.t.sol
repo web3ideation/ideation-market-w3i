@@ -81,6 +81,32 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         assertEq(owner.balance - ownerBalBefore, 0.04 ether);
     }
 
+    function testERC1155BuyExactRemainingRemovesListing() public {
+        // List 10, partials enabled
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Buy 4, then buy remaining 6
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 4 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 4, address(0));
+
+        vm.deal(operator, 6 ether);
+        vm.prank(operator);
+        market.purchaseListing{value: 6 ether}(id, 6 ether, address(0), 6, address(0), 0, 0, 6, address(0));
+
+        // Listing removed
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     function testERC1155BuyingMoreThanListedReverts() public {
         vm.startPrank(owner);
         collections.addWhitelistedCollection(address(erc1155));

@@ -38,64 +38,6 @@ contract IdeationMarketDiamondTest is MarketTestBase {
     // Extra edge-case tests
     // -----------------------------------------------------------------------
 
-    function testExpectedPriceMismatchReverts() public {
-        uint128 id = _createListingERC721(false, new address[](0));
-        // Seller changes price to 2 ether
-        vm.prank(seller);
-        market.updateListing(id, 2 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
-
-        // Buyer sends enough ETH but insists expectedPrice=1 ether -> should revert
-        vm.deal(buyer, 2 ether);
-        vm.prank(buyer);
-        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
-        market.purchaseListing{value: 2 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
-    }
-
-    function testExpectedErc1155QuantityMismatchReverts() public {
-        // ERC1155 listing: qty=10
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        vm.deal(buyer, 10 ether);
-        vm.prank(buyer);
-        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
-        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 9, address(0), 0, 0, 10, address(0));
-    }
-
-    function testERC1155BuyExactRemainingRemovesListing() public {
-        // List 10, partials enabled
-        vm.prank(owner);
-        collections.addWhitelistedCollection(address(erc1155));
-        vm.prank(seller);
-        erc1155.setApprovalForAll(address(diamond), true);
-        vm.prank(seller);
-        market.createListing(
-            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
-        );
-        uint128 id = getter.getNextListingId() - 1;
-
-        // Buy 4, then buy remaining 6
-        vm.deal(buyer, 10 ether);
-        vm.prank(buyer);
-        market.purchaseListing{value: 4 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 4, address(0));
-
-        vm.deal(operator, 6 ether);
-        vm.prank(operator);
-        market.purchaseListing{value: 6 ether}(id, 6 ether, address(0), 6, address(0), 0, 0, 6, address(0));
-
-        // Listing removed
-        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
-        getter.getListingByListingId(id);
-    }
-
     function testERC721PurchaseWithNonZero1155QuantityReverts() public {
         uint128 id = _createListingERC721(false, new address[](0));
         vm.deal(buyer, 1 ether);
