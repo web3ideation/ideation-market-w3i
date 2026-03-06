@@ -125,6 +125,30 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    function testExactPaymentRequired() public {
+        uint128 id = _createListingERC721(false, new address[](0)); // price = 1 ETH
+
+        vm.deal(buyer, 3 ether);
+        uint256 buyerBalBefore = buyer.balance;
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+
+        // Non-custodial: exact payment required (no overpay)
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Atomic payments: seller gets 0.99 ETH, owner gets 0.01 ETH (1% fee)
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+
+        // Buyer spent exactly 1 ETH (no overpay mechanism)
+        uint256 buyerBalAfter = buyer.balance;
+        assertEq(buyerBalBefore - buyerBalAfter, 1 ether);
+
+        // Non-custodial: diamond holds no balance (atomic payments)
+        assertEq(address(diamond).balance, 0);
+    }
+
     // =========================================================================
     // Group 1: Mixed Currency Sequencing (2 tests)
     // =========================================================================

@@ -76,6 +76,28 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    // buyer on whitelist can purchase and listing is removed
+    function testWhitelistedBuyerPurchaseSuccess() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     // update keeps same listingId even with other activity in between
     function testUpdateKeepsListingId() public {
         _whitelistCollectionAndApproveERC721();

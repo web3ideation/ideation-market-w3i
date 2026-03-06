@@ -149,7 +149,7 @@ contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
     /* zero address input                                                     */
     /* --------------------------------------------------------------------- */
 
-    function testAddZeroAddress_Reverts() public {
+    function testCollectionWhitelistZeroAddressReverts() public {
         vm.startPrank(owner);
         vm.expectRevert(CollectionWhitelist__ZeroAddress.selector);
         collections.addWhitelistedCollection(address(0));

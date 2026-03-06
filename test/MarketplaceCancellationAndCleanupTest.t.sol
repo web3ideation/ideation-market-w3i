@@ -10,6 +10,58 @@ import {IdeationMarket__StillApproved, IdeationMarketFacet} from "../src/facets/
  * @notice Cancellation and cleanup lifecycle behavior for listings.
  */
 contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
+    function testSellerCancelAfterApprovalRevoked() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        vm.prank(seller);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testUpdateAfterCollectionDeWhitelistingCancels() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // De-whitelist the collection
+        vm.prank(owner);
+        collections.removeWhitelistedCollection(address(erc721));
+
+        // Calling updateListing should cancel and return (no revert)
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
+
+        // Listing is gone
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    function testActiveListingIdClearsAfterCancel() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create & cancel listing
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+        vm.prank(seller);
+        market.cancelListing(id);
+
+        // No active listing
+        assertEq(getter.getActiveListingIdByERC721(address(erc721), 1), 0);
+    }
+
     function testCleanListing721() public {
         uint128 id = _createListingERC721(false, new address[](0));
 

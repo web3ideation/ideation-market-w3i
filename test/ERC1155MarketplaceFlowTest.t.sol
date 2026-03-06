@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 import {
+    IdeationMarket__InvalidUnitPrice,
     IdeationMarket__InvalidPurchaseQuantity,
     IdeationMarket__PartialBuyNotPossible,
     IdeationMarketFacet
@@ -13,6 +14,32 @@ import {
  * @notice ERC1155-specific listing, update, purchase, and quantity rules.
  */
 contract ERC1155MarketplaceFlowTest is MarketTestBase {
+    function testInvalidUnitPriceOnCreateReverts() public {
+        // ERC1155 listing with qty=3, price=10 (not divisible) and partials enabled → revert
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__InvalidUnitPrice.selector);
+        market.createListing(
+            address(erc1155),
+            1,
+            seller,
+            10, // price
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            3, // quantity
+            false,
+            true, // partialBuyEnabled
+            new address[](0)
+        );
+        vm.stopPrank();
+    }
+
     function testERC1155PartialBuyHappyPath() public {
         // Whitelist & approve
         vm.prank(owner);
