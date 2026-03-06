@@ -62,6 +62,43 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         market.purchaseListing{value: 1 ether}(999_999, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
     }
 
+    function testRepurchaseAfterBuyReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Second attempt should revert since listing is gone
+        vm.deal(operator, 1 ether);
+        vm.prank(operator);
+        vm.expectRevert(IdeationMarket__NotListed.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+    }
+
+    function testNoOpUpdateKeepsValues() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+        Listing memory beforeL = getter.getListingByListingId(id);
+
+        vm.prank(seller);
+        market.updateListing(
+            id,
+            beforeL.price,
+            beforeL.currency,
+            beforeL.desiredTokenAddress,
+            beforeL.desiredTokenId,
+            beforeL.desiredErc1155Quantity,
+            beforeL.erc1155Quantity,
+            beforeL.buyerWhitelistEnabled,
+            beforeL.partialBuyEnabled,
+            new address[](0)
+        );
+
+        Listing memory afterL = getter.getListingByListingId(id);
+        assertEq(afterL.listingId, beforeL.listingId);
+        assertEq(afterL.price, beforeL.price);
+        assertEq(afterL.erc1155Quantity, beforeL.erc1155Quantity);
+    }
+
     function testExpectedPriceMismatchReverts() public {
         uint128 id = _createListingERC721(false, new address[](0));
 

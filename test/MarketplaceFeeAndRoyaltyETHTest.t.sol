@@ -9,6 +9,35 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
  * @notice ETH-path fee snapshots, fee boundaries, and ERC2981 royalty behavior.
  */
 contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
+    function testRoyaltyReceiverEqualsSeller() public {
+        MockERC721Royalty r = new MockERC721Royalty();
+        r.mint(seller, 1);
+        r.setRoyalty(seller, 10_000); // 10%
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Seller receives sale - fee (0.99), since royalty loops back to seller.
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+    }
+
     function testFeeRoyaltyRounding_TinyPrices() public {
         // innovationFee is 1% by default in your setup (1000/100_000)
         MockERC721Royalty r = new MockERC721Royalty();
@@ -128,6 +157,37 @@ contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
 
         // Non-custodial: diamond holds no balance
         assertEq(address(diamond).balance, 0);
+    }
+
+    function testRoyaltyEqualsPostFeeProceedsBoundary() public {
+        // fee = 1% (0.01 ETH), royalty = 99% (0.99 ETH) -> seller net 0
+        MockERC721Royalty r = new MockERC721Royalty();
+        r.mint(seller, 1);
+        r.setRoyalty(address(0xB0B), 99_000);
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        uint256 royaltyBalBefore = address(0xB0B).balance;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        assertEq(address(0xB0B).balance - royaltyBalBefore, 0.99 ether);
+        assertEq(seller.balance - sellerBalBefore, 0);
     }
 
     function testInnovationFeeUpdateSemantics() public {

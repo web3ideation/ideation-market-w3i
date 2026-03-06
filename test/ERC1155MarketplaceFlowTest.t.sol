@@ -14,6 +14,23 @@ import {
  * @notice ERC1155-specific listing, update, purchase, and quantity rules.
  */
 contract ERC1155MarketplaceFlowTest is MarketTestBase {
+    function testERC1155UpdateInvalidUnitPriceReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // 7 ether % 3 != 0 in wei -> MUST revert
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__InvalidUnitPrice.selector);
+        market.updateListing(id, 7 ether, address(0), address(0), 0, 0, 3, false, true, new address[](0));
+    }
+
     function testInvalidUnitPriceOnCreateReverts() public {
         // ERC1155 listing with qty=3, price=10 (not divisible) and partials enabled → revert
         vm.prank(owner);

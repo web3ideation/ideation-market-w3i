@@ -3,13 +3,39 @@ pragma solidity ^0.8.28;
 
 import "./MarketTestBase.t.sol";
 import {Getter__ListingNotFound} from "../src/facets/GetterFacet.sol";
-import {IdeationMarket__StillApproved, IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
+import {
+    IdeationMarket__StillApproved,
+    IdeationMarket__NotListed,
+    IdeationMarketFacet
+} from "../src/facets/IdeationMarketFacet.sol";
 
 /**
  * @title MarketplaceCancellationAndCleanupTest
  * @notice Cancellation and cleanup lifecycle behavior for listings.
  */
 contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
+    function testCancelNonexistentListingReverts() public {
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotListed.selector);
+        market.cancelListing(999_999);
+    }
+
+    function testDoubleCleanReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Revoke approval, clean once
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        vm.prank(operator);
+        market.cleanListing(id);
+
+        // Second clean should revert (listing gone)
+        vm.prank(operator);
+        vm.expectRevert(IdeationMarket__NotListed.selector);
+        market.cleanListing(id);
+    }
+
     function testSellerCancelAfterApprovalRevoked() public {
         uint128 id = _createListingERC721(false, new address[](0));
 

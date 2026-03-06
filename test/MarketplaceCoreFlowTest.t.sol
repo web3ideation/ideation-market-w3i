@@ -312,6 +312,14 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         assertEq(sellerBalanceAfter - sellerBalanceBefore, 0.99 ether);
     }
 
+    function testERC721PurchaseWithNonZero1155QuantityReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__InvalidPurchaseQuantity.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 1, address(0));
+    }
+
     function testUpdateListing() public {
         uint128 id = _createListingERC721(false, new address[](0));
 
@@ -339,6 +347,12 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.stopPrank();
 
         assertTrue(getter.isBuyerWhitelisted(id, buyer));
+    }
+
+    function testUpdateNonexistentListingReverts() public {
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotListed.selector);
+        market.updateListing(999_999, 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
     }
 
     function testCancelListing() public {
