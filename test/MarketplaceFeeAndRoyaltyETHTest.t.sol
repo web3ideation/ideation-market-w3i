@@ -9,6 +9,13 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
  * @notice ETH-path fee snapshots, fee boundaries, and ERC2981 royalty behavior.
  */
 contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
+    function testSetInnovationFeeOnlyOwner() public {
+        vm.startPrank(buyer);
+        vm.expectRevert("LibDiamond: Must be contract owner");
+        market.setInnovationFee(1234);
+        vm.stopPrank();
+    }
+
     function testRoyaltyReceiverEqualsSeller() public {
         MockERC721Royalty r = new MockERC721Royalty();
         r.mint(seller, 1);

@@ -132,6 +132,30 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 9, address(0), 0, 0, 10, address(0));
     }
 
+    function testExpectedDesiredFieldsMismatchReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0)); // price = 1 ether
+
+        vm.deal(buyer, 2 ether);
+
+        // 1) Mismatch expectedDesiredTokenAddress (non-swap listing has address(0)).
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0xBEEF), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        // 2) Mismatch expectedDesiredTokenId (non-swap listing has 0).
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 123, 0, 0, address(0));
+        vm.stopPrank();
+
+        // 3) Mismatch expectedDesiredErc1155Quantity (non-swap listing has 0).
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 1, 0, address(0));
+        vm.stopPrank();
+    }
+
     function testListingIdIncrements() public {
         _whitelistCollectionAndApproveERC721();
 

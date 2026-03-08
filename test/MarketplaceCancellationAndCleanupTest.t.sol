@@ -110,6 +110,31 @@ contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
         getter.getListingByListingId(id);
     }
 
+    function testCleanListingERC1155() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Revoke marketplace approval so cleanListing is allowed.
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        vm.startPrank(operator);
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceledDueToInvalidListing(id, address(erc1155), 1, seller, operator);
+        market.cleanListing(id);
+        vm.stopPrank();
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     function testCleanListing_WhileStillApproved_ERC721_Reverts() public {
         _whitelistCollectionAndApproveERC721();
         vm.prank(seller);
@@ -119,6 +144,26 @@ contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
         uint128 id = getter.getNextListingId() - 1;
 
         address rando = vm.addr(0xC1EA11);
+        vm.startPrank(rando);
+        vm.expectRevert(IdeationMarket__StillApproved.selector);
+        market.cleanListing(id);
+        vm.stopPrank();
+    }
+
+    function testCleanListing_WhileStillApproved_ERC1155_Reverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Still fully approved & whitelisted means cleanListing must revert.
+        address rando = vm.addr(0xC1EA12);
         vm.startPrank(rando);
         vm.expectRevert(IdeationMarket__StillApproved.selector);
         market.cleanListing(id);

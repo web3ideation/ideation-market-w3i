@@ -15,6 +15,76 @@ import "./MarketTestBase.t.sol";
  * - Loupe consistency for unknown selectors and post-cut facet visibility
  */
 contract LibDiamondEdgesTest is MarketTestBase {
+    function testLoupeSelectorsPerFacet() public view {
+        // ===== Market facet =====
+        address marketAddr = loupe.facetAddress(IdeationMarketFacet.createListing.selector);
+        assertTrue(marketAddr != address(0));
+
+        assertEq(loupe.facetAddress(IdeationMarketFacet.purchaseListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.cancelListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.updateListing.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.setInnovationFee.selector), marketAddr);
+        assertEq(loupe.facetAddress(IdeationMarketFacet.cleanListing.selector), marketAddr);
+
+        bytes4[] memory m = loupe.facetFunctionSelectors(marketAddr);
+        assertTrue(_hasSel(m, IdeationMarketFacet.createListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.purchaseListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.cancelListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.updateListing.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.setInnovationFee.selector));
+        assertTrue(_hasSel(m, IdeationMarketFacet.cleanListing.selector));
+
+        // ===== Ownership facet =====
+        address ownershipAddr = loupe.facetAddress(IERC173.owner.selector);
+        assertTrue(ownershipAddr != address(0));
+        assertEq(loupe.facetAddress(IERC173.transferOwnership.selector), ownershipAddr);
+        assertEq(loupe.facetAddress(OwnershipFacet.acceptOwnership.selector), ownershipAddr);
+        bytes4[] memory o = loupe.facetFunctionSelectors(ownershipAddr);
+        assertTrue(_hasSel(o, IERC173.owner.selector));
+        assertTrue(_hasSel(o, IERC173.transferOwnership.selector));
+        assertTrue(_hasSel(o, OwnershipFacet.acceptOwnership.selector));
+
+        // ===== Loupe facet =====
+        address loupeAddr = loupe.facetAddress(IDiamondLoupeFacet.facets.selector);
+        assertTrue(loupeAddr != address(0));
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetFunctionSelectors.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetAddresses.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IDiamondLoupeFacet.facetAddress.selector), loupeAddr);
+        assertEq(loupe.facetAddress(IERC165.supportsInterface.selector), loupeAddr);
+        bytes4[] memory l = loupe.facetFunctionSelectors(loupeAddr);
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facets.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetFunctionSelectors.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetAddresses.selector));
+        assertTrue(_hasSel(l, IDiamondLoupeFacet.facetAddress.selector));
+        assertTrue(_hasSel(l, IERC165.supportsInterface.selector));
+
+        // ===== Collection whitelist facet =====
+        address colAddr = loupe.facetAddress(CollectionWhitelistFacet.addWhitelistedCollection.selector);
+        assertTrue(colAddr != address(0));
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.removeWhitelistedCollection.selector), colAddr);
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.batchAddWhitelistedCollections.selector), colAddr);
+        assertEq(loupe.facetAddress(CollectionWhitelistFacet.batchRemoveWhitelistedCollections.selector), colAddr);
+
+        // ===== Buyer whitelist facet =====
+        address bwAddr = loupe.facetAddress(BuyerWhitelistFacet.addBuyerWhitelistAddresses.selector);
+        assertTrue(bwAddr != address(0));
+        assertEq(loupe.facetAddress(BuyerWhitelistFacet.removeBuyerWhitelistAddresses.selector), bwAddr);
+
+        // ===== Getter facet =====
+        address getterAddr = loupe.facetAddress(GetterFacet.getNextListingId.selector);
+        assertTrue(getterAddr != address(0));
+        assertEq(loupe.facetAddress(GetterFacet.getActiveListingIdByERC721.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getListingByListingId.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getBalance.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getInnovationFee.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.isCollectionWhitelisted.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getWhitelistedCollections.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getContractOwner.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.isBuyerWhitelisted.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getBuyerWhitelistMaxBatchSize.selector), getterAddr);
+        assertEq(loupe.facetAddress(GetterFacet.getPendingOwner.selector), getterAddr);
+    }
+
     /* ------------------------------------------------------------------------
          add → replace → remove a custom selector (dummyFunction())
        uses VersionFacetV1 / VersionFacetV2 already provided by MarketTestBase
@@ -320,6 +390,9 @@ contract LibDiamondEdgesTest is MarketTestBase {
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC721).interfaceId));
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC1155).interfaceId));
         assertFalse(IERC165(address(diamond)).supportsInterface(type(IERC2981).interfaceId));
+
+        // Arbitrary unknown interface id must also be reported as unsupported.
+        assertFalse(IERC165(address(diamond)).supportsInterface(0x12345678));
     }
 
     /**

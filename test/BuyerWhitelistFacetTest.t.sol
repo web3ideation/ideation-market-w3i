@@ -128,6 +128,23 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         assertTrue(getter.isBuyerWhitelisted(listingId, allow[0]));
     }
 
+    function testBuyerWhitelistAddDuplicatesIdempotent() public {
+        // Create listing with whitelist enabled and one buyer.
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+        uint128 id = _createListingERC721(true, allowed);
+
+        // Add [buyer, buyer] again; should not revert and remain whitelisted.
+        address[] memory dups = new address[](2);
+        dups[0] = buyer;
+        dups[1] = buyer;
+
+        vm.prank(seller);
+        buyers.addBuyerWhitelistAddresses(id, dups);
+
+        assertTrue(getter.isBuyerWhitelisted(id, buyer));
+    }
+
     function testBuyerWhitelist_AddWhileDisabled_SucceedsAndStores() public {
         _whitelistDefaultMocks();
 

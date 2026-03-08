@@ -18,6 +18,77 @@ import {
  * @dev Keep only core happy/revert flow coverage here; specialized edge/security/integration cases stay in topical suites.
  */
 contract MarketplaceCoreFlowTest is MarketTestBase {
+    // create with whitelist enabled and zero address should revert via BuyerWhitelistFacet
+    function testCreateListingWhitelistWithZeroAddressReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory allowed = new address[](1);
+        allowed[0] = address(0);
+
+        vm.startPrank(seller);
+        vm.expectRevert(BuyerWhitelist__ZeroAddress.selector);
+        market.createListing(
+            address(erc721),
+            1,
+            address(0), // erc1155Holder
+            1 ether,
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0, // desiredTokenId
+            0, // desiredErc1155Quantity
+            0, // erc1155Quantity
+            true, // buyerWhitelistEnabled
+            false, // partialBuyEnabled
+            allowed
+        );
+        vm.stopPrank();
+    }
+
+    // update enabling whitelist with zero address should revert via BuyerWhitelistFacet
+    function testUpdateListingWhitelistWithZeroAddressReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing with whitelist disabled
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        address[] memory invalid = new address[](1);
+        invalid[0] = address(0);
+
+        vm.startPrank(seller);
+        vm.expectRevert(BuyerWhitelist__ZeroAddress.selector);
+        market.updateListing(
+            id,
+            1 ether,
+            address(0), // newCurrency
+            address(0), // newDesiredTokenAddress
+            0,
+            0,
+            0, // newErc1155Quantity
+            true, // enable whitelist
+            false,
+            invalid
+        );
+        vm.stopPrank();
+    }
+
+    function testUpdateWhitelistDisabledWithAddressesReverts() public {
+        // Create a simple ERC721 listing with whitelist disabled.
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Attempt update with whitelist still disabled but a non-empty list.
+        address[] memory bogus = new address[](1);
+        bogus[0] = buyer;
+
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__WhitelistDisabled.selector);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, false, false, bogus);
+        vm.stopPrank();
+    }
+
     // whitelist of exactly MAX_BATCH succeeds on create; >MAX_BATCH reverts
     function testCreateWithWhitelistExactlyMaxBatchSucceeds() public {
         _whitelistCollectionAndApproveERC721();
@@ -51,6 +122,53 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         market.createListing(
             address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, tooMany
         );
+        vm.stopPrank();
+    }
+
+    // enabling whitelist on update with exactly MAX_BATCH succeeds
+    function testUpdateWhitelistExactlyMaxBatchSucceeds() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing with whitelist disabled
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Enable whitelist with exactly MAX_BATCH addresses
+        address[] memory buyersList = new address[](MAX_BATCH);
+        for (uint256 i = 0; i < buyersList.length; i++) {
+            buyersList[i] = vm.addr(30_000 + i);
+        }
+
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, true, false, buyersList);
+
+        // Spot-check first/last entries to prove batch application happened.
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[0]));
+        assertTrue(getter.isBuyerWhitelisted(id, buyersList[buyersList.length - 1]));
+    }
+
+    // enabling whitelist on update with >MAX_BATCH reverts
+    function testUpdateWhitelistOverMaxBatchReverts() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create listing with whitelist disabled
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        address[] memory tooMany = new address[](uint256(MAX_BATCH) + 1);
+        for (uint256 i = 0; i < tooMany.length; i++) {
+            tooMany[i] = vm.addr(31_000 + i);
+        }
+
+        vm.startPrank(seller);
+        vm.expectRevert(abi.encodeWithSelector(BuyerWhitelist__ExceedsMaxBatchSize.selector, tooMany.length));
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, true, false, tooMany);
         vm.stopPrank();
     }
 
@@ -187,6 +305,27 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         assertEq(erc721.ownerOf(1), buyer);
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
         getter.getListingByListingId(id);
+    }
+
+    // after whitelist removal, that buyer can no longer purchase
+    function testPurchaseRevertsAfterWhitelistRemoval() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+        uint128 id = _createListingERC721(true, allowed);
+
+        // Remove buyer from whitelist
+        address[] memory one = new address[](1);
+        one[0] = buyer;
+        vm.prank(seller);
+        buyers.removeBuyerWhitelistAddresses(id, one);
+        assertFalse(getter.isBuyerWhitelisted(id, buyer));
+
+        // Attempt purchase -> revert BuyerNotWhitelisted
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, buyer));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
     }
 
     // update keeps same listingId even with other activity in between
