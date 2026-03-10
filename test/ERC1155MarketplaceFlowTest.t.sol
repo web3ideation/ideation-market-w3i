@@ -6,6 +6,7 @@ import {
     IdeationMarket__InvalidUnitPrice,
     IdeationMarket__InvalidPurchaseQuantity,
     IdeationMarket__PartialBuyNotPossible,
+    IdeationMarket__WrongQuantityParameter,
     IdeationMarketFacet
 } from "../src/facets/IdeationMarketFacet.sol";
 
@@ -14,6 +15,59 @@ import {
  * @notice ERC1155-specific listing, update, purchase, and quantity rules.
  */
 contract ERC1155MarketplaceFlowTest is MarketTestBase {
+    /// Listing ERC1155 more than holder's balance should revert with SellerInsufficientTokenBalance.
+    function testERC1155CreateInsufficientBalanceReverts() public {
+        // Mint only 5 units of a fresh tokenId
+        uint256 tokenId = 99;
+        erc1155.mint(seller, tokenId, 5);
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IdeationMarket__SellerInsufficientTokenBalance.selector,
+                10, // required
+                5 // available
+            )
+        );
+        market.createListing(
+            address(erc1155),
+            tokenId,
+            seller,
+            1 ether,
+            address(0), // currency
+            address(0), // desiredTokenAddress
+            0,
+            0,
+            10, // quantity > balance
+            false,
+            false,
+            new address[](0)
+        );
+    }
+
+    /// ERC1155 listing without marketplace approval must revert NotApprovedForMarketplace.
+    function testERC1155CreateWithoutMarketplaceApprovalReverts() public {
+        uint256 tokenId = 100;
+        erc1155.mint(seller, tokenId, 5);
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+
+        // Seller intentionally does not call setApprovalForAll(address(diamond), true)
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.createListing(
+            address(erc1155), tokenId, seller, 1 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
+    }
+
     function testTogglePartialBuyEnabledWithoutPriceChange() public {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(erc1155));
@@ -39,6 +93,116 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         assertEq(l.price, 10 ether);
         assertFalse(l.partialBuyEnabled);
         assertEq(l.erc1155Quantity, 10);
+    }
+
+    /// Updating partial buy on a too-small ERC1155 quantity must revert.
+    function testUpdatePartialBuyWithSmallQuantityReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 203;
+        erc1155.mint(seller, tokenId, 1);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tokenId, seller, 1 ether, address(0), address(0), 0, 0, 1, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__PartialBuyNotPossible.selector);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 1, false, true, new address[](0));
+    }
+
+    /// Updating an ERC721 listing to ERC1155 semantics (newErc1155Quantity > 0) must revert.
+    function testUpdateFlipERC721ToERC1155Reverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0));
+    }
+
+    /// Updating ERC1155 listing with revoked marketplace approval must revert.
+    function testERC1155UpdateApprovalRevokedReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.updateListing(id, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0));
+    }
+
+    /// Updating quantity greater than seller's ERC1155 balance must revert.
+    function testERC1155UpdateBalanceTooLowReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 202;
+        erc1155.mint(seller, tokenId, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, buyer, tokenId, 3, "");
+
+        vm.prank(seller);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerInsufficientTokenBalance.selector, 5, 2));
+        market.updateListing(id, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0));
+    }
+
+    /// Updating an ERC1155 listing to ERC721 semantics (newErc1155Quantity == 0) must revert.
+    function testUpdateFlipERC1155ToERC721Reverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 200;
+        erc1155.mint(seller, tokenId, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__WrongQuantityParameter.selector);
+        market.updateListing(id, 5 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
+    }
+
+    /// Only seller or its approved operator may update an ERC1155 listing.
+    function testERC1155UpdateUnauthorizedOperatorReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 201;
+        erc1155.mint(seller, tokenId, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), tokenId, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
+        market.updateListing(id, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0));
     }
 
     function testERC1155HolderDifferentFromSellerHappyPath() public {
@@ -76,6 +240,84 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         assertEq(operator.balance - operatorBefore, 9.9 ether);
         assertEq(owner.balance - ownerBefore, 0.1 ether);
         assertEq(seller.balance, 0);
+    }
+
+    /// After listing an ERC1155, if seller's balance drops below listed quantity, purchase reverts.
+    function testERC1155PurchaseSellerBalanceDroppedReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 400;
+        erc1155.mint(seller, tokenId, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            tokenId,
+            seller,
+            10 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            10,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Seller transfers away 5 units leaving 5 (less than listed 10).
+        vm.prank(seller);
+        erc1155.safeTransferFrom(seller, buyer, tokenId, 5, "");
+
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IdeationMarket__SellerInsufficientTokenBalance.selector,
+                10, // required
+                5 // available
+            )
+        );
+        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 10, address(0));
+    }
+
+    /// If marketplace approval is revoked for an ERC1155 listing, purchase reverts.
+    function testERC1155PurchaseMarketplaceApprovalRevokedReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 401;
+        erc1155.mint(seller, tokenId, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155),
+            tokenId,
+            seller,
+            10 ether,
+            address(0),
+            address(0),
+            0,
+            0,
+            10,
+            false,
+            false,
+            new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // seller revokes approval
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), false);
+
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 10, address(0));
     }
 
     function testERC1155OperatorNotApprovedReverts_thenSucceedsAfterApproval() public {
@@ -217,6 +459,23 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    /// Partial buys cannot be enabled when quantity <= 1 on ERC1155 create.
+    function testPartialBuyWithQuantityOneReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        uint256 tokenId = 101;
+        erc1155.mint(seller, tokenId, 1);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__PartialBuyNotPossible.selector);
+        market.createListing(
+            address(erc1155), tokenId, seller, 1 ether, address(0), address(0), 0, 0, 1, false, true, new address[](0)
+        );
+    }
+
     function testERC1155CreateUnauthorizedListerReverts() public {
         // Whitelist the collection
         vm.prank(owner);
@@ -276,6 +535,29 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         // Atomic payment: seller gets 3.96 ETH, owner gets 0.04 ETH (1% fee)
         assertEq(seller.balance - sellerBalBefore, 3.96 ether);
         assertEq(owner.balance - ownerBalBefore, 0.04 ether);
+    }
+
+    function testERC1155_PartialBuy_UnderpayReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(seller, 11, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // qty=10, price=10 ETH -> unit=1 ETH; partials enabled
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 11, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 10 ether);
+        vm.startPrank(buyer);
+        // Buy 4 units but send 3.9 ETH -> PriceNotMet(listingId, 4, 3.9)
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__PriceNotMet.selector, id, 4 ether, 3.9 ether));
+        market.purchaseListing{value: 3.9 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 4, address(0));
+        vm.stopPrank();
     }
 
     // ERC-1155 partials: 10 units at 1e18 each; buy 3, then 2; check exact residual price/qty and proceeds/fees.

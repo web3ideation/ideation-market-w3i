@@ -197,6 +197,140 @@ contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
         assertEq(seller.balance - sellerBalBefore, 0);
     }
 
+    /// Purchase uses the fee rate frozen at listing time, not the current innovationFee.
+    function testPurchaseFeeSnapshotOldFee() public {
+        _whitelistCollectionAndApproveERC721();
+        // Create listing with initial fee of 1% (1000)
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Owner raises fee to 2.5%
+        vm.prank(owner);
+        market.setInnovationFee(2500);
+
+        // Purchase: seller must still receive 0.99, owner 0.01
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+
+        uint32 feeSnap = getter.getListingByListingId(id).feeRate; // should be old fee (e.g. 1000)
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingPurchased(
+            id, address(erc721), 1, 0, false, 1 ether, address(0), feeSnap, seller, buyer, address(0), 0, 0
+        );
+
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        vm.stopPrank();
+
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+    }
+
+    // Misconfigured fee (>100%) should make purchase impossible.
+    // Underflow in `sellerProceeds = purchasePrice - innovationProceeds` triggers
+    // Solidity 0.8 arithmetic revert.
+    function testPathologicalFeeCausesRevert() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(owner);
+        market.setInnovationFee(200_000); // 200% with denominator 100_000
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        vm.expectRevert(stdError.arithmeticError); // forge-std
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+    }
+
+    function testFeeExactly100Percent_SucceedsSellerGetsZero() public {
+        _whitelistCollectionAndApproveERC721();
+
+        vm.prank(owner);
+        market.setInnovationFee(100_000); // exactly 100%
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Seller gets 0, owner gets full 1 ETH (no royalty in this test)
+        assertEq(seller.balance - sellerBalBefore, 0);
+        assertEq(owner.balance - ownerBalBefore, 1 ether);
+
+        // Listing is gone and ownership transferred
+        assertEq(erc721.ownerOf(1), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// ERC2981 token returning zero royalty should succeed and pay only fee.
+    function testERC2981ZeroRoyalty() public {
+        MockERC721Royalty token = new MockERC721Royalty();
+        token.mint(seller, 1);
+        token.setRoyalty(address(0xBEEF), 0); // 0%
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(token));
+        vm.prank(seller);
+        token.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(token), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        uint256 royaltyBalBefore = address(0xBEEF).balance;
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Seller 0.99, owner 0.01, royaltyReceiver 0
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        assertEq(address(0xBEEF).balance - royaltyBalBefore, 0);
+    }
+
+    /// ERC2981 token that reverts royaltyInfo must cause purchase to revert.
+    function testERC2981RevertingRoyaltyRevertsPurchase() public {
+        MockERC721RoyaltyReverting r = new MockERC721RoyaltyReverting();
+        r.mint(seller, 1);
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        vm.expectRevert(); // royaltyInfo reverts inside purchase
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+    }
+
     function testInnovationFeeUpdateSemantics() public {
         _whitelistCollectionAndApproveERC721();
 

@@ -97,6 +97,19 @@ contract MarketplaceAuthorizationTest is MarketTestBase {
         );
     }
 
+    // unauthorized third party cannot list someone else's ERC721
+    function testERC721CreateUnauthorizedListerReverts() public {
+        // whitelist and approve the ERC721 for the seller
+        _whitelistCollectionAndApproveERC721();
+
+        // buyer attempts to list seller's token
+        vm.prank(buyer);
+        vm.expectRevert(IdeationMarket__NotAuthorizedOperator.selector);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
     // purchase fails if approval revoked between listing and purchase
     function testPurchaseRevertsIfApprovalRevokedBeforeBuy() public {
         uint128 id = _createListingERC721(false, new address[](0));
@@ -110,5 +123,17 @@ contract MarketplaceAuthorizationTest is MarketTestBase {
         vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
         market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
+    }
+
+    // update fails if approval revoked between listing and update
+    function testERC721UpdateApprovalRevokedReverts() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.prank(seller);
+        erc721.approve(address(0), 1);
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotApprovedForMarketplace.selector);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0));
     }
 }

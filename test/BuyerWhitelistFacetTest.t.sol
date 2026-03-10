@@ -21,6 +21,14 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         buyers.addBuyerWhitelistAddresses(type(uint128).max, addrs);
     }
 
+    function testBuyerWhitelistRemoveNonexistentListingReverts() public {
+        address[] memory list = new address[](1);
+        list[0] = buyer;
+        vm.prank(seller);
+        vm.expectRevert(BuyerWhitelist__ListingDoesNotExist.selector);
+        buyers.removeBuyerWhitelistAddresses(123456, list);
+    }
+
     function testBuyerWhitelist_AddZeroAddressReverts() public {
         _whitelistDefaultMocks();
         uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);
@@ -143,6 +151,42 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         buyers.addBuyerWhitelistAddresses(id, dups);
 
         assertTrue(getter.isBuyerWhitelisted(id, buyer));
+    }
+
+    /// Removing an address that isn't in the whitelist should not revert.
+    function testBuyerWhitelistRemoveNonWhitelistedNoRevert() public {
+        address[] memory allowed = new address[](1);
+        allowed[0] = buyer;
+        uint128 id = _createListingERC721(true, allowed);
+
+        // operator is not on the list
+        address[] memory toRemove = new address[](1);
+        toRemove[0] = operator;
+
+        vm.prank(seller);
+        buyers.removeBuyerWhitelistAddresses(id, toRemove);
+        assertFalse(getter.isBuyerWhitelisted(id, operator));
+    }
+
+    /// isBuyerWhitelisted should revert on invalid listing id.
+    function testIsBuyerWhitelistedInvalidListingIdReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, 999999));
+        getter.isBuyerWhitelisted(999999, buyer);
+    }
+
+    /// Adding/removing whitelist entries while whitelist is disabled must not revert.
+    function testBuyerWhitelistAddRemoveWhenDisabledAllowed() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+        address[] memory arr = new address[](1);
+        arr[0] = buyer;
+        // Add a buyer even though whitelist is disabled
+        vm.prank(seller);
+        buyers.addBuyerWhitelistAddresses(id, arr);
+        // Remove the same buyer
+        vm.prank(seller);
+        buyers.removeBuyerWhitelistAddresses(id, arr);
+        // Buyer should remain not whitelisted
+        assertFalse(getter.isBuyerWhitelisted(id, buyer));
     }
 
     function testBuyerWhitelist_AddWhileDisabled_SucceedsAndStores() public {

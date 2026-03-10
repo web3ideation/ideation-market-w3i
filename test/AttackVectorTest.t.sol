@@ -734,6 +734,34 @@ contract AttackVectorTest is MarketTestBase {
         assertEq(owner.balance + seller.balance, ownerBalBefore + sellerBalBefore + 5 ether, "payment mismatch");
     }
 
+    /// @notice Royalty receiver set to address(0) must not burn funds and should only charge marketplace fee.
+    function testRoyaltyReceiverZeroAddress() public {
+        MockERC721Royalty r = new MockERC721Royalty();
+        r.mint(seller, 1);
+        r.setRoyalty(address(0), 10_000); // 10%
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // When royalty receiver is address(0), royalty is skipped entirely.
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        assertEq(address(diamond).balance, 0); // non-custodial
+    }
+
     // =========================================================================
     // TOKEN BURN ATTACK VECTORS
     // =========================================================================
@@ -832,6 +860,22 @@ contract AttackVectorTest is MarketTestBase {
         erc721.transferFrom(seller, address(0), 1);
 
         // Buyer attempts purchase → must revert with SellerNotTokenOwner(listingId)
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerNotTokenOwner.selector, id));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    function testPurchaseRevertsIfOwnerChangedOffMarket() public {
+        // Create a normal ERC721 listing (price = 1 ETH)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // Off-market transfer: seller moves token #1 to operator
+        vm.prank(seller);
+        erc721.transferFrom(seller, operator, 1);
+
+        // Buyer has enough ETH but purchase must revert because stored seller no longer owns the token
         vm.deal(buyer, 1 ether);
         vm.startPrank(buyer);
         vm.expectRevert(abi.encodeWithSelector(IdeationMarket__SellerNotTokenOwner.selector, id));

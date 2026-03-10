@@ -172,6 +172,16 @@ contract CollectionWhitelistFacetEdgeTest is MarketTestBase {
         assertFalse(getter.isCollectionWhitelisted(address(a)));
     }
 
+    /// batchAddWhitelistedCollections must revert if any entry is zero address.
+    function testBatchAddWhitelistedCollectionWithZeroReverts() public {
+        address[] memory arr = new address[](2);
+        arr[0] = address(erc721);
+        arr[1] = address(0);
+        vm.prank(owner);
+        vm.expectRevert(CollectionWhitelist__ZeroAddress.selector);
+        collections.batchAddWhitelistedCollections(arr);
+    }
+
     /* --------------------------------------------------------------------- */
     /* enumeration signal (getWhitelistedCollections)                         */
     /* --------------------------------------------------------------------- */

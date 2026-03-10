@@ -18,6 +18,38 @@ import {
  * @dev Keep only core happy/revert flow coverage here; specialized edge/security/integration cases stay in topical suites.
  */
 contract MarketplaceCoreFlowTest is MarketTestBase {
+    function testCreateListingWithNonNFTContracQt0tReverts() public {
+        NotAnNFT bad = new NotAnNFT();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(bad));
+
+        // Note: the whitelist does NOT enforce interfaces-you can whitelist any address.
+        // The revert happens inside createListing's interface check:
+        // with erc1155Quantity == 0 it requires ERC721 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
+        market.createListing(
+            address(bad), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+    }
+
+    function testCreateListingWithNonNFTContractQ9Reverts() public {
+        NotAnNFT bad = new NotAnNFT();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(bad));
+
+        // Note: the whitelist does NOT enforce interfaces-you can whitelist any address.
+        // The revert happens inside createListing's interface check:
+        // with erc1155Quantity == 9 it requires ERC1155 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
+
+        vm.prank(seller);
+        vm.expectRevert(IdeationMarket__NotSupportedTokenStandard.selector);
+        market.createListing(
+            address(bad), 1, address(0), 1 ether, address(0), address(0), 0, 0, 9, false, false, new address[](0)
+        );
+    }
+
     function testPurchaseRevertsWhenBuyerIsSeller() public {
         // seller lists ERC721 (price = 1 ETH)
         uint128 id = _createListingERC721(false, new address[](0));
@@ -202,6 +234,25 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         assertFalse(getter.isBuyerWhitelisted(id, seller));
     }
 
+    // duplicates in create whitelist are idempotent and must not revert
+    function testWhitelistDuplicatesOnCreateIdempotent() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory allowed = new address[](3);
+        allowed[0] = buyer;
+        allowed[1] = buyer;
+        allowed[2] = operator;
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed
+        );
+
+        uint128 id = getter.getNextListingId() - 1;
+        assertTrue(getter.isBuyerWhitelisted(id, buyer));
+        assertTrue(getter.isBuyerWhitelisted(id, operator));
+    }
+
     // update can enable whitelist with an empty list and should not auto-whitelist anyone
     function testUpdateEnableWhitelistWithEmptyArrayOK() public {
         uint128 id = _createListingERC721(false, new address[](0));
@@ -215,6 +266,22 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         // Sanity: no addresses are whitelisted yet
         assertFalse(getter.isBuyerWhitelisted(id, buyer));
         assertFalse(getter.isBuyerWhitelisted(id, seller));
+    }
+
+    // Duplicates in update whitelist input are idempotent and must not revert.
+    function testWhitelistDuplicatesOnUpdateIdempotent() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        address[] memory allowed = new address[](3);
+        allowed[0] = buyer;
+        allowed[1] = buyer;
+        allowed[2] = operator;
+
+        vm.prank(seller);
+        market.updateListing(id, 1 ether, address(0), address(0), 0, 0, 0, true, false, allowed);
+
+        assertTrue(getter.isBuyerWhitelisted(id, buyer));
+        assertTrue(getter.isBuyerWhitelisted(id, operator));
     }
 
     // disabling whitelist on update should re-open purchase access
