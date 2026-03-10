@@ -261,4 +261,32 @@ contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
         market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
         vm.stopPrank();
     }
+
+    /// Royalty edge: high innovation fee + royalty makes royalty exceed post-fee proceeds.
+    function testRoyaltyEdge_HighFeePlusRoyaltyExceedsProceeds() public {
+        // 50% royalty with a 60% fee means royalty exceeds remaining proceeds on a 1 ETH sale.
+        MockERC721Royalty r = new MockERC721Royalty();
+        r.mint(seller, 1);
+        r.setRoyalty(address(0xB0B), 50_000);
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+        vm.prank(seller);
+        r.approve(address(diamond), 1);
+
+        vm.prank(owner);
+        market.setInnovationFee(60_000);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.deal(buyer, 2 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(IdeationMarket__RoyaltyFeeExceedsProceeds.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
 }

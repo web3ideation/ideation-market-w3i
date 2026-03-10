@@ -18,6 +18,18 @@ import {
  * @dev Keep only core happy/revert flow coverage here; specialized edge/security/integration cases stay in topical suites.
  */
 contract MarketplaceCoreFlowTest is MarketTestBase {
+    function testPurchaseRevertsWhenBuyerIsSeller() public {
+        // seller lists ERC721 (price = 1 ETH)
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        // seller tries to buy own listing -> must revert
+        vm.deal(seller, 1 ether);
+        vm.startPrank(seller);
+        vm.expectRevert(IdeationMarket__SameBuyerAsSeller.selector);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
     // create with whitelist enabled and zero address should revert via BuyerWhitelistFacet
     function testCreateListingWhitelistWithZeroAddressReverts() public {
         _whitelistCollectionAndApproveERC721();

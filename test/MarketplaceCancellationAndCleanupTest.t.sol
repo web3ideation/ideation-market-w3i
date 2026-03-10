@@ -14,6 +14,40 @@ import {
  * @notice Cancellation and cleanup lifecycle behavior for listings.
  */
 contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
+    function testCancelListingByERC721ApprovedOperator() public {
+        // Whitelist ERC721 collection
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc721));
+
+        // Seller: grant blanket approval to marketplace (so createListing passes)
+        vm.prank(seller);
+        erc721.setApprovalForAll(address(diamond), true);
+
+        // Seller: set per-token approval to 'operator' (this is the authority we want to test)
+        vm.prank(seller);
+        erc721.approve(operator, 1);
+
+        // Create listing for token 1
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Operator cancels via getApproved(tokenId) path
+        vm.startPrank(operator);
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, operator);
+
+        market.cancelListing(id);
+        vm.stopPrank();
+
+        // Listing is removed
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     function testCancelNonexistentListingReverts() public {
         vm.prank(seller);
         vm.expectRevert(IdeationMarket__NotListed.selector);

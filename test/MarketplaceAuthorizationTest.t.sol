@@ -8,6 +8,44 @@ import "./MarketTestBase.t.sol";
  * @notice Authorization and approval invariants across create/update/purchase/cancel flows.
  */
 contract MarketplaceAuthorizationTest is MarketTestBase {
+    /// ERC-721 by operator: operator creates listing; purchase succeeds.
+    function testERC721OperatorListsAndPurchaseSucceeds_AfterFix() public {
+        MockERC721 x = new MockERC721();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(x));
+
+        // holder owns token; operator is approved-for-all
+        address holder = vm.addr(0xAAAA);
+        x.mint(holder, 9);
+        vm.prank(holder);
+        x.setApprovalForAll(operator, true);
+
+        // Marketplace approval by holder
+        vm.prank(holder);
+        x.approve(address(diamond), 9);
+
+        // Operator creates listing on behalf of holder
+        vm.prank(operator);
+        market.createListing(
+            address(x), 9, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Confirm listing seller is the holder (post-fix behavior)
+        Listing memory L = getter.getListingByListingId(id);
+        assertEq(L.seller, holder);
+
+        // Buyer purchases successfully
+        uint256 balBefore = holder.balance;
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Token moved to buyer; proceeds to holder
+        assertEq(x.ownerOf(9), buyer);
+        assertEq(holder.balance - balBefore, 0.99 ether);
+    }
+
     // setApprovalForAll (without per-token approval) allows ERC721 listing creation
     function testERC721SetApprovalForAllCreateListing() public {
         vm.prank(owner);
