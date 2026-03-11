@@ -250,6 +250,63 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
         assertEq(address(diamond).balance, 0);
     }
 
+    function testInvariant_DiamondBalanceAlwaysZero_NonCustodial() public {
+        // In non-custodial model, all payments are atomic.
+        // Diamond NEVER holds funds; balance must be 0 after any purchase.
+
+        // 1) Simple ERC721 sale: verify atomic payments
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id1 = getter.getNextListingId() - 1;
+
+        uint256 sellerBalBefore = seller.balance;
+        uint256 ownerBalBefore = owner.balance;
+        vm.deal(buyer, 1 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id1, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Verify atomic payments: seller got 0.99 ETH, owner got 0.01 ETH
+        assertEq(seller.balance - sellerBalBefore, 0.99 ether);
+        assertEq(owner.balance - ownerBalBefore, 0.01 ether);
+        // Diamond holds NOTHING (non-custodial)
+        assertEq(address(diamond).balance, 0);
+
+        // 2) Royalty sale at 1.5 ETH, 10% royalty to R
+        MockERC721Royalty r = new MockERC721Royalty();
+        address R = vm.addr(0xB0B0);
+        r.mint(seller, 88);
+        r.setRoyalty(R, 10_000); // 10%
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(r));
+        vm.prank(seller);
+        r.approve(address(diamond), 88);
+
+        vm.prank(seller);
+        market.createListing(
+            address(r), 88, address(0), 1.5 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id2 = getter.getNextListingId() - 1;
+
+        address richBuyer = vm.addr(0xCAFE);
+        uint256 sellerBalBefore2 = seller.balance;
+        uint256 ownerBalBefore2 = owner.balance;
+        uint256 royaltyBalBefore = R.balance;
+        vm.deal(richBuyer, 1.5 ether);
+        vm.prank(richBuyer);
+        market.purchaseListing{value: 1.5 ether}(id2, 1.5 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+
+        // Verify atomic payments: owner fee, royalty, seller proceeds
+        assertEq(owner.balance - ownerBalBefore2, 0.015 ether); // 1%
+        assertEq(R.balance - royaltyBalBefore, 0.15 ether); // 10%
+        assertEq(seller.balance - sellerBalBefore2, 1.335 ether); // 89%
+        // Diamond STILL holds NOTHING
+        assertEq(address(diamond).balance, 0);
+    }
+
     // =========================================================================
     // Group 1: Mixed Currency Sequencing (2 tests)
     // =========================================================================

@@ -116,6 +116,63 @@ contract BuyerWhitelistFacetTest is MarketTestBase {
         buyers.removeBuyerWhitelistAddresses(listingId, addrs);
     }
 
+    function testBuyerWhitelist_AddRemove_ByERC721TokenApprovedOperator() public {
+        _whitelistCollectionAndApproveERC721();
+
+        // Create whitelist-enabled listing (seed with buyer)
+        address[] memory allow = new address[](1);
+        allow[0] = buyer;
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allow
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Approve 'operator' for that ERC721 token
+        vm.prank(seller);
+        erc721.approve(operator, 1);
+
+        // operator can add/remove entries
+        address who = vm.addr(123);
+        address[] memory arr = new address[](1);
+        arr[0] = who;
+
+        vm.prank(operator);
+        buyers.addBuyerWhitelistAddresses(id, arr);
+        assertTrue(getter.isBuyerWhitelisted(id, who));
+
+        vm.prank(operator);
+        buyers.removeBuyerWhitelistAddresses(id, arr);
+        assertFalse(getter.isBuyerWhitelisted(id, who));
+    }
+
+    function testBuyerWhitelist_AddRemove_ByERC721OperatorForAll() public {
+        _whitelistCollectionAndApproveERC721();
+
+        address[] memory allow = new address[](1);
+        allow[0] = buyer;
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, allow
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc721.setApprovalForAll(operator, true);
+
+        address who = vm.addr(456);
+        address[] memory arr = new address[](1);
+        arr[0] = who;
+
+        vm.prank(operator);
+        buyers.addBuyerWhitelistAddresses(id, arr);
+        assertTrue(getter.isBuyerWhitelisted(id, who));
+
+        vm.prank(operator);
+        buyers.removeBuyerWhitelistAddresses(id, arr);
+        assertFalse(getter.isBuyerWhitelisted(id, who));
+    }
+
     function testBuyerWhitelist_AddRemove_ByERC1155OperatorForAll() public {
         _whitelistDefaultMocks();
         uint128 listingId = listERC1155WithOperatorAndWhitelistEnabled(1, 6, 10 ether);

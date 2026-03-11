@@ -702,6 +702,58 @@ contract AttackVectorTest is MarketTestBase {
         getter.getListingByListingId(id);
     }
 
+    /// @notice Contract buyer without ERC721Receiver must fail strict ERC721 delivery.
+    function testERC721BuyerContractWithoutReceiverInterfaceReverts_Strict() public {
+        StrictERC721 strict721 = new StrictERC721();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(strict721));
+
+        strict721.mint(seller, 1);
+        vm.prank(seller);
+        strict721.approve(address(diamond), 1);
+
+        vm.prank(seller);
+        market.createListing(
+            address(strict721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        NonReceiver non = new NonReceiver();
+        vm.deal(address(non), 2 ether);
+
+        vm.startPrank(address(non));
+        vm.expectRevert();
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+    }
+
+    /// @notice Contract buyer without ERC1155Receiver must fail strict ERC1155 delivery.
+    function testERC1155BuyerContractWithoutReceiverInterfaceReverts_Strict() public {
+        StrictERC1155 strict1155 = new StrictERC1155();
+
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(strict1155));
+
+        strict1155.mint(seller, 1, 10);
+        vm.prank(seller);
+        strict1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(strict1155), 1, seller, 10 ether, address(0), address(0), 0, 0, 10, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        NonReceiver non = new NonReceiver();
+        vm.deal(address(non), 20 ether);
+
+        vm.startPrank(address(non));
+        vm.expectRevert();
+        market.purchaseListing{value: 10 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 10, address(0));
+        vm.stopPrank();
+    }
+
     /// @notice ERC1155 swallowing receiver does not block marketplace delivery during purchase flow
     function testReceiverHooksThatSwallowReverts_ERC1155() public {
         vm.prank(owner);
@@ -838,6 +890,56 @@ contract AttackVectorTest is MarketTestBase {
         emit IdeationMarketFacet.ListingCanceled(id, address(erc721), 1, seller, operator);
 
         vm.prank(operator);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// @notice Seller can cancel their ERC1155 listing after burning all listed quantity
+    function testCancelListing_BurnedERC1155_BySeller() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(seller, 42, 5);
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 42, seller, 5 ether, address(0), address(0), 0, 0, 5, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        erc1155.burn(seller, 42, 5);
+
+        vm.prank(seller);
+        market.cancelListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
+    /// @notice Diamond owner can cancel an ERC1155 listing after full burn
+    function testCancelListingAfterERC1155Burn_ByContractOwner() public {
+        BurnableERC1155 y = new BurnableERC1155();
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(y));
+
+        y.mint(seller, 9, 6);
+        vm.prank(seller);
+        y.setApprovalForAll(address(diamond), true);
+
+        vm.prank(seller);
+        market.createListing(
+            address(y), 9, seller, 6 ether, address(0), address(0), 0, 0, 6, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        vm.prank(seller);
+        y.burn(seller, 9, 6);
+
+        vm.prank(owner);
         market.cancelListing(id);
 
         vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));

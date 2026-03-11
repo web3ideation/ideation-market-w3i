@@ -560,6 +560,35 @@ contract ERC1155MarketplaceFlowTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    function testERC1155_PartialBuy_SecondBuyerWithStaleExpectedTermsReverts() public {
+        vm.prank(owner);
+        collections.addWhitelistedCollection(address(erc1155));
+        erc1155.mint(seller, 700, 10);
+
+        vm.prank(seller);
+        erc1155.setApprovalForAll(address(diamond), true);
+
+        // qty=10, price=10 ETH; partials enabled
+        vm.prank(seller);
+        market.createListing(
+            address(erc1155), 700, seller, 10 ether, address(0), address(0), 0, 0, 10, false, true, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // First partial: buy 4
+        vm.deal(buyer, 10 ether);
+        vm.prank(buyer);
+        market.purchaseListing{value: 4 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 4, address(0));
+
+        // Second buyer uses stale expected terms (10/10) -> ListingTermsChanged
+        address buyer2 = vm.addr(0xDEAD);
+        vm.deal(buyer2, 10 ether);
+        vm.startPrank(buyer2);
+        vm.expectRevert(IdeationMarket__ListingTermsChanged.selector);
+        market.purchaseListing{value: 6 ether}(id, 10 ether, address(0), 10, address(0), 0, 0, 6, address(0));
+        vm.stopPrank();
+    }
+
     // ERC-1155 partials: 10 units at 1e18 each; buy 3, then 2; check exact residual price/qty and proceeds/fees.
     function testERC1155MultiStepPartialsMaintainPriceProportions() public {
         vm.prank(owner);

@@ -359,6 +359,25 @@ contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    function testCleanListingERC721_OwnerChangedButApprovalIntact_Cancels() public {
+        _whitelistCollectionAndApproveERC721();
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        // Off-market transfer to operator; approval state on the old owner does not keep listing valid.
+        vm.prank(seller);
+        erc721.transferFrom(seller, operator, 1);
+
+        vm.prank(buyer);
+        market.cleanListing(id);
+
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     function testOwnerCanCancelAnyListing() public {
         uint128 id = _createListingERC721(false, new address[](0));
 

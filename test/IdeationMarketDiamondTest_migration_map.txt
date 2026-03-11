@@ -186,3 +186,17 @@ testRoyaltyPurchase_EmitsPurchasedThenRoyalty -> MarketplaceEventsTest.t.sol
 testUpdate_SwapSameNFTReverts -> MarketplaceSwapFlowTest.t.sol
 testUpdate_AddDesiredToEthListing_Succeeds -> MarketplaceCoreFlowTest.t.sol
 testUpdate_AddEthToSwapListing_Succeeds -> MarketplaceSwapFlowTest.t.sol
+
+ok great, now lets continue with the testcase testUpdate_AddEthToSwapListing_Succeeds.
+review the testcase:
+
+Test intent validity:
+-Migrate the testcase from the massive ideationmarketdiamond.t.sol suite into the best-fitting existing topic-based script - we already guessed which testscirpt it might fit to (find the mapping in the test/IdeationMarketDiamondTest_migration_map.txt), but doublecheck that based on what the testcase code is actually doing that it really fits in the mapped testscript.
+-Redundancy cleanup: make sure that there is not such testcase already in the matching testscript. make sure to not just go by testname duplicates but by a tests actual coverage.
+-the test case code should make sense and match intended protocol behavior (check the to be deployed diamonds code in /src/), and read the inline documentation for each testcase if it fits the testcases behaviour -> if they don't match that is probably a sign for that the test is covering up issues of the code.
+-No false safety: tests must not “cover up” real issues or pass for the wrong reasons.
+-Shared harness consistency: make sure the common MarketTestBase setup/helpers is used across scripts (scripts shouldnt have their own imports or helpers).
+-Move-safely workflow: after moving/editing tests, run the touched testscripts completely to ensure nothing broke.
+
+once you went through the checklist, highlight if there are/were issues and move the testcase to the fitting testscript - then check once again that the now migrated testcase is still testing the same thing as it did before and hasnt regressed
+make sure you the checklist is all postive and if it is, don't elaborate on it, just say "checklist positive"

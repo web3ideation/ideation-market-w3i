@@ -407,6 +407,59 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.stopPrank();
     }
 
+    // large whitelist population in max-sized chunks must not break purchase correctness
+    function testWhitelistScale_PurchaseUnaffectedByLargeList() public {
+        _whitelistCollectionAndApproveERC721();
+        erc721.mint(seller, 123);
+        vm.prank(seller);
+        erc721.approve(address(diamond), 123);
+
+        address[] memory empty;
+        vm.prank(seller);
+        market.createListing(
+            address(erc721), 123, address(0), 1 ether, address(0), address(0), 0, 0, 0, true, false, empty
+        );
+        uint128 id = getter.getNextListingId() - 1;
+
+        uint16 maxBatch = getter.getBuyerWhitelistMaxBatchSize();
+        uint256 N = 2400;
+
+        address[] memory chunk = new address[](maxBatch);
+        uint256 filled;
+        while (filled < N) {
+            uint256 k = 0;
+            while (k < maxBatch && filled < N) {
+                chunk[k] = vm.addr(uint256(keccak256(abi.encodePacked("wh", filled))));
+                k++;
+                filled++;
+            }
+            address[] memory slice = new address[](k);
+            for (uint256 i = 0; i < k; i++) {
+                slice[i] = chunk[i];
+            }
+
+            vm.prank(seller);
+            buyers.addBuyerWhitelistAddresses(id, slice);
+        }
+
+        vm.deal(buyer, 1 ether);
+        vm.startPrank(buyer);
+        vm.expectRevert(abi.encodeWithSelector(IdeationMarket__BuyerNotWhitelisted.selector, id, buyer));
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        vm.stopPrank();
+
+        address[] memory me = new address[](1);
+        me[0] = buyer;
+        vm.prank(seller);
+        buyers.addBuyerWhitelistAddresses(id, me);
+
+        vm.prank(buyer);
+        market.purchaseListing{value: 1 ether}(id, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0));
+        assertEq(erc721.ownerOf(123), buyer);
+        vm.expectRevert(abi.encodeWithSelector(Getter__ListingNotFound.selector, id));
+        getter.getListingByListingId(id);
+    }
+
     // update keeps same listingId even with other activity in between
     function testUpdateKeepsListingId() public {
         _whitelistCollectionAndApproveERC721();
@@ -565,6 +618,21 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.stopPrank();
 
         assertTrue(getter.isBuyerWhitelisted(id, buyer));
+    }
+
+    function testUpdate_AddDesiredToEthListing_Succeeds() public {
+        uint128 id = _createListingERC721(false, new address[](0));
+
+        vm.startPrank(seller);
+        uint32 feeNow = getter.getInnovationFee();
+
+        vm.expectEmit(true, true, true, true, address(diamond));
+        emit IdeationMarketFacet.ListingUpdated(
+            id, address(erc721), 1, 0, 2 ether, address(0), feeNow, seller, false, false, address(erc721), 2, 0
+        );
+
+        market.updateListing(id, 2 ether, address(0), address(erc721), 2, 0, 0, false, false, new address[](0));
+        vm.stopPrank();
     }
 
     function testUpdateNonexistentListingReverts() public {
