@@ -168,7 +168,7 @@ contract StorageCollisionTest is MarketTestBase {
 
     /// -----------------------------------------------------------------------
     /// 5) Malicious facet "smash": simulate a bad upgrade writing AppStorage.
-    ///    This is NOT a collision; it demonstrates your guards would catch a
+    ///    This is NOT a collision; it demonstrates these guards catch a
     ///    refactor accident by observing drift in canaries.
     /// -----------------------------------------------------------------------
     function testStorage_MaliciousFacetCorruptsCanaries() public {

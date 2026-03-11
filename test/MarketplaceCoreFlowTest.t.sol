@@ -23,7 +23,7 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(bad));
 
-        // Note: the whitelist does NOT enforce interfaces-you can whitelist any address.
+        // Note: the whitelist does NOT enforce interfaces; any address can be whitelisted.
         // The revert happens inside createListing's interface check:
         // with erc1155Quantity == 0 it requires ERC721 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
 
@@ -39,7 +39,7 @@ contract MarketplaceCoreFlowTest is MarketTestBase {
         vm.prank(owner);
         collections.addWhitelistedCollection(address(bad));
 
-        // Note: the whitelist does NOT enforce interfaces-you can whitelist any address.
+        // Note: the whitelist does NOT enforce interfaces; any address can be whitelisted.
         // The revert happens inside createListing's interface check:
         // with erc1155Quantity == 9 it requires ERC1155 via IERC165; a non-NFT reverts with NotSupportedTokenStandard.
 

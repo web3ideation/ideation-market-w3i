@@ -13,6 +13,11 @@ import {
 /**
  * @title ERC1155MarketplaceFlowTest
  * @notice ERC1155-specific listing, update, purchase, and quantity rules.
+ * @dev Coverage groups:
+ * - Create guards: balance/approval checks, quantity shape validation, and holder semantics.
+ * - Update guards: quantity flips, insufficient balances, approval revocation, and unit-price constraints.
+ * - Purchase flow: full/partial fills, stale expected terms, overbuy/underpay, and listing removal behavior.
+ * - Partial-buy toggles and edge handling for small quantities and proportional pricing.
  */
 contract ERC1155MarketplaceFlowTest is MarketTestBase {
     /// Listing ERC1155 more than holder's balance should revert with SellerInsufficientTokenBalance.

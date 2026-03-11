@@ -6,6 +6,12 @@ import "./MarketTestBase.t.sol";
 /**
  * @title MarketplaceSwapFlowTest
  * @notice ERC721/ERC1155 swap-path behavior and swap-related guardrails.
+ * @dev Coverage groups:
+ * - Swap happy paths across ERC721<->ERC721, ERC721<->ERC1155, and ERC1155<->ERC1155 with/without ETH.
+ * - Authorization and approval checks for desired-token holders/operators and marketplace approvals.
+ * - Expected-term mismatch protection and stale-listing cleanup interactions.
+ * - Create/update swap-parameter validation (type mismatches, no-swap invalid params, same-token swap rejection).
+ * - Update behavior for transitioning listing economics while preserving swap intent.
  */
 contract MarketplaceSwapFlowTest is MarketTestBase {
     function testWhitelist_BlocksSwap_ERC721toERC721() public {

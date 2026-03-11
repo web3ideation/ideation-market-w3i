@@ -6,6 +6,11 @@ import "./MarketTestBase.t.sol";
 /**
  * @title MarketplaceAuthorizationTest
  * @notice Authorization and approval invariants across create/update/purchase/cancel flows.
+ * @dev Coverage groups:
+ * - Operator and owner authorization boundaries for ERC721 listing creation.
+ * - Required marketplace approvals at create/update/purchase time.
+ * - Approval revocation effects between listing creation and later actions.
+ * - Seller attribution integrity when operator-assisted listing paths are used.
  */
 contract MarketplaceAuthorizationTest is MarketTestBase {
     /// ERC-721 by operator: operator creates listing; purchase succeeds.

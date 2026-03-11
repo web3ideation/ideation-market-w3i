@@ -17,7 +17,7 @@ import "../src/libraries/LibAppStorage.sol"; // for Listing struct
  */
 contract IdeationMarketGasTest is MarketTestBase {
     // ---------------------------------------------------------------------
-    // Gas budgets (tighten after your first snapshot on your machine/CI)
+    // Gas budgets (tighten after the first baseline snapshot in CI) !!!W
     // ---------------------------------------------------------------------
     // Tightened with ~5–10% headroom over measured baseline
     uint256 private constant CREATE_721_BUDGET = 225_000;

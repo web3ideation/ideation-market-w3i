@@ -13,6 +13,11 @@ import {
 /**
  * @title MarketplaceCancellationAndCleanupTest
  * @notice Cancellation and cleanup lifecycle behavior for listings.
+ * @dev Coverage groups:
+ * - Authorized cancellation paths for seller, approved operators, and contract owner override.
+ * - Unauthorized cancellation and nonexistent-listing revert behavior.
+ * - cleanListing invalidation triggers (de-whitelist, owner drift, burn/balance drift) and still-approved reverts.
+ * - Event integrity for explicit cancel and cancel-due-to-invalid-listing paths.
  */
 contract MarketplaceCancellationAndCleanupTest is MarketTestBase {
     /// cleanListing should cancel if collection has been removed from whitelist.

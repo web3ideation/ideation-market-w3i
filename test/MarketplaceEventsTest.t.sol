@@ -6,6 +6,11 @@ import "./MarketTestBase.t.sol";
 /**
  * @title MarketplaceEventsTest
  * @notice Event emission correctness across marketplace flows.
+ * @dev Coverage groups:
+ * - ListingCreated emission for ERC721 and ERC1155 create paths.
+ * - ListingUpdated and ListingPurchased payload accuracy against runtime listing terms.
+ * - RoyaltyPaid emission for royalty-enabled purchases, including combined RoyaltyPaid+ListingPurchased sequences.
+ * - Admin event emission for innovation-fee updates.
  */
 contract MarketplaceEventsTest is MarketTestBase {
     /// ListingCreated fires with exact parameters for ERC721 listing

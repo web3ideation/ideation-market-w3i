@@ -7,6 +7,11 @@ import {IdeationMarketFacet} from "../src/facets/IdeationMarketFacet.sol";
 /**
  * @title MarketplaceFeeAndRoyaltyETHTest
  * @notice ETH-path fee snapshots, fee boundaries, and ERC2981 royalty behavior.
+ * @dev Coverage groups:
+ * - Owner-only innovation fee updates and fee snapshot usage at purchase time.
+ * - Boundary economics for 0-100% fee, pathological fee configurations, and rounding-sensitive amounts.
+ * - ERC2981 royalty distribution correctness (receiver variants, zero receiver, zero royalty, and revert paths).
+ * - Non-custodial ETH accounting guarantees during fee+royalty+seller settlement.
  */
 contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
     function testSetInnovationFeeOnlyOwner() public {
@@ -46,7 +51,7 @@ contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
     }
 
     function testFeeRoyaltyRounding_TinyPrices() public {
-        // innovationFee is 1% by default in your setup (1000/100_000)
+        // innovationFee defaults to 1% (1000/100_000)
         MockERC721Royalty r = new MockERC721Royalty();
         address RR = vm.addr(0xBEEF);
         r.setRoyalty(RR, 1_000); // 1% of 100_000
@@ -382,7 +387,7 @@ contract MarketplaceFeeAndRoyaltyETHTest is MarketTestBase {
         vm.prank(seller);
         royaltyNft.approve(address(diamond), 1);
 
-        // Listing will succeed with your current code (no listing-time check)
+        // Listing succeeds because there is no listing-time royalty-bounds check.
         vm.prank(seller);
         market.createListing(
             address(royaltyNft), 1, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)

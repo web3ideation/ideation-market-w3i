@@ -301,7 +301,7 @@ abstract contract MarketTestBase is Test {
         vm.startPrank(seller);
         market.createListing(
             address(erc1155), // tokenAddress
-            1, // tokenId (align with your ERC721 helper; change if needed)
+            1, // tokenId
             seller, // erc1155Holder (must be the holder or authorized operator)
             1 ether, // price
             address(0), // currency (ETH)
@@ -310,7 +310,7 @@ abstract contract MarketTestBase is Test {
             0, // desiredErc1155Quantity (no swap)
             quantity, // erc1155Quantity (>0 for ERC1155)
             buyerWhitelistEnabled, // buyer whitelist flag
-            false, // partialBuyEnabled (fixed here; paramize if you plan partial-buy tests)
+            false, // partialBuyEnabled
             allowedBuyers // initial whitelist (must be empty if whitelist disabled)
         );
         vm.stopPrank();
@@ -800,7 +800,7 @@ contract MockERC721 {
         return (spender == owner || spender == _tokenApprovals[tokenId] || _operatorApprovals[owner][spender]);
     }
 
-    // Replace your current burn with this (no _burn() call needed)
+    // Burn implementation without calling a separate internal _burn helper.
     function burn(uint256 tokenId) external {
         address owner = _owners[tokenId];
         require(owner != address(0), "nonexistent");
@@ -1247,7 +1247,7 @@ contract StrictERC1155 is ERC1155 {
     constructor() ERC1155("") {}
 
     function mint(address to, uint256 id, uint256 amt) external {
-        // _mint + your later safeTransferFrom will enforce ERC1155Receiver on contracts
+        // Receiver checks are enforced during safeTransferFrom to contract recipients.
         _mint(to, id, amt, "");
     }
 }

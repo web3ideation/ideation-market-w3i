@@ -179,7 +179,7 @@ contract EdgeCasesAndIntegrationTest is MarketTestBase {
     }
 
     // ERC1155 createListing wrong quantity flags → should revert with WrongQuantityParameter
-    // NOTE: With your current code, this may fail earlier due to calling ERC1155 methods before checking interface.
+    // NOTE: This path may fail earlier if ERC1155 methods are reached before interface checks.
     function testWrongQuantityParameterPaths() public {
         // Try to list ERC721 but with erc1155Quantity > 0
         _whitelistCollectionAndApproveERC721();

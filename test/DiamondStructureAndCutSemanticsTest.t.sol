@@ -4,9 +4,9 @@ pragma solidity ^0.8.28;
 import "./MarketTestBase.t.sol";
 
 /**
- * @title LibDiamondEdgesTest
- * @notice Scope/category: diamond-cut and loupe edge semantics for ERC-8109
- * upgrade flows and LibDiamond selector/facet bookkeeping behavior.
+ * @title DiamondStructureAndCutSemanticsTest
+ * @notice Scope/category: diamond structure, diamond-cut semantics, and loupe
+ * selector/facet invariants for ERC-8109 upgrade flows.
  *
  * Covered categories:
  * - Add/replace/remove selector lifecycle via `upgradeDiamond`
@@ -14,7 +14,7 @@ import "./MarketTestBase.t.sol";
  * - Removal mechanics (nonexistent selector, swap-and-pop across facets, swap within same facet)
  * - Loupe consistency for unknown selectors and post-cut facet visibility
  */
-contract LibDiamondEdgesTest is MarketTestBase {
+contract DiamondStructureAndCutSemanticsTest is MarketTestBase {
     function testLoupeSelectorsPerFacet() public view {
         // ===== Market facet =====
         address marketAddr = loupe.facetAddress(IdeationMarketFacet.createListing.selector);
