@@ -575,23 +575,46 @@ contract PauseFacetTest is MarketTestBase {
         pauseFacet.pause();
     }
 
-    /// @notice Fuzz test: pause state is consistent across all checks
-    function testFuzz_PauseStateConsistent(bool shouldPause) public {
-        vm.startPrank(owner);
+    /// @notice Fuzz test: repeated pause/unpause operations keep state consistent and unauthorized callers never drift state.
+    function testFuzz_PauseStateConsistent(bool shouldPause, uint8 repetitions, address randomUser) public {
+        repetitions = uint8(bound(repetitions, 1, 12));
+        vm.assume(randomUser != owner && randomUser != address(0));
 
-        if (shouldPause) {
-            if (!getter.isPaused()) {
+        bool expectedPaused = getter.isPaused();
+
+        for (uint256 i = 0; i < repetitions; i++) {
+            // Unauthorized pause toggle attempts must never mutate pause state.
+            vm.prank(randomUser);
+            vm.expectRevert("LibDiamond: Must be contract owner");
+            if (expectedPaused) {
+                pauseFacet.unpause();
+            } else {
                 pauseFacet.pause();
             }
-            assertTrue(getter.isPaused());
-        } else {
-            if (getter.isPaused()) {
-                pauseFacet.unpause();
-            }
-            assertFalse(getter.isPaused());
-        }
+            assertEq(getter.isPaused(), expectedPaused, "pause state changed after unauthorized call");
 
-        vm.stopPrank();
+            // Owner enforces target state and redundant calls revert with the expected custom error.
+            vm.prank(owner);
+            if (shouldPause) {
+                if (expectedPaused) {
+                    vm.expectRevert(PauseFacet.Pause__AlreadyPaused.selector);
+                    pauseFacet.pause();
+                } else {
+                    pauseFacet.pause();
+                    expectedPaused = true;
+                }
+            } else {
+                if (expectedPaused) {
+                    pauseFacet.unpause();
+                    expectedPaused = false;
+                } else {
+                    vm.expectRevert(PauseFacet.Pause__NotPaused.selector);
+                    pauseFacet.unpause();
+                }
+            }
+
+            assertEq(getter.isPaused(), expectedPaused, "pause state drifted from expected target");
+        }
     }
 
     /// @notice Fuzz test: randomized role/action sequence preserves pause semantics.
@@ -609,10 +632,13 @@ contract PauseFacetTest is MarketTestBase {
         vm.stopPrank();
 
         bool expectedPaused = getter.isPaused();
+        uint256 nonToggleActionCount;
+        uint256 successfulUnpausedActionCount;
 
         for (uint256 i = 0; i < steps; i++) {
             uint256 actionSeed = uint256(keccak256(abi.encode(actorSeed, i)));
-            uint8 action = uint8(actionSeed % 4);
+            // Force at least one non-toggle probe in an initial known-unpaused state.
+            uint8 action = i == 0 ? 1 : uint8(actionSeed % 4);
 
             if (action == 0) {
                 uint8 actorPick = uint8((actionSeed >> 8) % 4);
@@ -638,6 +664,7 @@ contract PauseFacetTest is MarketTestBase {
                     expectedPaused = before;
                 }
             } else if (action == 1) {
+                nonToggleActionCount++;
                 uint256 tokenId = 1000 + (tokenSeed % 100000) + i;
 
                 vm.prank(seller);
@@ -664,8 +691,9 @@ contract PauseFacetTest is MarketTestBase {
                         new address[](0)
                     );
                 } else {
+                    uint128 beforeNextListingId = getter.getNextListingId();
                     vm.prank(user2);
-                    try market.createListing(
+                    market.createListing(
                         address(erc721),
                         tokenId,
                         address(0),
@@ -678,9 +706,16 @@ contract PauseFacetTest is MarketTestBase {
                         false,
                         false,
                         new address[](0)
-                    ) {} catch {}
+                    );
+                    assertEq(
+                        getter.getNextListingId(),
+                        beforeNextListingId + 1,
+                        "unpaused createListing should create exactly one listing"
+                    );
+                    successfulUnpausedActionCount++;
                 }
             } else if (action == 2) {
+                nonToggleActionCount++;
                 uint256 newPrice = 1 ether + ((actionSeed >> 16) % 2 ether);
 
                 if (expectedPaused) {
@@ -690,29 +725,70 @@ contract PauseFacetTest is MarketTestBase {
                         listingId, newPrice, address(0), address(0), 0, 0, 0, false, false, new address[](0)
                     );
                 } else {
+                    Listing memory beforeListing = getter.getListingByListingId(listingId);
+                    assertEq(beforeListing.seller, user1, "stable probe listing should remain user1-owned");
                     vm.prank(user1);
-                    try market.updateListing(
+                    market.updateListing(
                         listingId, newPrice, address(0), address(0), 0, 0, 0, false, false, new address[](0)
-                    ) {} catch {}
+                    );
+                    Listing memory afterListing = getter.getListingByListingId(listingId);
+                    assertEq(afterListing.price, newPrice, "unpaused updateListing should update listing price");
+                    successfulUnpausedActionCount++;
                 }
             } else {
+                nonToggleActionCount++;
                 vm.deal(user2, 1 ether);
                 if (expectedPaused) {
                     vm.prank(user2);
                     vm.expectRevert(IdeationMarket__ContractPaused.selector);
                     market.purchaseListing{value: 1 ether}(
-                        listingId, 2 ether, address(0), 0, address(0), 0, 0, 0, address(0)
+                        listingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0)
                     );
                 } else {
+                    uint256 purchaseProbeTokenId = 200000 + (tokenSeed % 100000) + i;
+
+                    vm.prank(seller);
+                    erc721.mint(attacker, purchaseProbeTokenId);
+
+                    vm.startPrank(attacker);
+                    erc721.approve(address(diamond), purchaseProbeTokenId);
+                    market.createListing(
+                        address(erc721),
+                        purchaseProbeTokenId,
+                        address(0),
+                        1 ether,
+                        address(0),
+                        address(0),
+                        0,
+                        0,
+                        0,
+                        false,
+                        false,
+                        new address[](0)
+                    );
+                    uint128 purchaseProbeListingId = getter.getNextListingId() - 1;
+                    vm.stopPrank();
+
                     vm.prank(user2);
-                    try market.purchaseListing{value: 1 ether}(
-                        listingId, 2 ether, address(0), 0, address(0), 0, 0, 0, address(0)
-                    ) {} catch {}
+                    market.purchaseListing{value: 1 ether}(
+                        purchaseProbeListingId, 1 ether, address(0), 0, address(0), 0, 0, 0, address(0)
+                    );
+                    assertEq(
+                        erc721.ownerOf(purchaseProbeTokenId),
+                        user2,
+                        "unpaused purchaseListing should transfer purchased token"
+                    );
+                    successfulUnpausedActionCount++;
                 }
             }
 
             assertEq(getter.isPaused(), expectedPaused, "pause state drifted from expected sequence state");
         }
+
+        assertGt(nonToggleActionCount, 0, "fuzz sequence should execute non-toggle market actions");
+        assertGt(
+            successfulUnpausedActionCount, 0, "fuzz sequence should verify at least one successful unpaused action"
+        );
     }
 
     /// @notice Fuzz test: pause guards hold across listing modes (ETH/ERC20, ERC721/ERC1155, whitelist/partial).
@@ -842,5 +918,123 @@ contract PauseFacetTest is MarketTestBase {
         // Seller exit path must remain available while paused.
         vm.prank(user1);
         market.cancelListing(listingId);
+
+        // Recovery path: after unpause, update and purchase should succeed for the same listing mode.
+        vm.prank(owner);
+        pauseFacet.unpause();
+        assertFalse(getter.isPaused(), "pause state should be false after owner unpause");
+
+        uint128 recoveryListingId;
+        uint256 recoveryTokenId;
+        uint256 recoveryErc1155Qty = erc1155Qty;
+
+        if (useERC1155) {
+            vm.prank(seller);
+            erc1155.mint(user1, 199, recoveryErc1155Qty);
+
+            vm.startPrank(user1);
+            erc1155.setApprovalForAll(address(diamond), true);
+            market.createListing(
+                address(erc1155),
+                199,
+                user1,
+                price,
+                currency,
+                address(0),
+                0,
+                0,
+                recoveryErc1155Qty,
+                buyerWhitelistEnabled,
+                partialMode,
+                allowedBuyers
+            );
+            recoveryListingId = getter.getNextListingId() - 1;
+            vm.stopPrank();
+        } else {
+            recoveryTokenId = 50000 + (uint256(priceSeed) % 10000);
+            vm.prank(seller);
+            erc721.mint(user1, recoveryTokenId);
+
+            vm.startPrank(user1);
+            erc721.approve(address(diamond), recoveryTokenId);
+            market.createListing(
+                address(erc721),
+                recoveryTokenId,
+                address(0),
+                price,
+                currency,
+                address(0),
+                0,
+                0,
+                0,
+                buyerWhitelistEnabled,
+                false,
+                allowedBuyers
+            );
+            recoveryListingId = getter.getNextListingId() - 1;
+            vm.stopPrank();
+        }
+
+        uint256 updatedPrice = partialMode ? price + recoveryErc1155Qty : price + 1;
+        vm.prank(user1);
+        market.updateListing(
+            recoveryListingId,
+            updatedPrice,
+            currency,
+            address(0),
+            0,
+            0,
+            useERC1155 ? recoveryErc1155Qty : 0,
+            buyerWhitelistEnabled,
+            partialMode,
+            allowedBuyers
+        );
+        Listing memory updatedListing = getter.getListingByListingId(recoveryListingId);
+        assertEq(updatedListing.price, updatedPrice, "unpaused update should persist updated price");
+
+        uint256 recoveryPurchaseQty = useERC1155 ? (partialMode ? 1 : recoveryErc1155Qty) : 0;
+        uint256 expectedPayment = updatedPrice;
+        if (useERC1155 && partialMode) {
+            expectedPayment = (updatedPrice / recoveryErc1155Qty) * recoveryPurchaseQty;
+        }
+        vm.deal(user2, 10 ether);
+        vm.prank(user2);
+        market.purchaseListing{value: useERC20 ? 0 : expectedPayment}(
+            recoveryListingId,
+            updatedPrice,
+            currency,
+            useERC1155 ? recoveryErc1155Qty : 0,
+            address(0),
+            0,
+            0,
+            recoveryPurchaseQty,
+            address(0)
+        );
+
+        if (useERC1155) {
+            if (partialMode) {
+                Listing memory afterPurchase = getter.getListingByListingId(recoveryListingId);
+                assertEq(
+                    afterPurchase.erc1155Quantity,
+                    recoveryErc1155Qty - recoveryPurchaseQty,
+                    "unpaused ERC1155 partial purchase should reduce remaining quantity"
+                );
+            } else {
+                assertEq(
+                    erc1155.balanceOf(user2, 199),
+                    recoveryErc1155Qty,
+                    "unpaused ERC1155 full purchase should transfer listed quantity"
+                );
+                vm.expectRevert();
+                getter.getListingByListingId(recoveryListingId);
+            }
+        } else {
+            assertEq(erc721.ownerOf(recoveryTokenId), user2, "unpaused ERC721 purchase should transfer ownership");
+            assertEq(
+                getter.getActiveListingIdByERC721(address(erc721), recoveryTokenId),
+                0,
+                "unpaused ERC721 purchase should clear active listing mapping"
+            );
+        }
     }
 }
