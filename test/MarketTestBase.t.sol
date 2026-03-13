@@ -2341,6 +2341,13 @@ contract SellerHandler {
     uint128 public lastListingId721;
     bool public hasListing721;
 
+    uint256 public successfulCreateCount;
+    uint256 public successfulUpdateCount;
+    uint256 public successfulWhitelistAddCount;
+    uint256 public successfulWhitelistRemoveCount;
+    uint256 public successfulCancelCount;
+    uint256 public successfulCreate1155Count;
+
     constructor(address _diamond, address _buyers, address _erc721, address _erc1155) {
         diamond = _diamond;
         market = IdeationMarketFacet(_diamond);
@@ -2367,6 +2374,7 @@ contract SellerHandler {
         );
         lastListingId721 = getter.getNextListingId() - 1;
         hasListing721 = true;
+        successfulCreateCount++;
     }
 
     function enableWhitelist() external {
@@ -2384,6 +2392,7 @@ contract SellerHandler {
             listing.partialBuyEnabled,
             new address[](0)
         );
+        successfulUpdateCount++;
     }
 
     function addBuyerToWhitelist() external {
@@ -2391,6 +2400,7 @@ contract SellerHandler {
         address[] memory a = new address[](1);
         a[0] = buyerAddr;
         buyers.addBuyerWhitelistAddresses(lastListingId721, a);
+        successfulWhitelistAddCount++;
     }
 
     function removeBuyerFromWhitelist() external {
@@ -2398,6 +2408,7 @@ contract SellerHandler {
         address[] memory a = new address[](1);
         a[0] = buyerAddr;
         buyers.removeBuyerWhitelistAddresses(lastListingId721, a);
+        successfulWhitelistRemoveCount++;
     }
 
     function cancel721() external {
@@ -2405,12 +2416,19 @@ contract SellerHandler {
         market.cancelListing(lastListingId721);
         hasListing721 = false;
         lastListingId721 = 0;
+        successfulCancelCount++;
     }
 
     function create1155Listing() external {
         market.createListing(
             address(erc1155), 5, address(this), 2 ether, address(0), address(0), 0, 0, 2, false, false, new address[](0)
         );
+        successfulCreate1155Count++;
+    }
+
+    function successfulActions() external view returns (uint256) {
+        return successfulCreateCount + successfulUpdateCount + successfulWhitelistAddCount
+            + successfulWhitelistRemoveCount + successfulCancelCount + successfulCreate1155Count;
     }
 }
 
@@ -2418,6 +2436,8 @@ contract BuyerHandler {
     IdeationMarketFacet public market;
     GetterFacet public getter;
     ISellerHandlerView public sellerH;
+
+    uint256 public successfulBuyCount;
 
     constructor(address _diamond, address _getter, address _sellerH) {
         market = IdeationMarketFacet(_diamond);
@@ -2445,10 +2465,15 @@ contract BuyerHandler {
             0,
             address(0)
         );
+        successfulBuyCount++;
     }
 
     function setSeller(address _sellerH) external {
         sellerH = ISellerHandlerView(_sellerH);
+    }
+
+    function successfulActions() external view returns (uint256) {
+        return successfulBuyCount;
     }
 }
 
@@ -2750,5 +2775,13 @@ contract InvariantHandler {
         } catch {
             return;
         }
+    }
+
+    function listingIdsLength() external view returns (uint256) {
+        return _listingIds.length;
+    }
+
+    function listingIdAt(uint256 idx) external view returns (uint128) {
+        return _listingIds[idx];
     }
 }

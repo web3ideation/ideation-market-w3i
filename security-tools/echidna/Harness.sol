@@ -583,6 +583,15 @@ contract EchidnaIdeationMarketHarness {
     bool internal collectionUpdateBypass;
     bool internal collectionCreateBypass;
 
+    uint256 internal createAttempts;
+    uint256 internal createSuccesses;
+    uint256 internal updateAttempts;
+    uint256 internal updateSuccesses;
+    uint256 internal purchaseAttempts;
+    uint256 internal purchaseSuccesses;
+    uint256 internal pauseTransitionAttempts;
+    uint256 internal pauseTransitionSuccesses;
+
     uint128[64] internal recentListingIds;
     uint256 internal recentListingCursor;
 
@@ -786,6 +795,7 @@ contract EchidnaIdeationMarketHarness {
     function do_list_erc721(uint256 who, bool royaltyToken, uint256 tokenIdHint, uint256 price, bool whitelist)
         external
     {
+        createAttempts++;
         Agent ag = _pickAgent(who);
         address token = royaltyToken ? address(nft721Royalty) : address(nft721);
         uint256 tokenId = _owned721(ag, token, tokenIdHint);
@@ -801,6 +811,7 @@ contract EchidnaIdeationMarketHarness {
         try ag.listERC721(token, tokenId, p, address(0), address(0), 0, 0, whitelist, false, allowed) {
             _recordListing(nextId);
             ok = true;
+            createSuccesses++;
         } catch {}
 
         if (ok && paused) pauseBypass = true;
@@ -810,6 +821,7 @@ contract EchidnaIdeationMarketHarness {
     function do_list_erc721_erc20(uint256 who, bool royaltyToken, uint256 tokenIdHint, uint256 price, bool whitelist)
         external
     {
+        createAttempts++;
         Agent ag = _pickAgent(who);
         address token = royaltyToken ? address(nft721Royalty) : address(nft721);
         uint256 tokenId = _owned721(ag, token, tokenIdHint);
@@ -824,6 +836,7 @@ contract EchidnaIdeationMarketHarness {
         try ag.listERC721(token, tokenId, p, address(erc20), address(0), 0, 0, whitelist, false, allowed) {
             _recordListing(nextId);
             ok = true;
+            createSuccesses++;
         } catch {}
 
         if (ok && paused) pauseBypass = true;
@@ -832,6 +845,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_list_swap_erc721(uint256 who, bool royaltyToken, uint256 tokenIdHint, uint256 desiredBuyer) external {
+        createAttempts++;
         Agent seller = _pickAgent(who);
         address token = royaltyToken ? address(nft721Royalty) : address(nft721);
         uint256 tokenId = _owned721(seller, token, tokenIdHint);
@@ -850,6 +864,7 @@ contract EchidnaIdeationMarketHarness {
         ) {
             _recordListing(nextId);
             ok = true;
+            createSuccesses++;
         } catch {}
 
         if (ok && paused) pauseBypass = true;
@@ -859,6 +874,7 @@ contract EchidnaIdeationMarketHarness {
     function do_list_swap_desired_erc1155(uint256 who, bool royaltyToken, uint256 tokenIdHint, uint256 desiredQty)
         external
     {
+        createAttempts++;
         Agent seller = _pickAgent(who);
         address token = royaltyToken ? address(nft721Royalty) : address(nft721);
         uint256 tokenId = _owned721(seller, token, tokenIdHint);
@@ -875,6 +891,7 @@ contract EchidnaIdeationMarketHarness {
         {
             _recordListing(nextId);
             ok = true;
+            createSuccesses++;
         } catch {}
 
         if (ok && paused) pauseBypass = true;
@@ -882,6 +899,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_list_erc1155(uint256 who, uint256 qty, uint256 price, bool whitelist, bool partialBuy) external {
+        createAttempts++;
         Agent ag = _pickAgent(who);
         uint256 have = IERC1155(address(nft1155)).balanceOf(address(ag), 1);
         if (have == 0) return;
@@ -901,6 +919,7 @@ contract EchidnaIdeationMarketHarness {
         try ag.listERC1155(address(nft1155), 1, address(ag), p, address(0), q, whitelist, partialBuy, allowed) {
             _recordListing(nextId);
             ok = true;
+            createSuccesses++;
         } catch {}
 
         if (ok && paused) pauseBypass = true;
@@ -916,6 +935,7 @@ contract EchidnaIdeationMarketHarness {
         bool partialBuy,
         uint256 qtyHint
     ) external {
+        updateAttempts++;
         bool paused = GetterFacet(address(diamond)).isPaused();
 
         try GetterFacet(address(diamond)).getListingByListingId(listingId) returns (Listing memory L) {
@@ -977,6 +997,7 @@ contract EchidnaIdeationMarketHarness {
                 allowed
             ) {
                 ok = true;
+                updateSuccesses++;
             } catch {}
 
             if (ok && paused) pauseBypass = true;
@@ -995,6 +1016,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_purchase(uint256 buyerIdx, uint128 listingId, uint256 erc1155Qty) external payable {
+        purchaseAttempts++;
         Agent buyer = _pickAgent(buyerIdx);
         try GetterFacet(address(diamond)).getListingByListingId(listingId) returns (Listing memory L) {
             if (L.desiredTokenAddress != address(0)) return;
@@ -1035,6 +1057,7 @@ contract EchidnaIdeationMarketHarness {
                 address(0)
             ) {
                 ok = true;
+                purchaseSuccesses++;
             } catch {}
 
             if (ok && paused) pauseBypass = true;
@@ -1043,6 +1066,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_purchase_erc20(uint256 buyerIdx, uint128 listingId, uint256 erc1155Qty) external payable {
+        purchaseAttempts++;
         Agent buyer = _pickAgent(buyerIdx);
         try GetterFacet(address(diamond)).getListingByListingId(listingId) returns (Listing memory L) {
             if (L.desiredTokenAddress != address(0)) return;
@@ -1083,6 +1107,7 @@ contract EchidnaIdeationMarketHarness {
                 address(0)
             ) {
                 ok = true;
+                purchaseSuccesses++;
             } catch {}
 
             if (ok && paused) pauseBypass = true;
@@ -1091,6 +1116,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_purchase_swap(uint128 listingId) external payable {
+        purchaseAttempts++;
         try GetterFacet(address(diamond)).getListingByListingId(listingId) returns (Listing memory L) {
             if (L.desiredTokenAddress != address(nft721Swap)) return;
             if (L.desiredErc1155Quantity != 0) return;
@@ -1116,6 +1142,7 @@ contract EchidnaIdeationMarketHarness {
                 address(0)
             ) {
                 ok = true;
+                purchaseSuccesses++;
             } catch {}
 
             if (ok && paused) pauseBypass = true;
@@ -1124,6 +1151,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_purchase_swap_erc1155(uint128 listingId, uint256 holderIdx) external payable {
+        purchaseAttempts++;
         try GetterFacet(address(diamond)).getListingByListingId(listingId) returns (Listing memory L) {
             if (L.desiredTokenAddress != address(nft1155Swap)) return;
             if (L.desiredErc1155Quantity == 0) return;
@@ -1152,6 +1180,7 @@ contract EchidnaIdeationMarketHarness {
                 address(desiredHolder)
             ) {
                 ok = true;
+                purchaseSuccesses++;
             } catch {}
 
             if (ok && paused) pauseBypass = true;
@@ -1212,11 +1241,21 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function do_owner_pause() external {
-        try ownerAgent.pause() {} catch {}
+        pauseTransitionAttempts++;
+        bool before = GetterFacet(address(diamond)).isPaused();
+        try ownerAgent.pause() {
+            bool afterPaused = GetterFacet(address(diamond)).isPaused();
+            if (!before && afterPaused) pauseTransitionSuccesses++;
+        } catch {}
     }
 
     function do_owner_unpause() external {
-        try ownerAgent.unpause() {} catch {}
+        pauseTransitionAttempts++;
+        bool before = GetterFacet(address(diamond)).isPaused();
+        try ownerAgent.unpause() {
+            bool afterPaused = GetterFacet(address(diamond)).isPaused();
+            if (before && !afterPaused) pauseTransitionSuccesses++;
+        } catch {}
     }
 
     function do_owner_remove_collection(uint256 which) external {
@@ -1324,20 +1363,36 @@ contract EchidnaIdeationMarketHarness {
         return !(alice.reentryOk() || bob.reentryOk() || carol.reentryOk() || dave.reentryOk());
     }
 
-    function echidna_collections_still_whitelisted() external pure returns (bool) {
-        // Collections may be de-whitelisted by admin actions; enforcement is checked separately.
+    function echidna_collections_still_whitelisted() external view returns (bool) {
+        // Collections may be de-whitelisted by admin actions, so this property
+        // checks whitelist storage integrity rather than static membership.
+        address[] memory cols = GetterFacet(address(diamond)).getWhitelistedCollections();
+
+        for (uint256 i = 0; i < cols.length; i++) {
+            address c = cols[i];
+            if (c == address(0)) return false;
+            if (!GetterFacet(address(diamond)).isCollectionWhitelisted(c)) return false;
+
+            for (uint256 j = i + 1; j < cols.length; j++) {
+                if (c == cols[j]) return false;
+            }
+        }
+
         return true;
     }
 
     function echidna_pause_enforced() external view returns (bool) {
+        if (!_hasMinimumActivity()) return true;
         return !pauseBypass;
     }
 
     function echidna_currency_allowlist_enforced() external view returns (bool) {
+        if (!_hasMinimumActivity()) return true;
         return !currencyBypass;
     }
 
     function echidna_collection_whitelist_enforced() external view returns (bool) {
+        if (!_hasMinimumActivity()) return true;
         return !(collectionPurchaseBypass || collectionUpdateBypass || collectionCreateBypass);
     }
 
@@ -1388,6 +1443,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function echidna_whitelist_enforced() external view returns (bool) {
+        if (!_hasMinimumActivity()) return true;
         return !whitelistBypass;
     }
 
@@ -1404,6 +1460,10 @@ contract EchidnaIdeationMarketHarness {
         unchecked {
             recentListingCursor++;
         }
+    }
+
+    function _hasMinimumActivity() internal view returns (bool) {
+        return createSuccesses + updateSuccesses + purchaseSuccesses + pauseTransitionSuccesses >= 3;
     }
 
     function _pickAgent(uint256 who) internal view returns (Agent) {

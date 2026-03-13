@@ -12,3 +12,38 @@ optimizer_runs = 5000
 
 [dependencies]
 openzeppelin-contracts = "5.0.2"
+
+[fuzz]
+runs = 10000
+
+[invariant]
+runs = 2000
+depth = 120
+
+[profile.ci.fuzz]
+runs = 3000
+
+[profile.ci.invariant]
+runs = 500
+depth = 60
+
+[profile.pr.fuzz]
+runs = 3000
+
+[profile.pr.invariant]
+runs = 500
+depth = 60
+
+[profile.nightly.fuzz]
+runs = 20000
+
+[profile.nightly.invariant]
+runs = 3000
+depth = 150
+
+[profile.release.fuzz]
+runs = 50000
+
+[profile.release.invariant]
+runs = 8000
+depth = 250

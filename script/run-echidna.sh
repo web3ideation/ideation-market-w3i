@@ -18,13 +18,17 @@ Usage:
 
 Notes:
   - Runs the canonical harness at security-tools/echidna/Harness.sol.
+  - Uses security-tools/echidna/echidna.yaml by default; override via ECHIDNA_CONFIG.
   - Mirrors repo src/ into security-tools/echidna/src/ for self-contained compilation.
   - Writes corpus/coverage/reproducers under security-tools/echidna/echidna_corpus/.
+  - Loads and replays sequences from echidna_corpus/reproducers and echidna_corpus/coverage.
   - Outputs: security-tools/echidna/echidna_corpus/, security-tools/echidna/crytic-export/
 
 Examples:
   bash script/run-echidna.sh --format text
   bash script/run-echidna.sh --seq-len 120 --test-limit 300000 --format text
+  bash script/run-echidna.sh --seed 424242 --seq-len 120 --test-limit 2000000 --format text
+  ECHIDNA_CONFIG=security-tools/echidna/echidna.pr.yaml bash script/run-echidna.sh --format text
 EOF
 }
 
@@ -47,7 +51,8 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOL_DIR="$ROOT/security-tools/echidna"
 HARNESS="$TOOL_DIR/Harness.sol"
-CONFIG="$TOOL_DIR/echidna.yaml"
+CONFIG_DEFAULT="$TOOL_DIR/echidna.yaml"
+CONFIG="${ECHIDNA_CONFIG:-$CONFIG_DEFAULT}"
 CORPUS_DIR="$TOOL_DIR/echidna_corpus"
 EXPORT_DIR="$TOOL_DIR/crytic-export"
 CONTRACT="EchidnaIdeationMarketHarness"

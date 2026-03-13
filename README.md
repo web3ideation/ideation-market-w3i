@@ -351,6 +351,101 @@ For local/testnet convenience there is [script/DeployMocksAndMint.s.sol](script/
 forge test
 ```
 
+### Randomized test reproducibility (seeds)
+
+Use fixed seeds to make fuzz/invariant behavior deterministic across reruns.
+
+Foundry (fuzz target):
+
+```bash
+forge test \
+  --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent" \
+  --fuzz-seed 424242
+```
+
+Foundry (invariant target):
+
+```bash
+forge test --match-contract IdeationMarketInvariantTest --fuzz-seed 424242
+forge test --match-contract StorageCollisionInvariant --fuzz-seed 424242
+```
+
+Echidna (fixed-seed campaign):
+
+```bash
+bash script/run-echidna.sh \
+  --seed 424242 \
+  --test-limit 2000000 \
+  --seq-len 120 \
+  --format text
+```
+
+Echidna reproducers:
+- Failing reproducers are stored in `security-tools/echidna/echidna_corpus/reproducers/`.
+- Coverage corpus is stored in `security-tools/echidna/echidna_corpus/coverage/`.
+- `bash script/run-echidna.sh` automatically loads and replays sequences from both directories at startup.
+
+### Staged fuzz/invariant profiles (PR, nightly, release)
+
+Foundry profile lanes are configured in [foundry.toml](foundry.toml):
+- `pr` and `ci`: fuzz 3000, invariant 500/depth 60
+- `nightly`: fuzz 20000, invariant 3000/depth 150
+- `release`: fuzz 50000, invariant 8000/depth 250
+
+Run Foundry with a selected profile:
+
+```bash
+FOUNDRY_PROFILE=pr forge test
+FOUNDRY_PROFILE=nightly forge test --match-contract IdeationMarketInvariantTest
+FOUNDRY_PROFILE=release forge test --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent"
+```
+
+Echidna lane configs:
+- PR: `security-tools/echidna/echidna.pr.yaml`
+- Nightly: `security-tools/echidna/echidna.nightly.yaml`
+- Release: `security-tools/echidna/echidna.release.yaml`
+
+Run Echidna with a selected profile:
+
+```bash
+ECHIDNA_CONFIG=security-tools/echidna/echidna.pr.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=security-tools/echidna/echidna.nightly.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=security-tools/echidna/echidna.release.yaml bash script/run-echidna.sh --format text
+```
+
+### Multi-seed campaign matrix
+
+Seed matrix policy:
+- Nightly: at least 10 distinct seeds.
+- Pre-release: at least 20 distinct seeds.
+- Save failing seeds and keep generated reproducers under `security-tools/echidna/echidna_corpus/reproducers/`.
+
+Suggested Foundry seed loops:
+
+```bash
+for s in 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010; do
+  FOUNDRY_PROFILE=nightly forge test --fuzz-seed "$s"
+done
+
+for s in 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020; do
+  FOUNDRY_PROFILE=release forge test --fuzz-seed "$s"
+done
+```
+
+Suggested Echidna seed loops:
+
+```bash
+for s in 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010; do
+  ECHIDNA_CONFIG=security-tools/echidna/echidna.nightly.yaml \
+    bash script/run-echidna.sh --seed "$s" --format text
+done
+
+for s in 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020; do
+  ECHIDNA_CONFIG=security-tools/echidna/echidna.release.yaml \
+    bash script/run-echidna.sh --seed "$s" --format text
+done
+```
+
 ### Sepolia broadcast scripts
 
 Broadcastable smoke scripts against live Sepolia deployment, live under [test/integration](test/integration).

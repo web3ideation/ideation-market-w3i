@@ -239,11 +239,18 @@ contract StorageCollisionInvariant is StdInvariant, MarketTestBase {
         // Register handlers as fuzz targets
         targetContract(address(sellerH));
         targetContract(address(buyerH));
+
+        // Seed one successful operation so non-vacuity checks are meaningful
+        // even during Foundry's initial invariant pre-check phase.
+        sellerH.create721Listing();
     }
 
     /// Invariant: across arbitrary handler calls (create/update/whitelist/add/remove/buy/withdraw),
     /// admin state must not drift (no setInnovationFee, no collection edits used here).
     function invariant_NoDriftOnForeignState() public view {
+        uint256 successful = sellerH.successfulActions() + buyerH.successfulActions();
+        assertGt(successful, 0, "Invariant run was vacuous: no successful handler actions");
+
         assertEq(getter.getInnovationFee(), initialFee, "innovationFee drifted during ops");
         assertEq(getter.getBuyerWhitelistMaxBatchSize(), initialMax, "maxBatch drifted during ops");
         assertEq(getter.getWhitelistedCollections().length, initialWlLen, "collections length drifted during ops");

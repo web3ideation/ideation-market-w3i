@@ -83,6 +83,9 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
         handler.list721ERC20(1);
         handler.purchaseERC20(0, 0);
 
+        // Seed at least one active ERC721 listing for active-mapping consistency checks.
+        handler.list721(2, 200);
+
         // Tell the fuzzer to target handler's public/external mutating functions
         targetContract(address(handler));
     }
@@ -111,5 +114,41 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
             + erc20Inv.balanceOf(handler.royaltyReceiver()) + erc20Inv.balanceOf(address(diamond));
 
         assertEq(buyersSpent, recipientsCredited, "ERC20 delta accounting mismatch across buyer/seller/fee/royalty");
+    }
+
+    /// @notice Active ERC721 listings must map back to their listing id via activeListingIdByERC721.
+    function invariant_ActiveERC721ListingMappingConsistent() public view {
+        uint256 tracked = handler.listingIdsLength();
+        assertGt(tracked, 0, "Expected tracked listings for mapping consistency invariant");
+
+        for (uint256 i = 0; i < tracked; i++) {
+            uint128 id = handler.listingIdAt(i);
+
+            try getter.getListingByListingId(id) returns (Listing memory listing) {
+                if (listing.tokenAddress != address(erc721Roy)) {
+                    continue;
+                }
+
+                uint128 activeId = getter.getActiveListingIdByERC721(listing.tokenAddress, listing.tokenId);
+
+                if (listing.seller != address(0)) {
+                    assertEq(activeId, id, "active ERC721 listing pointer mismatch");
+                } else {
+                    assertEq(activeId, 0, "inactive ERC721 listing should not keep active pointer");
+                }
+            } catch {
+                continue;
+            }
+        }
+    }
+
+    /// @notice Handler actions must not drift owner-only/admin state.
+    function invariant_AdminStateNotDriftedByHandler() public view {
+        uint256 tracked = handler.listingIdsLength();
+        assertGt(tracked, 0, "Expected handler activity before admin drift checks");
+
+        assertEq(getter.getContractOwner(), owner, "contract owner drifted under handler actions");
+        assertEq(getter.getInnovationFee(), INNOVATION_FEE, "innovationFee drifted under handler actions");
+        assertFalse(getter.isPaused(), "pause flag drifted under handler actions");
     }
 }

@@ -593,4 +593,254 @@ contract PauseFacetTest is MarketTestBase {
 
         vm.stopPrank();
     }
+
+    /// @notice Fuzz test: randomized role/action sequence preserves pause semantics.
+    /// forge-config: default.fuzz.runs = 2048
+    function testFuzz_PauseRoleActionSequence(uint8 steps, uint256 actorSeed, uint256 tokenSeed) public {
+        steps = uint8(bound(steps, 4, 12));
+
+        // Seed one stable listing used by update/purchase probes.
+        vm.startPrank(user1);
+        erc721.approve(address(diamond), 10);
+        market.createListing(
+            address(erc721), 10, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+        uint128 listingId = getter.getNextListingId() - 1;
+        vm.stopPrank();
+
+        bool expectedPaused = getter.isPaused();
+
+        for (uint256 i = 0; i < steps; i++) {
+            uint256 actionSeed = uint256(keccak256(abi.encode(actorSeed, i)));
+            uint8 action = uint8(actionSeed % 4);
+
+            if (action == 0) {
+                uint8 actorPick = uint8((actionSeed >> 8) % 4);
+                address actor = actorPick == 0 ? owner : actorPick == 1 ? user1 : actorPick == 2 ? user2 : attacker;
+
+                bool before = getter.isPaused();
+                if (actor == owner) {
+                    vm.prank(owner);
+                    if (before) {
+                        pauseFacet.unpause();
+                    } else {
+                        pauseFacet.pause();
+                    }
+                    expectedPaused = !before;
+                } else {
+                    vm.prank(actor);
+                    vm.expectRevert("LibDiamond: Must be contract owner");
+                    if (before) {
+                        pauseFacet.unpause();
+                    } else {
+                        pauseFacet.pause();
+                    }
+                    expectedPaused = before;
+                }
+            } else if (action == 1) {
+                uint256 tokenId = 1000 + (tokenSeed % 100000) + i;
+
+                vm.prank(seller);
+                erc721.mint(user2, tokenId);
+
+                vm.prank(user2);
+                erc721.approve(address(diamond), tokenId);
+
+                if (expectedPaused) {
+                    vm.prank(user2);
+                    vm.expectRevert(IdeationMarket__ContractPaused.selector);
+                    market.createListing(
+                        address(erc721),
+                        tokenId,
+                        address(0),
+                        1 ether,
+                        address(0),
+                        address(0),
+                        0,
+                        0,
+                        0,
+                        false,
+                        false,
+                        new address[](0)
+                    );
+                } else {
+                    vm.prank(user2);
+                    try market.createListing(
+                        address(erc721),
+                        tokenId,
+                        address(0),
+                        1 ether,
+                        address(0),
+                        address(0),
+                        0,
+                        0,
+                        0,
+                        false,
+                        false,
+                        new address[](0)
+                    ) {} catch {}
+                }
+            } else if (action == 2) {
+                uint256 newPrice = 1 ether + ((actionSeed >> 16) % 2 ether);
+
+                if (expectedPaused) {
+                    vm.prank(user1);
+                    vm.expectRevert(IdeationMarket__ContractPaused.selector);
+                    market.updateListing(
+                        listingId, newPrice, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+                    );
+                } else {
+                    vm.prank(user1);
+                    try market.updateListing(
+                        listingId, newPrice, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+                    ) {} catch {}
+                }
+            } else {
+                vm.deal(user2, 1 ether);
+                if (expectedPaused) {
+                    vm.prank(user2);
+                    vm.expectRevert(IdeationMarket__ContractPaused.selector);
+                    market.purchaseListing{value: 1 ether}(
+                        listingId, 2 ether, address(0), 0, address(0), 0, 0, 0, address(0)
+                    );
+                } else {
+                    vm.prank(user2);
+                    try market.purchaseListing{value: 1 ether}(
+                        listingId, 2 ether, address(0), 0, address(0), 0, 0, 0, address(0)
+                    ) {} catch {}
+                }
+            }
+
+            assertEq(getter.isPaused(), expectedPaused, "pause state drifted from expected sequence state");
+        }
+    }
+
+    /// @notice Fuzz test: pause guards hold across listing modes (ETH/ERC20, ERC721/ERC1155, whitelist/partial).
+    /// forge-config: default.fuzz.runs = 1024
+    function testFuzz_PauseGuardsAcrossListingModes(
+        bool useERC20,
+        bool useERC1155,
+        bool partialBuyEnabled,
+        bool buyerWhitelistEnabled,
+        uint96 priceSeed,
+        uint16 qtySeed
+    ) public {
+        uint256 price = uint256(bound(priceSeed, 1e12, 10 ether));
+        uint256 erc1155Qty = uint256(bound(qtySeed, 2, 10));
+
+        bool partialMode = useERC1155 && partialBuyEnabled;
+        if (partialMode) {
+            price = erc1155Qty * uint256(bound(priceSeed, 1e12, 1 ether));
+        }
+
+        address currency = address(0);
+        MockERC20 token;
+        if (useERC20) {
+            token = new MockERC20("Pause Fuzz Token", "PFT");
+            currency = address(token);
+            vm.prank(owner);
+            currencies.addAllowedCurrency(currency);
+
+            token.mint(user2, 1_000_000 ether);
+            vm.prank(user2);
+            token.approve(address(diamond), type(uint256).max);
+        }
+
+        address[] memory allowedBuyers = buyerWhitelistEnabled ? new address[](1) : new address[](0);
+        if (buyerWhitelistEnabled) {
+            allowedBuyers[0] = user2;
+        }
+
+        uint128 listingId;
+        if (useERC1155) {
+            vm.prank(seller);
+            erc1155.mint(user1, 99, erc1155Qty);
+
+            vm.startPrank(user1);
+            erc1155.setApprovalForAll(address(diamond), true);
+            market.createListing(
+                address(erc1155),
+                99,
+                user1,
+                price,
+                currency,
+                address(0),
+                0,
+                0,
+                erc1155Qty,
+                buyerWhitelistEnabled,
+                partialMode,
+                allowedBuyers
+            );
+            listingId = getter.getNextListingId() - 1;
+            vm.stopPrank();
+        } else {
+            uint256 tokenId = 20 + (uint256(priceSeed) % 10000);
+            vm.prank(seller);
+            erc721.mint(user1, tokenId);
+
+            vm.startPrank(user1);
+            erc721.approve(address(diamond), tokenId);
+            market.createListing(
+                address(erc721),
+                tokenId,
+                address(0),
+                price,
+                currency,
+                address(0),
+                0,
+                0,
+                0,
+                buyerWhitelistEnabled,
+                false,
+                allowedBuyers
+            );
+            listingId = getter.getNextListingId() - 1;
+            vm.stopPrank();
+        }
+
+        vm.prank(owner);
+        pauseFacet.pause();
+        assertTrue(getter.isPaused(), "pause state should be true after owner pause");
+
+        // Create should be blocked while paused.
+        vm.prank(seller);
+        erc721.mint(attacker, 4242);
+        vm.prank(attacker);
+        erc721.approve(address(diamond), 4242);
+        vm.prank(attacker);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.createListing(
+            address(erc721), 4242, address(0), 1 ether, address(0), address(0), 0, 0, 0, false, false, new address[](0)
+        );
+
+        // Update should be blocked while paused.
+        vm.prank(user1);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.updateListing(
+            listingId,
+            price + 1,
+            currency,
+            address(0),
+            0,
+            0,
+            useERC1155 ? erc1155Qty : 0,
+            buyerWhitelistEnabled,
+            partialMode,
+            allowedBuyers
+        );
+
+        // Purchase should be blocked while paused.
+        uint256 purchaseQty = useERC1155 ? uint256(bound(qtySeed, 1, erc1155Qty)) : 0;
+        vm.deal(user2, 10 ether);
+        vm.prank(user2);
+        vm.expectRevert(IdeationMarket__ContractPaused.selector);
+        market.purchaseListing{value: useERC20 ? 0 : price}(
+            listingId, price, currency, useERC1155 ? erc1155Qty : 0, address(0), 0, 0, purchaseQty, address(0)
+        );
+
+        // Seller exit path must remain available while paused.
+        vm.prank(user1);
+        market.cancelListing(listingId);
+    }
 }

@@ -1,0 +1,3 @@
+testLimit: 10000000
+seqLen: 250
+shrinkLimit: 5000

@@ -3,7 +3,24 @@ name: CI
 on:
   push:
   pull_request:
+  schedule:
+    - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      lane:
+        description: "test lane (pr/nightly/release)"
+        required: false
+        default: "pr"
+        type: choice
+        options:
+          - pr
+          - nightly
+          - release
+      run_seed_matrix:
+        description: "run Foundry seed matrix jobs"
+        required: false
+        default: false
+        type: boolean
 
 env:
   FOUNDRY_PROFILE: ci
@@ -56,3 +73,45 @@ jobs:
         run: |
           forge test -vvv
         id: test
+
+  nightly-seeds:
+    if: ${{ env.SKIP_FORGE != 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'nightly')) }}
+    name: Foundry nightly seed matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+      - name: Run nightly seed
+        env:
+          FOUNDRY_PROFILE: nightly
+        run: forge test --fuzz-seed ${{ matrix.seed }} -vv
+
+  release-seeds:
+    if: ${{ env.SKIP_FORGE != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'release' }}
+    name: Foundry release seed matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+      - name: Run release seed
+        env:
+          FOUNDRY_PROFILE: release
+        run: forge test --fuzz-seed ${{ matrix.seed }} -vv
