@@ -2366,7 +2366,18 @@ contract SellerHandler {
         erc1155.setApprovalForAll(diamond, true);
     }
 
-    function create721Listing() external {
+    function _sync721ListingState() internal {
+        if (!hasListing721) return;
+
+        uint128 activeId = getter.getActiveListingIdByERC721(address(erc721), 100);
+        if (activeId != lastListingId721) {
+            hasListing721 = false;
+            lastListingId721 = 0;
+        }
+    }
+
+    function _ensure721Listing() internal {
+        _sync721ListingState();
         if (hasListing721) return;
 
         market.createListing(
@@ -2377,8 +2388,12 @@ contract SellerHandler {
         successfulCreateCount++;
     }
 
+    function create721Listing() external {
+        _ensure721Listing();
+    }
+
     function enableWhitelist() external {
-        if (!hasListing721) return;
+        _ensure721Listing();
         Listing memory listing = getter.getListingByListingId(lastListingId721);
         market.updateListing(
             lastListingId721,
@@ -2396,7 +2411,8 @@ contract SellerHandler {
     }
 
     function addBuyerToWhitelist() external {
-        if (!hasListing721 || buyerAddr == address(0)) return;
+        if (buyerAddr == address(0)) return;
+        _ensure721Listing();
         address[] memory a = new address[](1);
         a[0] = buyerAddr;
         buyers.addBuyerWhitelistAddresses(lastListingId721, a);
@@ -2404,7 +2420,8 @@ contract SellerHandler {
     }
 
     function removeBuyerFromWhitelist() external {
-        if (!hasListing721 || buyerAddr == address(0)) return;
+        if (buyerAddr == address(0)) return;
+        _ensure721Listing();
         address[] memory a = new address[](1);
         a[0] = buyerAddr;
         buyers.removeBuyerWhitelistAddresses(lastListingId721, a);
@@ -2412,6 +2429,7 @@ contract SellerHandler {
     }
 
     function cancel721() external {
+        _sync721ListingState();
         if (!hasListing721) return;
         market.cancelListing(lastListingId721);
         hasListing721 = false;

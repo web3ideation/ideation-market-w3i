@@ -207,6 +207,10 @@ contract StorageCollisionInvariant is StdInvariant, MarketTestBase {
     uint32 internal initialFee;
     uint16 internal initialMax;
     uint256 internal initialWlLen;
+    uint256 internal initialAllowedCurrenciesLen;
+    uint128 internal initialNextListingId;
+    bytes32 internal initialWhitelistedCollectionsHash;
+    bytes32 internal initialAllowedCurrenciesHash;
 
     SellerHandler internal sellerH;
     BuyerHandler internal buyerH;
@@ -235,10 +239,25 @@ contract StorageCollisionInvariant is StdInvariant, MarketTestBase {
         initialFee = getter.getInnovationFee();
         initialMax = getter.getBuyerWhitelistMaxBatchSize();
         initialWlLen = getter.getWhitelistedCollections().length;
+        initialAllowedCurrenciesLen = getter.getAllowedCurrencies().length;
+        initialNextListingId = getter.getNextListingId();
+        initialWhitelistedCollectionsHash = _hashAddresses(getter.getWhitelistedCollections());
+        initialAllowedCurrenciesHash = _hashAddresses(getter.getAllowedCurrencies());
 
-        // Register handlers as fuzz targets
-        targetContract(address(sellerH));
-        targetContract(address(buyerH));
+        // Register only stateful market actions as fuzz targets.
+        // This avoids spending budget on wiring/setup helper calls.
+        bytes4[] memory sellerSelectors = new bytes4[](6);
+        sellerSelectors[0] = SellerHandler.create721Listing.selector;
+        sellerSelectors[1] = SellerHandler.enableWhitelist.selector;
+        sellerSelectors[2] = SellerHandler.addBuyerToWhitelist.selector;
+        sellerSelectors[3] = SellerHandler.removeBuyerFromWhitelist.selector;
+        sellerSelectors[4] = SellerHandler.cancel721.selector;
+        sellerSelectors[5] = SellerHandler.create1155Listing.selector;
+        targetSelector(FuzzSelector({addr: address(sellerH), selectors: sellerSelectors}));
+
+        bytes4[] memory buyerSelectors = new bytes4[](1);
+        buyerSelectors[0] = BuyerHandler.buySeller721.selector;
+        targetSelector(FuzzSelector({addr: address(buyerH), selectors: buyerSelectors}));
 
         // Seed one successful operation so non-vacuity checks are meaningful
         // even during Foundry's initial invariant pre-check phase.
@@ -254,5 +273,38 @@ contract StorageCollisionInvariant is StdInvariant, MarketTestBase {
         assertEq(getter.getInnovationFee(), initialFee, "innovationFee drifted during ops");
         assertEq(getter.getBuyerWhitelistMaxBatchSize(), initialMax, "maxBatch drifted during ops");
         assertEq(getter.getWhitelistedCollections().length, initialWlLen, "collections length drifted during ops");
+        assertEq(
+            getter.getAllowedCurrencies().length,
+            initialAllowedCurrenciesLen,
+            "allowed currencies length drifted during ops"
+        );
+        assertEq(
+            _hashAddresses(getter.getWhitelistedCollections()),
+            initialWhitelistedCollectionsHash,
+            "whitelisted collections set/order drifted during ops"
+        );
+        assertEq(
+            _hashAddresses(getter.getAllowedCurrencies()),
+            initialAllowedCurrenciesHash,
+            "allowed currencies set/order drifted during ops"
+        );
+        assertTrue(getter.isCurrencyAllowed(address(0)), "ETH currency allowance drifted during ops");
+
+        // Normal seller/buyer flows must not mutate these admin flags.
+        assertEq(getter.getContractOwner(), owner, "contract owner drifted during ops");
+        assertFalse(getter.isPaused(), "pause flag drifted during non-admin flows");
+
+        // Listing IDs should only move forward as listings are created.
+        assertGe(getter.getNextListingId(), initialNextListingId, "nextListingId moved backwards");
+    }
+
+    /// Invariant: seeded default collections remain whitelisted under normal user flows.
+    function invariant_WhitelistedCollectionsRemainAllowed() public view {
+        assertTrue(getter.isCollectionWhitelisted(address(erc721)), "erc721 default whitelist drifted");
+        assertTrue(getter.isCollectionWhitelisted(address(erc1155)), "erc1155 default whitelist drifted");
+    }
+
+    function _hashAddresses(address[] memory values) internal pure returns (bytes32) {
+        return keccak256(abi.encode(values));
     }
 }
