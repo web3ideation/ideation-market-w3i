@@ -2519,6 +2519,10 @@ contract InvariantHandler {
     uint128[] internal _listingIds;
     uint256 public successfulERC20Purchases;
 
+    mapping(uint128 => bool) internal _isTrackedERC721Listing;
+    mapping(uint128 => uint256) internal _trackedERC721TokenId;
+    mapping(uint128 => bool) internal _expectedActiveERC721Listing;
+
     mapping(address => bool) internal _seen;
     address[] internal _actors;
 
@@ -2605,6 +2609,9 @@ contract InvariantHandler {
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
+        _isTrackedERC721Listing[id] = true;
+        _trackedERC721TokenId[id] = tokenId;
+        _expectedActiveERC721Listing[id] = true;
     }
 
     function list1155(uint256 unitSeed, uint256 qtySeed, bool _partial) external {
@@ -2665,6 +2672,9 @@ contract InvariantHandler {
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
+        _isTrackedERC721Listing[id] = true;
+        _trackedERC721TokenId[id] = offeredId;
+        _expectedActiveERC721Listing[id] = true;
     }
 
     function listSwap721For1155(uint256 qtySeed) external {
@@ -2694,6 +2704,9 @@ contract InvariantHandler {
         );
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
+        _isTrackedERC721Listing[id] = true;
+        _trackedERC721TokenId[id] = offeredId;
+        _expectedActiveERC721Listing[id] = true;
     }
 
     function list721ERC20(uint256 priceSeed) external {
@@ -2726,6 +2739,9 @@ contract InvariantHandler {
 
         uint128 id = getter.getNextListingId() - 1;
         _pushListing(id);
+        _isTrackedERC721Listing[id] = true;
+        _trackedERC721TokenId[id] = tokenId;
+        _expectedActiveERC721Listing[id] = true;
     }
 
     function purchase(uint256 pickSeed, uint256 qtySeed, uint256 buyerSeed) external {
@@ -2759,6 +2775,10 @@ contract InvariantHandler {
                 buyQty,
                 address(0)
             );
+
+            if (_isTrackedERC721Listing[id] && listing.erc1155Quantity == 0) {
+                _expectedActiveERC721Listing[id] = false;
+            }
         } catch {
             return;
         }
@@ -2789,10 +2809,26 @@ contract InvariantHandler {
                 0,
                 address(0)
             );
+
+            if (_isTrackedERC721Listing[id]) {
+                _expectedActiveERC721Listing[id] = false;
+            }
             successfulERC20Purchases++;
         } catch {
             return;
         }
+    }
+
+    function isTrackedERC721Listing(uint128 id) external view returns (bool) {
+        return _isTrackedERC721Listing[id];
+    }
+
+    function trackedERC721TokenId(uint128 id) external view returns (uint256) {
+        return _trackedERC721TokenId[id];
+    }
+
+    function expectedActiveERC721Listing(uint128 id) external view returns (bool) {
+        return _expectedActiveERC721Listing[id];
     }
 
     function listingIdsLength() external view returns (uint256) {

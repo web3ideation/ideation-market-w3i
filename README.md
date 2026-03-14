@@ -366,7 +366,7 @@ forge test \
 Foundry (invariant target):
 
 ```bash
-forge test --match-contract IdeationMarketInvariantTest --fuzz-seed 424242
+forge test --match-contract MarketFlowInvariantTest --fuzz-seed 424242
 forge test --match-contract StorageCollisionInvariant --fuzz-seed 424242
 ```
 
@@ -396,7 +396,7 @@ Run Foundry with a selected profile:
 
 ```bash
 FOUNDRY_PROFILE=pr forge test
-FOUNDRY_PROFILE=nightly forge test --match-contract IdeationMarketInvariantTest
+FOUNDRY_PROFILE=nightly forge test --match-contract MarketFlowInvariantTest
 FOUNDRY_PROFILE=release forge test --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent"
 ```
 

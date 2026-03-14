@@ -5,7 +5,7 @@ import "./MarketTestBase.t.sol";
 import "forge-std/StdInvariant.sol";
 
 /**
- * @title IdeationMarketInvariantTest
+ * @title MarketFlowInvariantTest
  * @notice Scope/category: stateful invariant fuzzing for marketplace liveness/safety
  * using `InvariantHandler` randomized listing/purchase flows.
  *
@@ -14,7 +14,7 @@ import "forge-std/StdInvariant.sol";
  * - Non-custodial ERC20 accounting: diamond ERC20 balance remains zero across ERC20 listing/purchase flows
  * - ERC20 purchase conservation accounting: buyer spend equals seller + owner fee + royalty credits
  */
-contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
+contract MarketFlowInvariantTest is StdInvariant, MarketTestBase {
     InvariantHandler internal handler;
 
     address internal buyer1;
@@ -26,6 +26,11 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
     MockERC20 internal erc20Inv;
 
     uint256 internal constant INITIAL_ERC20_BUYER_FLOAT = 3_000_000 ether;
+
+    uint32 internal initialInnovationFee;
+    uint16 internal initialWhitelistMaxBatch;
+    bytes32 internal initialWhitelistedCollectionsHash;
+    bytes32 internal initialAllowedCurrenciesHash;
 
     function setUp() public override {
         super.setUp();
@@ -86,8 +91,22 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
         // Seed at least one active ERC721 listing for active-mapping consistency checks.
         handler.list721(2, 200);
 
-        // Tell the fuzzer to target handler's public/external mutating functions
+        // Snapshot admin/config state after deterministic seeding.
+        initialInnovationFee = getter.getInnovationFee();
+        initialWhitelistMaxBatch = getter.getBuyerWhitelistMaxBatchSize();
+        initialWhitelistedCollectionsHash = _hashAddresses(getter.getWhitelistedCollections());
+        initialAllowedCurrenciesHash = _hashAddresses(getter.getAllowedCurrencies());
+
+        // Target only mutating handler actions to keep invariant fuzzing focused.
+        bytes4[] memory handlerSelectors = new bytes4[](6);
+        handlerSelectors[0] = InvariantHandler.list721.selector;
+        handlerSelectors[1] = InvariantHandler.list1155.selector;
+        handlerSelectors[2] = InvariantHandler.listSwap721For721.selector;
+        handlerSelectors[3] = InvariantHandler.listSwap721For1155.selector;
+        handlerSelectors[4] = InvariantHandler.purchase.selector;
+        handlerSelectors[5] = InvariantHandler.purchaseERC20.selector;
         targetContract(address(handler));
+        targetSelector(FuzzSelector({addr: address(handler), selectors: handlerSelectors}));
     }
 
     /// @notice In non-custodial model, diamond should hold zero balance (all payments are atomic)
@@ -124,20 +143,17 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
         for (uint256 i = 0; i < tracked; i++) {
             uint128 id = handler.listingIdAt(i);
 
-            try getter.getListingByListingId(id) returns (Listing memory listing) {
-                if (listing.tokenAddress != address(erc721Roy)) {
-                    continue;
-                }
-
-                uint128 activeId = getter.getActiveListingIdByERC721(listing.tokenAddress, listing.tokenId);
-
-                if (listing.seller != address(0)) {
-                    assertEq(activeId, id, "active ERC721 listing pointer mismatch");
-                } else {
-                    assertEq(activeId, 0, "inactive ERC721 listing should not keep active pointer");
-                }
-            } catch {
+            if (!handler.isTrackedERC721Listing(id)) {
                 continue;
+            }
+
+            uint256 tokenId = handler.trackedERC721TokenId(id);
+            uint128 activeId = getter.getActiveListingIdByERC721(address(erc721Roy), tokenId);
+
+            if (handler.expectedActiveERC721Listing(id)) {
+                assertEq(activeId, id, "active ERC721 listing pointer mismatch");
+            } else {
+                assertEq(activeId, 0, "inactive ERC721 listing should not keep active pointer");
             }
         }
     }
@@ -148,7 +164,26 @@ contract IdeationMarketInvariantTest is StdInvariant, MarketTestBase {
         assertGt(tracked, 0, "Expected handler activity before admin drift checks");
 
         assertEq(getter.getContractOwner(), owner, "contract owner drifted under handler actions");
-        assertEq(getter.getInnovationFee(), INNOVATION_FEE, "innovationFee drifted under handler actions");
+        assertEq(getter.getInnovationFee(), initialInnovationFee, "innovationFee drifted under handler actions");
+        assertEq(getter.getBuyerWhitelistMaxBatchSize(), initialWhitelistMaxBatch, "buyer whitelist max batch drifted");
+        assertEq(
+            _hashAddresses(getter.getWhitelistedCollections()),
+            initialWhitelistedCollectionsHash,
+            "whitelisted collections drifted under handler actions"
+        );
+        assertEq(
+            _hashAddresses(getter.getAllowedCurrencies()),
+            initialAllowedCurrenciesHash,
+            "allowed currencies drifted under handler actions"
+        );
+        assertTrue(getter.isCollectionWhitelisted(address(erc721Roy)), "erc721 whitelist drifted");
+        assertTrue(getter.isCollectionWhitelisted(address(erc1155New)), "erc1155 whitelist drifted");
+        assertTrue(getter.isCurrencyAllowed(address(erc20Inv)), "erc20 whitelist drifted");
+        assertTrue(getter.isCurrencyAllowed(address(0)), "ETH currency allowance drifted");
         assertFalse(getter.isPaused(), "pause flag drifted under handler actions");
+    }
+
+    function _hashAddresses(address[] memory values) internal pure returns (bytes32) {
+        return keccak256(abi.encode(values));
     }
 }
