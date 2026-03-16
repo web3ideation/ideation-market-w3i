@@ -408,9 +408,16 @@ Echidna lane configs:
 Run Echidna with a selected profile:
 
 ```bash
-ECHIDNA_CONFIG=security-tools/echidna/echidna.pr.yaml bash script/run-echidna.sh --format text
-ECHIDNA_CONFIG=security-tools/echidna/echidna.nightly.yaml bash script/run-echidna.sh --format text
-ECHIDNA_CONFIG=security-tools/echidna/echidna.release.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=echidna.pr.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=echidna.nightly.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=echidna.release.yaml bash script/run-echidna.sh --format text
+```
+
+Note: the Echidna harness is pinned to `--via-ir`; `script/run-echidna.sh` keeps Slither disabled to preserve compatibility.
+
+```bash
+ECHIDNA_CONFIG=echidna.nightly.yaml bash script/run-echidna.sh --format text
+ECHIDNA_CONFIG=echidna.release.yaml bash script/run-echidna.sh --format text
 ```
 
 ### Multi-seed campaign matrix
@@ -436,12 +443,12 @@ Suggested Echidna seed loops:
 
 ```bash
 for s in 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010; do
-  ECHIDNA_CONFIG=security-tools/echidna/echidna.nightly.yaml \
+  ECHIDNA_CONFIG=echidna.nightly.yaml \
     bash script/run-echidna.sh --seed "$s" --format text
 done
 
 for s in 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020; do
-  ECHIDNA_CONFIG=security-tools/echidna/echidna.release.yaml \
+  ECHIDNA_CONFIG=echidna.release.yaml \
     bash script/run-echidna.sh --seed "$s" --format text
 done
 ```

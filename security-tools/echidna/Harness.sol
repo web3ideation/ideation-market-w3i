@@ -572,6 +572,8 @@ contract EchidnaIdeationMarketHarness {
     uint32 internal constant INNOVATION_FEE = 1_000;
     uint16 internal constant WL_BATCH_MAX = 300;
     uint256 internal constant FEE_DENOM = 100_000;
+    uint256 internal constant MIN_CAMPAIGN_ATTEMPTS = 200;
+    uint256 internal constant MIN_PROBE_HITS = 1;
 
     bool internal whitelistBypass;
     bool internal unauthFeeChange;
@@ -582,6 +584,11 @@ contract EchidnaIdeationMarketHarness {
     bool internal collectionPurchaseBypass;
     bool internal collectionUpdateBypass;
     bool internal collectionCreateBypass;
+
+    uint256 internal pauseProbeAttempts;
+    uint256 internal currencyProbeAttempts;
+    uint256 internal collectionProbeAttempts;
+    uint256 internal whitelistProbeAttempts;
 
     uint256 internal createAttempts;
     uint256 internal createSuccesses;
@@ -594,6 +601,10 @@ contract EchidnaIdeationMarketHarness {
 
     uint128[64] internal recentListingIds;
     uint256 internal recentListingCursor;
+
+    address[64] internal recentErc721ListingTokens;
+    uint256[64] internal recentErc721ListingTokenIds;
+    uint256 internal recentErc721ListingCursor;
 
     constructor() payable {
         initializer = new DiamondInit();
@@ -807,9 +818,12 @@ contract EchidnaIdeationMarketHarness {
         address[] memory allowed = whitelist ? _oneAddress(address(_pickDifferentBuyer(ag))) : new address[](0);
         bool paused = GetterFacet(address(diamond)).isPaused();
         bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(token);
+        if (paused) pauseProbeAttempts++;
+        if (!wlOk) collectionProbeAttempts++;
         bool ok;
         try ag.listERC721(token, tokenId, p, address(0), address(0), 0, 0, whitelist, false, allowed) {
             _recordListing(nextId);
+            _recordErc721Listing(token, tokenId);
             ok = true;
             createSuccesses++;
         } catch {}
@@ -832,9 +846,13 @@ contract EchidnaIdeationMarketHarness {
         bool paused = GetterFacet(address(diamond)).isPaused();
         bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(token);
         bool curOk = GetterFacet(address(diamond)).isCurrencyAllowed(address(erc20));
+        if (paused) pauseProbeAttempts++;
+        if (!wlOk) collectionProbeAttempts++;
+        if (!paused && wlOk && !curOk) currencyProbeAttempts++;
         bool ok;
         try ag.listERC721(token, tokenId, p, address(erc20), address(0), 0, 0, whitelist, false, allowed) {
             _recordListing(nextId);
+            _recordErc721Listing(token, tokenId);
             ok = true;
             createSuccesses++;
         } catch {}
@@ -858,11 +876,14 @@ contract EchidnaIdeationMarketHarness {
         uint128 nextId = GetterFacet(address(diamond)).getNextListingId();
         bool paused = GetterFacet(address(diamond)).isPaused();
         bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(token);
+        if (paused) pauseProbeAttempts++;
+        if (!wlOk) collectionProbeAttempts++;
         bool ok;
         try seller.listERC721(
             token, tokenId, p, address(0), address(nft721Swap), desiredTokenId, 0, false, false, new address[](0)
         ) {
             _recordListing(nextId);
+            _recordErc721Listing(token, tokenId);
             ok = true;
             createSuccesses++;
         } catch {}
@@ -886,10 +907,13 @@ contract EchidnaIdeationMarketHarness {
         uint128 nextId = GetterFacet(address(diamond)).getNextListingId();
         bool paused = GetterFacet(address(diamond)).isPaused();
         bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(token);
+        if (paused) pauseProbeAttempts++;
+        if (!wlOk) collectionProbeAttempts++;
         bool ok;
         try seller.listERC721(token, tokenId, p, address(0), address(nft1155Swap), 2, q, false, false, new address[](0))
         {
             _recordListing(nextId);
+            _recordErc721Listing(token, tokenId);
             ok = true;
             createSuccesses++;
         } catch {}
@@ -915,6 +939,8 @@ contract EchidnaIdeationMarketHarness {
         address[] memory allowed = whitelist ? _oneAddress(address(_pickDifferentBuyer(ag))) : new address[](0);
         bool paused = GetterFacet(address(diamond)).isPaused();
         bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(address(nft1155));
+        if (paused) pauseProbeAttempts++;
+        if (!wlOk) collectionProbeAttempts++;
         bool ok;
         try ag.listERC1155(address(nft1155), 1, address(ag), p, address(0), q, whitelist, partialBuy, allowed) {
             _recordListing(nextId);
@@ -948,6 +974,9 @@ contract EchidnaIdeationMarketHarness {
 
             address newCurrency = useErc20 ? address(erc20) : address(0);
             bool curAllowed = GetterFacet(address(diamond)).isCurrencyAllowed(newCurrency);
+            if (paused) pauseProbeAttempts++;
+            if (!wlOkBefore) collectionProbeAttempts++;
+            if (!paused && wlOkBefore && !curAllowed) currencyProbeAttempts++;
 
             uint256 newErc1155Quantity = 0;
             bool newPartialBuyEnabled = false;
@@ -965,8 +994,20 @@ contract EchidnaIdeationMarketHarness {
                 }
             }
 
-            address newDesiredTokenAddress = setSwap ? address(nft721Swap) : address(0);
-            uint256 newDesiredTokenId = setSwap ? _ownedSwap721(_pickDifferentBuyer(seller)) : 0;
+            address newDesiredTokenAddress = address(0);
+            uint256 newDesiredTokenId = 0;
+            uint256 newDesiredErc1155Quantity = 0;
+            if (setSwap) {
+                // Alternate update coverage between ERC721 and ERC1155 desired-swap modes.
+                if ((qtyHint & 1) == 0) {
+                    newDesiredTokenAddress = address(nft721Swap);
+                    newDesiredTokenId = _ownedSwap721(_pickDifferentBuyer(seller));
+                } else {
+                    newDesiredTokenAddress = address(nft1155Swap);
+                    newDesiredTokenId = 2;
+                    newDesiredErc1155Quantity = (qtyHint % 10) + 1;
+                }
+            }
 
             uint256 newPrice;
             if (newPartialBuyEnabled) {
@@ -990,7 +1031,7 @@ contract EchidnaIdeationMarketHarness {
                 newCurrency,
                 newDesiredTokenAddress,
                 newDesiredTokenId,
-                0,
+                newDesiredErc1155Quantity,
                 newErc1155Quantity,
                 whitelist,
                 newPartialBuyEnabled,
@@ -1043,6 +1084,8 @@ contract EchidnaIdeationMarketHarness {
 
             bool paused = GetterFacet(address(diamond)).isPaused();
             bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(L.tokenAddress);
+            if (paused) pauseProbeAttempts++;
+            if (!wlOk) collectionProbeAttempts++;
 
             bool ok;
             try buyer.purchase{value: purchasePrice}(
@@ -1093,6 +1136,8 @@ contract EchidnaIdeationMarketHarness {
 
             bool paused = GetterFacet(address(diamond)).isPaused();
             bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(L.tokenAddress);
+            if (paused) pauseProbeAttempts++;
+            if (!wlOk) collectionProbeAttempts++;
 
             bool ok;
             try buyer.purchase(
@@ -1128,6 +1173,8 @@ contract EchidnaIdeationMarketHarness {
 
             bool paused = GetterFacet(address(diamond)).isPaused();
             bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(L.tokenAddress);
+            if (paused) pauseProbeAttempts++;
+            if (!wlOk) collectionProbeAttempts++;
 
             bool ok;
             try buyer.purchase{value: (L.currency == address(0) ? L.price : 0)}(
@@ -1166,6 +1213,8 @@ contract EchidnaIdeationMarketHarness {
 
             bool paused = GetterFacet(address(diamond)).isPaused();
             bool wlOk = GetterFacet(address(diamond)).isCollectionWhitelisted(L.tokenAddress);
+            if (paused) pauseProbeAttempts++;
+            if (!wlOk) collectionProbeAttempts++;
 
             bool ok;
             try desiredHolder.purchase{value: (L.currency == address(0) ? L.price : 0)}(
@@ -1202,6 +1251,8 @@ contract EchidnaIdeationMarketHarness {
             } catch {
                 return;
             }
+
+            whitelistProbeAttempts++;
 
             uint256 purchaseQty = 0;
             uint256 purchasePrice = L.price;
@@ -1382,17 +1433,17 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function echidna_pause_enforced() external view returns (bool) {
-        if (!_hasMinimumActivity()) return true;
+        if (pauseProbeAttempts == 0) return true;
         return !pauseBypass;
     }
 
     function echidna_currency_allowlist_enforced() external view returns (bool) {
-        if (!_hasMinimumActivity()) return true;
+        if (currencyProbeAttempts == 0) return true;
         return !currencyBypass;
     }
 
     function echidna_collection_whitelist_enforced() external view returns (bool) {
-        if (!_hasMinimumActivity()) return true;
+        if (collectionProbeAttempts == 0) return true;
         return !(collectionPurchaseBypass || collectionUpdateBypass || collectionCreateBypass);
     }
 
@@ -1401,25 +1452,19 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function echidna_fee_royalty_bounds() external view returns (bool) {
-        uint256[4] memory ids721 = [uint256(11), 12, 13, 14];
-        for (uint256 i = 0; i < ids721.length; i++) {
-            if (!_feeRoyaltyOkActive(address(nft721), ids721[i])) return false;
-        }
-        uint256[2] memory idsRoy = [uint256(21), 22];
-        for (uint256 i = 0; i < idsRoy.length; i++) {
-            if (!_feeRoyaltyOkActive(address(nft721Royalty), idsRoy[i])) return false;
+        for (uint256 i = 0; i < recentErc721ListingTokens.length; i++) {
+            address token = recentErc721ListingTokens[i];
+            if (token == address(0)) continue;
+            if (!_feeRoyaltyOkActive(token, recentErc721ListingTokenIds[i])) return false;
         }
         return true;
     }
 
     function echidna_erc721_active_mapping_consistent() external view returns (bool) {
-        uint256[4] memory ids721 = [uint256(11), 12, 13, 14];
-        for (uint256 i = 0; i < ids721.length; i++) {
-            if (!_activeMappingOk(address(nft721), ids721[i])) return false;
-        }
-        uint256[2] memory idsRoy = [uint256(21), 22];
-        for (uint256 i = 0; i < idsRoy.length; i++) {
-            if (!_activeMappingOk(address(nft721Royalty), idsRoy[i])) return false;
+        for (uint256 i = 0; i < recentErc721ListingTokens.length; i++) {
+            address token = recentErc721ListingTokens[i];
+            if (token == address(0)) continue;
+            if (!_activeMappingOk(token, recentErc721ListingTokenIds[i])) return false;
         }
         return true;
     }
@@ -1443,7 +1488,7 @@ contract EchidnaIdeationMarketHarness {
     }
 
     function echidna_whitelist_enforced() external view returns (bool) {
-        if (!_hasMinimumActivity()) return true;
+        if (whitelistProbeAttempts == 0) return true;
         return !whitelistBypass;
     }
 
@@ -1455,6 +1500,14 @@ contract EchidnaIdeationMarketHarness {
         return !doubleSell;
     }
 
+    function echidna_campaign_probe_non_vacuous() external view returns (bool) {
+        uint256 totalAttempts = createAttempts + updateAttempts + purchaseAttempts + pauseTransitionAttempts;
+        if (totalAttempts < MIN_CAMPAIGN_ATTEMPTS) return true;
+
+        return pauseProbeAttempts >= MIN_PROBE_HITS && currencyProbeAttempts >= MIN_PROBE_HITS
+            && collectionProbeAttempts >= MIN_PROBE_HITS && whitelistProbeAttempts >= MIN_PROBE_HITS;
+    }
+
     function _recordListing(uint128 listingId) internal {
         recentListingIds[recentListingCursor % recentListingIds.length] = listingId;
         unchecked {
@@ -1462,8 +1515,12 @@ contract EchidnaIdeationMarketHarness {
         }
     }
 
-    function _hasMinimumActivity() internal view returns (bool) {
-        return createSuccesses + updateSuccesses + purchaseSuccesses + pauseTransitionSuccesses >= 3;
+    function _recordErc721Listing(address token, uint256 tokenId) internal {
+        recentErc721ListingTokens[recentErc721ListingCursor % recentErc721ListingTokens.length] = token;
+        recentErc721ListingTokenIds[recentErc721ListingCursor % recentErc721ListingTokenIds.length] = tokenId;
+        unchecked {
+            recentErc721ListingCursor++;
+        }
     }
 
     function _pickAgent(uint256 who) internal view returns (Agent) {

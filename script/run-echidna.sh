@@ -22,13 +22,14 @@ Notes:
   - Mirrors repo src/ into security-tools/echidna/src/ for self-contained compilation.
   - Writes corpus/coverage/reproducers under security-tools/echidna/echidna_corpus/.
   - Loads and replays sequences from echidna_corpus/reproducers and echidna_corpus/coverage.
-  - Outputs: security-tools/echidna/echidna_corpus/, security-tools/echidna/crytic-export/
+  - Outputs: security-tools/echidna/echidna_corpus/.
+  - Optional crytic export: security-tools/echidna/crytic-export/ (disabled when Slither mode is enabled to avoid arg conflicts).
 
 Examples:
   bash script/run-echidna.sh --format text
   bash script/run-echidna.sh --seq-len 120 --test-limit 300000 --format text
   bash script/run-echidna.sh --seed 424242 --seq-len 120 --test-limit 2000000 --format text
-  ECHIDNA_CONFIG=security-tools/echidna/echidna.pr.yaml bash script/run-echidna.sh --format text
+  ECHIDNA_CONFIG=echidna.pr.yaml bash script/run-echidna.sh --format text
 EOF
 }
 
@@ -52,7 +53,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOL_DIR="$ROOT/security-tools/echidna"
 HARNESS="$TOOL_DIR/Harness.sol"
 CONFIG_DEFAULT="$TOOL_DIR/echidna.yaml"
-CONFIG="${ECHIDNA_CONFIG:-$CONFIG_DEFAULT}"
+CONFIG_INPUT="${ECHIDNA_CONFIG:-$CONFIG_DEFAULT}"
 CORPUS_DIR="$TOOL_DIR/echidna_corpus"
 EXPORT_DIR="$TOOL_DIR/crytic-export"
 CONTRACT="EchidnaIdeationMarketHarness"
@@ -60,6 +61,19 @@ CONTRACT="EchidnaIdeationMarketHarness"
 log "Outputs: $CORPUS_DIR (corpus/coverage/reproducers), $EXPORT_DIR (crytic export)"
 
 mkdir -p "$CORPUS_DIR" "$EXPORT_DIR"
+
+# Resolve config path before changing cwd. Accept absolute paths, repo-relative
+# paths, and tool-dir-relative short names like "echidna.pr.yaml".
+if [[ "$CONFIG_INPUT" = /* ]]; then
+  CONFIG="$CONFIG_INPUT"
+elif [[ -f "$ROOT/$CONFIG_INPUT" ]]; then
+  CONFIG="$ROOT/$CONFIG_INPUT"
+elif [[ -f "$TOOL_DIR/$CONFIG_INPUT" ]]; then
+  CONFIG="$TOOL_DIR/$CONFIG_INPUT"
+else
+  echo "error: Echidna config not found: $CONFIG_INPUT" >&2
+  exit 2
+fi
 
 # Keep Echidna compilation self-contained: copy the repo's src/ into TOOL_DIR/src.
 # This avoids solc allow-path issues when `src/` is outside the allowed directories.
