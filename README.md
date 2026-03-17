@@ -385,12 +385,14 @@ Echidna reproducers:
 - Coverage corpus is stored in `security-tools/echidna/echidna_corpus/coverage/`.
 - `bash script/run-echidna.sh` automatically loads and replays sequences from both directories at startup.
 
-### Staged fuzz/invariant profiles (PR, nightly, release)
+### Foundry test profiles (default + staged lanes)
 
-Foundry profile lanes are configured in [foundry.toml](foundry.toml):
-- `pr` and `ci`: fuzz 3000, invariant 500/depth 60
+Foundry profile lanes are configured in [foundry.toml](foundry.toml). Each lane has both a fuzz block (`[fuzz]` or `[profile.<name>.fuzz]`) and an invariant block (`[invariant]` or `[profile.<name>.invariant]`):
+- `default` (no `FOUNDRY_PROFILE`): fuzz 10000, invariant 2000/depth 120
+- `pr`: fuzz 3000, invariant 500/depth 60
 - `nightly`: fuzz 20000, invariant 3000/depth 150
 - `release`: fuzz 50000, invariant 8000/depth 250
+- `preprod_storage`: fuzz 50000, invariant 3300/depth 150 (StorageCollision preproduction sweet spot)
 
 Run Foundry with a selected profile:
 
@@ -398,7 +400,28 @@ Run Foundry with a selected profile:
 FOUNDRY_PROFILE=pr forge test
 FOUNDRY_PROFILE=nightly forge test --match-contract MarketFlowInvariantTest
 FOUNDRY_PROFILE=release forge test --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent"
+FOUNDRY_PROFILE=preprod_storage forge test --match-path test/StorageCollisionTest.t.sol --match-test '^invariant_'
 ```
+
+Note: these profile blocks are intentional (not obsolete). They exist to separate fast feedback (`pr`) from deeper campaigns (`nightly`, `release`) and the OOM-safe storage preproduction lane (`preprod_storage`).
+
+### StorageCollision preproduction guidance (OOM-safe)
+
+`StorageCollisionInvariant` can exceed memory on some machines under `release` (`invariant.runs=8000`, `depth=250`) and get OOM-killed (exit code 137).
+
+Use the dedicated `preprod_storage` profile for storage preproduction campaigns:
+
+```bash
+for s in 3101 3102 3103 3104 3105; do
+  FOUNDRY_PROFILE=preprod_storage \
+    forge test \
+      --match-path test/StorageCollisionTest.t.sol \
+      --match-test '^invariant_' \
+      --fuzz-seed "$s"
+done
+```
+
+This profile was calibrated to be stronger than nightly while remaining stable in this repo's current environment.
 
 Echidna lane configs:
 - PR: `security-tools/echidna/echidna.pr.yaml`

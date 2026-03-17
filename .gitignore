@@ -37,6 +37,7 @@ security-tools/**/diamond-report.sarif
 # Security tooling outputs (local)
 crytic-export/
 echidna_corpus/
+security-tools/foundry/preprod_logs/
 security-tools/echidna/crytic-export/
 security-tools/echidna/echidna_corpus/
 security-tools/echidna/src/

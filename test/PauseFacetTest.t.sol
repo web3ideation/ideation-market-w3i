@@ -997,7 +997,7 @@ contract PauseFacetTest is MarketTestBase {
         if (useERC1155 && partialMode) {
             expectedPayment = (updatedPrice / recoveryErc1155Qty) * recoveryPurchaseQty;
         }
-        vm.deal(user2, 10 ether);
+        vm.deal(user2, expectedPayment + 1 ether);
         vm.prank(user2);
         market.purchaseListing{value: useERC20 ? 0 : expectedPayment}(
             recoveryListingId,

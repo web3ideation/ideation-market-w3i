@@ -20,13 +20,6 @@ runs = 10000
 runs = 2000
 depth = 120
 
-[profile.ci.fuzz]
-runs = 3000
-
-[profile.ci.invariant]
-runs = 500
-depth = 60
-
 [profile.pr.fuzz]
 runs = 3000
 
@@ -47,3 +40,10 @@ runs = 50000
 [profile.release.invariant]
 runs = 8000
 depth = 250
+
+[profile.preprod_storage.fuzz]
+runs = 50000
+
+[profile.preprod_storage.invariant]
+runs = 3300
+depth = 150
