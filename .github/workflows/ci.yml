@@ -45,7 +45,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
 
       - name: Show Forge version
         run: |
@@ -93,7 +93,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
       - name: Run nightly seed
         env:
           FOUNDRY_PROFILE: nightly
@@ -126,7 +126,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: nightly
+          version: stable
       - name: Run release seed
         env:
           FOUNDRY_PROFILE: release
