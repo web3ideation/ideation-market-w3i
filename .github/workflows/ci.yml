@@ -47,13 +47,6 @@ jobs:
         with:
           version: stable
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Align Forge with local commit
-        run: |
-          foundryup -C 70ef94a
-
       - name: Show Forge version
         run: |
           forge --version
