@@ -45,16 +45,30 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: 0.2.0
+          version: stable
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Align Forge with local commit
+        run: |
+          foundryup -C 70ef94a
 
       - name: Show Forge version
         run: |
           forge --version
 
-      - name: Run Forge fmt
+      - name: Run Forge fmt (required on PR)
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           forge fmt --check
         id: fmt
+
+      - name: Run Forge fmt (non-blocking on push)
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          forge fmt --check || true
+        id: fmtPush
 
       - name: Run Forge build
         run: |
@@ -93,7 +107,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: 0.2.0
+          version: stable
       - name: Run nightly seed
         env:
           FOUNDRY_PROFILE: nightly
@@ -126,7 +140,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: 0.2.0
+          version: stable
       - name: Run release seed
         env:
           FOUNDRY_PROFILE: release
