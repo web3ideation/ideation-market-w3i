@@ -23,8 +23,11 @@ on:
         type: boolean
 
 env:
-  FOUNDRY_PROFILE: ci
-  SKIP_FORGE: 'true'   # <- flip to 'false' later to re-enable Foundry steps
+  FOUNDRY_PROFILE: pr
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -33,51 +36,52 @@ jobs:
 
     name: Foundry project
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Install Foundry
-        if: ${{ env.SKIP_FORGE != 'true' }}
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
 
       - name: Show Forge version
-        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge --version
 
       - name: Run Forge fmt
-        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge fmt --check
         id: fmt
 
       - name: Run Forge build
-        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge build --sizes
         id: build
 
       - name: Run selector clash check
-        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           chmod +x script/check-selectors.sh
           script/check-selectors.sh
         id: selectorClash
 
       - name: Run Forge tests
-        if: ${{ env.SKIP_FORGE != 'true' }}
         run: |
           forge test -vvv
         id: test
 
+      - name: Run gas snapshot regression check
+        run: |
+          bash script/gas-snapshot-check.sh
+        id: gas
+
   nightly-seeds:
-    if: ${{ env.SKIP_FORGE != 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'nightly')) }}
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'nightly') }}
     name: Foundry nightly seed matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -93,12 +97,24 @@ jobs:
       - name: Run nightly seed
         env:
           FOUNDRY_PROFILE: nightly
-        run: forge test --fuzz-seed ${{ matrix.seed }} -vv
+        run: |
+          mkdir -p artifacts/foundry
+          forge test --fuzz-seed ${{ matrix.seed }} -vv | tee artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+
+      - name: Upload nightly seed artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-nightly-seed-${{ matrix.seed }}
+          path: artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+          if-no-files-found: warn
+          retention-days: 30
 
   release-seeds:
-    if: ${{ env.SKIP_FORGE != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'release' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_seed_matrix == true && inputs.lane == 'release' }}
     name: Foundry release seed matrix
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -114,4 +130,81 @@ jobs:
       - name: Run release seed
         env:
           FOUNDRY_PROFILE: release
-        run: forge test --fuzz-seed ${{ matrix.seed }} -vv
+        run: |
+          mkdir -p artifacts/foundry
+          forge test --fuzz-seed ${{ matrix.seed }} -vv | tee artifacts/foundry/release-seed-${{ matrix.seed }}.log
+
+      - name: Upload release seed artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-release-seed-${{ matrix.seed }}
+          path: artifacts/foundry/release-seed-${{ matrix.seed }}.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  nightly-echidna:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.lane == 'nightly') }}
+    name: Echidna nightly lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Pull Echidna container
+        run: |
+          docker pull ghcr.io/crytic/echidna/echidna
+
+      - name: Run Echidna nightly
+        run: |
+          mkdir -p artifacts/echidna
+          docker run --rm -v "$PWD":/src ghcr.io/crytic/echidna/echidna \
+            bash -lc "cd /src && ECHIDNA_CONFIG=echidna.nightly.yaml bash script/run-echidna.sh --format text" \
+            | tee artifacts/echidna/echidna-nightly.log
+
+      - name: Upload Echidna nightly artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: echidna-nightly-artifacts
+          path: |
+            artifacts/echidna/echidna-nightly.log
+            security-tools/echidna/echidna_corpus/reproducers/
+            security-tools/echidna/echidna_corpus/coverage/
+          if-no-files-found: warn
+          retention-days: 30
+
+  release-echidna:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'release' }}
+    name: Echidna release lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Pull Echidna container
+        run: |
+          docker pull ghcr.io/crytic/echidna/echidna
+
+      - name: Run Echidna release
+        run: |
+          mkdir -p artifacts/echidna
+          docker run --rm -v "$PWD":/src ghcr.io/crytic/echidna/echidna \
+            bash -lc "cd /src && ECHIDNA_CONFIG=echidna.release.yaml bash script/run-echidna.sh --format text" \
+            | tee artifacts/echidna/echidna-release.log
+
+      - name: Upload Echidna release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: echidna-release-artifacts
+          path: |
+            artifacts/echidna/echidna-release.log
+            security-tools/echidna/echidna_corpus/reproducers/
+            security-tools/echidna/echidna_corpus/coverage/
+          if-no-files-found: warn
+          retention-days: 30
