@@ -38,11 +38,26 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SNAPSHOT_FILE="$ROOT/security-tools/gas/.gas-snapshot"
+TMP_SNAPSHOT="$(mktemp)"
+
+cleanup() {
+	rm -f "$TMP_SNAPSHOT"
+}
+trap cleanup EXIT
 
 log "Outputs: $SNAPSHOT_FILE"
 
 if [[ $# -eq 0 ]]; then
-	exec forge snapshot --match-contract IdeationMarketGasTest --snap "$SNAPSHOT_FILE"
+	forge snapshot --match-contract IdeationMarketGasTest --snap "$TMP_SNAPSHOT"
+else
+	forge snapshot --snap "$TMP_SNAPSHOT" "$@"
 fi
 
-exec forge snapshot --snap "$SNAPSHOT_FILE" "$@"
+if grep -Eq '1844674407[0-9]{10,}' "$TMP_SNAPSHOT"; then
+	echo "error: generated gas snapshot appears corrupted (wrapped uint64-like values detected)" >&2
+	echo "hint: run snapshot update under the same Foundry toolchain used in CI" >&2
+	exit 1
+fi
+
+mv "$TMP_SNAPSHOT" "$SNAPSHOT_FILE"
+echo "Updated gas snapshot: $SNAPSHOT_FILE"
