@@ -44,8 +44,15 @@ jobs:
 
       - name: Ensure submodules are initialized
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
+          git submodule update --init --recursive || true
+          if [ ! -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol ]; then
+            rm -rf lib/openzeppelin-contracts
+            git clone --depth 1 --branch v5.0.2 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+          fi
+          if [ ! -f lib/forge-std/src/Test.sol ]; then
+            rm -rf lib/forge-std
+            git clone --depth 1 https://github.com/foundry-rs/forge-std lib/forge-std
+          fi
           test -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol
           test -f lib/forge-std/src/Test.sol
 
@@ -107,8 +114,15 @@ jobs:
 
       - name: Ensure submodules are initialized
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
+          git submodule update --init --recursive || true
+          if [ ! -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol ]; then
+            rm -rf lib/openzeppelin-contracts
+            git clone --depth 1 --branch v5.0.2 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+          fi
+          if [ ! -f lib/forge-std/src/Test.sol ]; then
+            rm -rf lib/forge-std
+            git clone --depth 1 https://github.com/foundry-rs/forge-std lib/forge-std
+          fi
           test -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol
           test -f lib/forge-std/src/Test.sol
       - name: Install Foundry
@@ -147,8 +161,15 @@ jobs:
 
       - name: Ensure submodules are initialized
         run: |
-          git submodule sync --recursive
-          git submodule update --init --recursive
+          git submodule update --init --recursive || true
+          if [ ! -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol ]; then
+            rm -rf lib/openzeppelin-contracts
+            git clone --depth 1 --branch v5.0.2 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+          fi
+          if [ ! -f lib/forge-std/src/Test.sol ]; then
+            rm -rf lib/forge-std
+            git clone --depth 1 https://github.com/foundry-rs/forge-std lib/forge-std
+          fi
           test -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol
           test -f lib/forge-std/src/Test.sol
       - name: Install Foundry
