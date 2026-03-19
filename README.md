@@ -543,6 +543,11 @@ Wrapper scripts live in [script](script) and reports/artifacts are stored under 
 - Echidna: `bash script/run-echidna.sh`
 - Gas snapshots: `bash script/gas-snapshot-update.sh` / `bash script/gas-snapshot-check.sh`
 
+Gas snapshot version requirement:
+- Use Foundry v1.6.0 or newer for local gas snapshot update/check commands.
+- Older Foundry versions can report wrapped or underflowed gas values (very large numbers near 2^64) in pause/resume gas metering scenarios, which can corrupt `.gas-snapshot` and cause false regression failures.
+- If you cannot upgrade local Foundry yet, run gas snapshot checks via CI until your local toolchain is updated.
+
 Echidna notes:
 - The harness is [security-tools/echidna/Harness.sol](security-tools/echidna/Harness.sol).
 - The runner mirrors [src](src) into `security-tools/echidna/src/` for self-contained compilation.
