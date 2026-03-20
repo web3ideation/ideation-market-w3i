@@ -105,6 +105,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         seed: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010]
     steps:
@@ -133,15 +134,43 @@ jobs:
         env:
           FOUNDRY_PROFILE: nightly
         run: |
+          set +e
           mkdir -p artifacts/foundry
           forge test --fuzz-seed ${{ matrix.seed }} -vv | tee artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+          rc=${PIPESTATUS[0]}
+          initial_rc=$rc
+          retried=0
+
+          # Retry once on transient runner/process termination signals.
+          if [ "$rc" -eq 143 ] || [ "$rc" -eq 137 ]; then
+            retried=1
+            echo "Nightly seed ${{ matrix.seed }} ended with exit code $rc; retrying once after 20s..."
+            sleep 20
+            forge test --fuzz-seed ${{ matrix.seed }} -vv | tee -a artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+            rc=${PIPESTATUS[0]}
+          fi
+
+          {
+            echo "seed=${{ matrix.seed }}"
+            echo "initial_exit_code=$initial_rc"
+            echo "final_exit_code=$rc"
+            echo "retried=$retried"
+          } > artifacts/foundry/nightly-seed-${{ matrix.seed }}.status
+
+          if [ "$retried" -eq 1 ] && [ "$rc" -eq 0 ]; then
+            echo "::warning::Nightly seed ${{ matrix.seed }} passed only after retry following infra-style termination (initial=$initial_rc)."
+          fi
+
+          exit "$rc"
 
       - name: Upload nightly seed artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: foundry-nightly-seed-${{ matrix.seed }}
-          path: artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+          path: |
+            artifacts/foundry/nightly-seed-${{ matrix.seed }}.log
+            artifacts/foundry/nightly-seed-${{ matrix.seed }}.status
           if-no-files-found: warn
           retention-days: 30
 
@@ -152,6 +181,7 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         seed: [2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
     steps:
@@ -180,15 +210,43 @@ jobs:
         env:
           FOUNDRY_PROFILE: release
         run: |
+          set +e
           mkdir -p artifacts/foundry
           forge test --fuzz-seed ${{ matrix.seed }} -vv | tee artifacts/foundry/release-seed-${{ matrix.seed }}.log
+          rc=${PIPESTATUS[0]}
+          initial_rc=$rc
+          retried=0
+
+          # Retry once on transient runner/process termination signals.
+          if [ "$rc" -eq 143 ] || [ "$rc" -eq 137 ]; then
+            retried=1
+            echo "Release seed ${{ matrix.seed }} ended with exit code $rc; retrying once after 20s..."
+            sleep 20
+            forge test --fuzz-seed ${{ matrix.seed }} -vv | tee -a artifacts/foundry/release-seed-${{ matrix.seed }}.log
+            rc=${PIPESTATUS[0]}
+          fi
+
+          {
+            echo "seed=${{ matrix.seed }}"
+            echo "initial_exit_code=$initial_rc"
+            echo "final_exit_code=$rc"
+            echo "retried=$retried"
+          } > artifacts/foundry/release-seed-${{ matrix.seed }}.status
+
+          if [ "$retried" -eq 1 ] && [ "$rc" -eq 0 ]; then
+            echo "::warning::Release seed ${{ matrix.seed }} passed only after retry following infra-style termination (initial=$initial_rc)."
+          fi
+
+          exit "$rc"
 
       - name: Upload release seed artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: foundry-release-seed-${{ matrix.seed }}
-          path: artifacts/foundry/release-seed-${{ matrix.seed }}.log
+          path: |
+            artifacts/foundry/release-seed-${{ matrix.seed }}.log
+            artifacts/foundry/release-seed-${{ matrix.seed }}.status
           if-no-files-found: warn
           retention-days: 30
 
