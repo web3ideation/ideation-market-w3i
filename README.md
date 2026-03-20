@@ -403,19 +403,23 @@ FOUNDRY_PROFILE=release forge test --match-test "testFuzz_OnlyOwnerCanPause|test
 FOUNDRY_PROFILE=preprod_storage forge test --match-path test/StorageCollisionTest.t.sol --match-test '^invariant_'
 ```
 
-Note: these profile blocks are intentional (not obsolete). They exist to separate fast feedback (`pr`) from deeper campaigns (`nightly`, `release`) and the OOM-safe storage preproduction lane (`preprod_storage`).
+Note: these profile blocks are intentional (not obsolete). They separate fast feedback (`pr`) from deeper campaigns (`nightly`, `release`), while keeping an OOM-safe storage preproduction profile (`preprod_storage`) used for local storage campaigns and the release lane storage-collision check.
 
-CI trigger policy for Foundry lanes:
-- `pr` is the default lane used in the main CI check job.
-- `nightly` seed matrix runs on schedule and can also be triggered manually via workflow_dispatch (`lane=nightly`, `run_seed_matrix=true`).
-- `release` seed matrix is manual-only via workflow_dispatch (`lane=release`, `run_seed_matrix=true`).
-- `preprod_storage` is manual-only via workflow_dispatch (`lane=preprod_storage`).
+CI lane quick reference:
+- `pr`: default main CI check lane.
+- `nightly`: scheduled seed matrix lane; manual trigger also supported via workflow_dispatch (`lane=nightly`, `run_seed_matrix=true`).
+- `release`: manual-only full pre-release lane via workflow_dispatch (`lane=release`).
+
+Release lane includes all heavy checks in one run:
+- Foundry release seed matrix,
+- Foundry storage-collision invariants (preprod_storage profile target),
+- Echidna release lane.
 
 workflow_dispatch checkbox behavior (`run Foundry seed matrix jobs`):
-- For `nightly` and `release`: check the box to run the Foundry seed matrix jobs.
-- For `preprod_storage`: leave the box unchecked; this lane ignores the seed-matrix toggle and runs its dedicated storage invariant job directly.
+- `nightly`: check the box to run Foundry nightly seed matrix jobs.
+- `release`: checkbox is ignored; release always runs its Foundry release seed matrix.
 
-Run the `preprod_storage` lane after storage-sensitive changes, especially:
+Run `release` before go-live and after storage-sensitive changes, especially:
 - changes to `AppStorage` fields/order/types or storage-related libraries,
 - facet changes that add/remove/reshape persisted state,
 - upgrade initializer changes that touch existing storage,
@@ -438,9 +442,7 @@ done
 ```
 
 This profile was calibrated to be stronger than nightly while remaining stable in this repo's current environment.
-
-Manual CI lane equivalent:
-- Trigger workflow_dispatch with `lane=preprod_storage` to run the same storage-collision invariant target in CI.
+In CI, the same storage-collision invariant target is included in the `release` lane.
 
 Echidna lane configs:
 - PR: `security-tools/echidna/echidna.pr.yaml`
