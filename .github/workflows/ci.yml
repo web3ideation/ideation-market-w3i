@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       lane:
-        description: "test lane (pr/nightly/release)"
+        description: "test lane (pr/nightly/release/preprod_storage)"
         required: false
         default: "pr"
         type: choice
@@ -16,6 +16,7 @@ on:
           - pr
           - nightly
           - release
+          - preprod_storage
       run_seed_matrix:
         description: "run Foundry seed matrix jobs"
         required: false
@@ -189,6 +190,55 @@ jobs:
         with:
           name: foundry-release-seed-${{ matrix.seed }}
           path: artifacts/foundry/release-seed-${{ matrix.seed }}.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  preprod-storage:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.lane == 'preprod_storage' }}
+    name: Foundry preprod storage lane
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Ensure submodules are initialized
+        run: |
+          git submodule update --init --recursive || true
+          if [ ! -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol ]; then
+            rm -rf lib/openzeppelin-contracts
+            git clone --depth 1 --branch v5.0.2 https://github.com/OpenZeppelin/openzeppelin-contracts lib/openzeppelin-contracts
+          fi
+          if [ ! -f lib/forge-std/src/Test.sol ]; then
+            rm -rf lib/forge-std
+            git clone --depth 1 https://github.com/foundry-rs/forge-std lib/forge-std
+          fi
+          test -f lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol
+          test -f lib/forge-std/src/Test.sol
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Run preprod storage invariants
+        env:
+          FOUNDRY_PROFILE: preprod_storage
+        run: |
+          mkdir -p artifacts/foundry
+          forge test \
+            --match-path test/StorageCollisionTest.t.sol \
+            --match-test '^invariant_' \
+            --fuzz-seed 3101 \
+            -vv | tee artifacts/foundry/preprod-storage-seed-3101.log
+
+      - name: Upload preprod storage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundry-preprod-storage-seed-3101
+          path: artifacts/foundry/preprod-storage-seed-3101.log
           if-no-files-found: warn
           retention-days: 30
 

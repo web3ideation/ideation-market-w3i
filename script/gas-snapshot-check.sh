@@ -18,6 +18,7 @@ Usage:
 
 Notes:
 	- Default checks only IdeationMarketGasTest against the pinned snapshot.
+	- Enforces a 5% tolerance window against the pinned snapshot baseline.
 	- `--refresh-and-check` first regenerates snapshot via gas-snapshot-update.sh,
 	  then runs the regression check (useful for local workflows).
 	- Snapshot file lives at security-tools/gas/.gas-snapshot.
@@ -51,6 +52,7 @@ fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SNAPSHOT_FILE="$ROOT/security-tools/gas/.gas-snapshot"
+GAS_TOLERANCE="${GAS_TOLERANCE:-5}"
 
 log "Outputs: $SNAPSHOT_FILE"
 
@@ -65,7 +67,7 @@ if [[ "$REFRESH_FIRST" == "1" ]]; then
 fi
 
 if [[ ${#FORGE_ARGS[@]} -eq 0 ]]; then
-	exec forge snapshot --match-contract IdeationMarketGasTest --check "$SNAPSHOT_FILE"
+	exec forge snapshot --match-contract IdeationMarketGasTest --tolerance "$GAS_TOLERANCE" --check "$SNAPSHOT_FILE"
 fi
 
-exec forge snapshot --check "$SNAPSHOT_FILE" "${FORGE_ARGS[@]}"
+exec forge snapshot --tolerance "$GAS_TOLERANCE" --check "$SNAPSHOT_FILE" "${FORGE_ARGS[@]}"

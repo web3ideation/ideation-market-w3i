@@ -405,6 +405,18 @@ FOUNDRY_PROFILE=preprod_storage forge test --match-path test/StorageCollisionTes
 
 Note: these profile blocks are intentional (not obsolete). They exist to separate fast feedback (`pr`) from deeper campaigns (`nightly`, `release`) and the OOM-safe storage preproduction lane (`preprod_storage`).
 
+CI trigger policy for Foundry lanes:
+- `pr` is the default lane used in the main CI check job.
+- `nightly` seed matrix runs on schedule and can also be triggered manually via workflow_dispatch (`lane=nightly`, `run_seed_matrix=true`).
+- `release` seed matrix is manual-only via workflow_dispatch (`lane=release`, `run_seed_matrix=true`).
+- `preprod_storage` is manual-only via workflow_dispatch (`lane=preprod_storage`).
+
+Run the `preprod_storage` lane after storage-sensitive changes, especially:
+- changes to `AppStorage` fields/order/types or storage-related libraries,
+- facet changes that add/remove/reshape persisted state,
+- upgrade initializer changes that touch existing storage,
+- selector/cut changes that alter which facet owns storage-mutating paths.
+
 ### StorageCollision preproduction guidance (OOM-safe)
 
 `StorageCollisionInvariant` can exceed memory on some machines under `release` (`invariant.runs=8000`, `depth=250`) and get OOM-killed (exit code 137).
@@ -422,6 +434,9 @@ done
 ```
 
 This profile was calibrated to be stronger than nightly while remaining stable in this repo's current environment.
+
+Manual CI lane equivalent:
+- Trigger workflow_dispatch with `lane=preprod_storage` to run the same storage-collision invariant target in CI.
 
 Echidna lane configs:
 - PR: `security-tools/echidna/echidna.pr.yaml`
