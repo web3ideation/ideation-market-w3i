@@ -411,6 +411,10 @@ CI trigger policy for Foundry lanes:
 - `release` seed matrix is manual-only via workflow_dispatch (`lane=release`, `run_seed_matrix=true`).
 - `preprod_storage` is manual-only via workflow_dispatch (`lane=preprod_storage`).
 
+workflow_dispatch checkbox behavior (`run Foundry seed matrix jobs`):
+- For `nightly` and `release`: check the box to run the Foundry seed matrix jobs.
+- For `preprod_storage`: leave the box unchecked; this lane ignores the seed-matrix toggle and runs its dedicated storage invariant job directly.
+
 Run the `preprod_storage` lane after storage-sensitive changes, especially:
 - changes to `AppStorage` fields/order/types or storage-related libraries,
 - facet changes that add/remove/reshape persisted state,
