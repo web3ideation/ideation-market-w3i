@@ -385,64 +385,56 @@ Echidna reproducers:
 - Coverage corpus is stored in `security-tools/echidna/echidna_corpus/coverage/`.
 - `bash script/run-echidna.sh` automatically loads and replays sequences from both directories at startup.
 
-### Foundry test profiles (default + staged lanes)
+### Foundry test configuration
 
-Foundry profile lanes are configured in [foundry.toml](foundry.toml). Each lane has both a fuzz block (`[fuzz]` or `[profile.<name>.fuzz]`) and an invariant block (`[invariant]` or `[profile.<name>.invariant]`):
+Foundry config is now single-profile in [foundry.toml](foundry.toml):
 - `default` (no `FOUNDRY_PROFILE`): fuzz 10000, invariant 2000/depth 120
-- `pr`: fuzz 3000, invariant 500/depth 60
-- `nightly`: fuzz 20000, invariant 3000/depth 150
-- `release`: fuzz 50000, invariant 8000/depth 250
-- `preprod_storage`: fuzz 50000, invariant 3300/depth 150 (StorageCollision preproduction sweet spot)
 
-Run Foundry with a selected profile:
+Run standard tests with default settings:
 
 ```bash
-FOUNDRY_PROFILE=pr forge test
-FOUNDRY_PROFILE=nightly forge test --match-contract MarketFlowInvariantTest
-FOUNDRY_PROFILE=release forge test --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent"
-FOUNDRY_PROFILE=preprod_storage forge test --match-path test/StorageCollisionTest.t.sol --match-test '^invariant_'
+forge test
 ```
 
-Note: these profile blocks are intentional (not obsolete). They separate fast feedback (`pr`) from deeper campaigns (`nightly`, `release`), while keeping an OOM-safe storage preproduction profile (`preprod_storage`) used for local storage campaigns and the release lane storage-collision check.
+### CI policy (single lane)
 
-CI lane quick reference:
-- `pr`: default main CI check lane.
-- `nightly`: scheduled seed matrix lane; manual trigger also supported via workflow_dispatch (`lane=nightly`, `run_seed_matrix=true`).
-- `release`: manual-only full pre-release lane via workflow_dispatch (`lane=release`).
+CI runs one always-on lane (push + pull request) via [.github/workflows/ci.yml](.github/workflows/ci.yml):
+- `forge fmt` (required on PR, non-blocking on push)
+- `forge build --sizes`
+- selector clash check
+- `forge test -vvv`
+- gas snapshot regression check
 
-Release lane includes all heavy checks in one run:
-- Foundry release seed matrix,
-- Foundry storage-collision invariants (preprod_storage profile target),
-- Echidna release lane.
+### Optional local deep campaigns
 
-workflow_dispatch checkbox behavior (`run Foundry seed matrix jobs`):
-- `nightly`: check the box to run Foundry nightly seed matrix jobs.
-- `release`: checkbox is ignored; release always runs its Foundry release seed matrix.
+Deeper or longer campaigns are run locally (not in CI). Use explicit knobs per command instead of profile lanes.
 
-Run `release` before go-live and after storage-sensitive changes, especially:
-- changes to `AppStorage` fields/order/types or storage-related libraries,
-- facet changes that add/remove/reshape persisted state,
-- upgrade initializer changes that touch existing storage,
-- selector/cut changes that alter which facet owns storage-mutating paths.
-
-### StorageCollision preproduction guidance (OOM-safe)
-
-`StorageCollisionInvariant` can exceed memory on some machines under `release` (`invariant.runs=8000`, `depth=250`) and get OOM-killed (exit code 137).
-
-Use the dedicated `preprod_storage` profile for storage preproduction campaigns:
+Examples:
 
 ```bash
+# Higher fuzz campaign for selected tests
+forge test \
+  --match-test "testFuzz_OnlyOwnerCanPause|testFuzz_PauseStateConsistent" \
+  --fuzz-runs 50000 \
+  --fuzz-seed 424242
+
+# Higher invariant campaign
+forge test \
+  --match-contract MarketFlowInvariantTest \
+  --invariant-runs 8000 \
+  --invariant-depth 250 \
+  --fuzz-seed 424242
+
+# Storage collision focused campaign
 for s in 3101 3102 3103 3104 3105; do
-  FOUNDRY_PROFILE=preprod_storage \
-    forge test \
-      --match-path test/StorageCollisionTest.t.sol \
-      --match-test '^invariant_' \
-      --fuzz-seed "$s"
+  forge test \
+    --match-path test/StorageCollisionTest.t.sol \
+    --match-test '^invariant_' \
+    --invariant-runs 3300 \
+    --invariant-depth 150 \
+    --fuzz-seed "$s"
 done
 ```
-
-This profile was calibrated to be stronger than nightly while remaining stable in this repo's current environment.
-In CI, the same storage-collision invariant target is included in the `release` lane.
 
 Echidna lane configs:
 - PR: `security-tools/echidna/echidna.pr.yaml`
@@ -464,22 +456,22 @@ ECHIDNA_CONFIG=echidna.nightly.yaml bash script/run-echidna.sh --format text
 ECHIDNA_CONFIG=echidna.release.yaml bash script/run-echidna.sh --format text
 ```
 
-### Multi-seed campaign matrix
+### Multi-seed campaign matrix (local)
 
-Seed matrix policy:
-- Nightly: at least 10 distinct seeds.
-- Pre-release: at least 20 distinct seeds.
+Seed matrix policy (local campaigns):
+- Medium campaign: at least 10 distinct seeds.
+- Deep campaign: at least 20 distinct seeds.
 - Save failing seeds and keep generated reproducers under `security-tools/echidna/echidna_corpus/reproducers/`.
 
 Suggested Foundry seed loops:
 
 ```bash
 for s in 1001 1002 1003 1004 1005 1006 1007 1008 1009 1010; do
-  FOUNDRY_PROFILE=nightly forge test --fuzz-seed "$s"
+  forge test --fuzz-seed "$s"
 done
 
 for s in 2001 2002 2003 2004 2005 2006 2007 2008 2009 2010 2011 2012 2013 2014 2015 2016 2017 2018 2019 2020; do
-  FOUNDRY_PROFILE=release forge test --fuzz-seed "$s"
+  forge test --fuzz-runs 50000 --invariant-runs 8000 --invariant-depth 250 --fuzz-seed "$s"
 done
 ```
 
