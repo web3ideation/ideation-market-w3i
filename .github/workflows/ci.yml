@@ -44,17 +44,11 @@ jobs:
         run: |
           forge --version
 
-      - name: Run Forge fmt (required on PR)
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Run Forge fmt
+        continue-on-error: ${{ github.event_name != 'pull_request' }}
         run: |
           forge fmt --check
         id: fmt
-
-      - name: Run Forge fmt (non-blocking on push)
-        if: ${{ github.event_name != 'pull_request' }}
-        run: |
-          forge fmt --check || true
-        id: fmtPush
 
       - name: Run Forge build
         run: |
