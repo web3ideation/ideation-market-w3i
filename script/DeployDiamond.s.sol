@@ -26,15 +26,16 @@ import {IERC173} from "../src/interfaces/IERC173.sol";
 
 /// @title DeployDiamond (Foundry script)
 /// @notice Deploys the IdeationMarket Diamond and all facets, then initializes state via `DiamondInit.init`.
-/// @dev Run with Foundry (e.g., `forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url <URL> --broadcast`).
-/// Uses `vm.startBroadcast()`; the tx signer becomes the initial diamond owner.
+/// @dev Uses keystore signing via CLI (`--account ...`) with `vm.startBroadcast()`
+/// and reads `DEPLOYER_ADDRESS` to set the initial diamond owner.
 /// The script performs an ERC-8109 `upgradeDiamond` to add facet groups (Loupe, Ownership, Market, Collection WL,
 /// Buyer WL, Getter, Currency WL, Version, Pause) on top of the initially deployed upgrade facet, then asserts
 /// there are exactly 10 facet addresses.
 ///
-/// To deploy run this command: source .env && forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url $SEPOLIA_RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY
+/// To deploy run this command: source .env && export DEPLOYER_ADDRESS=$(cast wallet address --account mainnetDevKey)
+/// && forge script script/DeployDiamond.s.sol:DeployDiamond --rpc-url $MAINNET_RPC_URL --account mainnetDevKey --sender $DEPLOYER_ADDRESS --broadcast --verify --etherscan-api-key "$ETHERSCAN_API_KEY"
 ///
-/// @custom:security The script sets the initial owner from the broadcast EOA.
+/// @custom:security Ensure `DEPLOYER_ADDRESS` matches the keystore account used to broadcast.
 contract DeployDiamond is Script {
     /// @notice Innovation/marketplace fee rate used during initialization.
     /// @dev Denominator is 100_000 (e.g., 1_000 = 1%). Passed to `DiamondInit.init`.
@@ -53,10 +54,10 @@ contract DeployDiamond is Script {
     /// Currency WL, Version, Pause, Upgrade).
     /// Emits Foundry `console.log` outputs with deployed addresses for traceability.
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
-        vm.startBroadcast(deployerPrivateKey);
-
-        address deployer = vm.addr(deployerPrivateKey);
+        // Keystore-only mode: signer comes from CLI `--account`, owner comes from DEPLOYER_ADDRESS.
+        address deployer = vm.envAddress("DEPLOYER_ADDRESS");
+        require(deployer != address(0), "DEPLOYER_ADDRESS not set");
+        vm.startBroadcast();
 
         // Deploy Contracts
         DiamondInit diamondInit = new DiamondInit();
