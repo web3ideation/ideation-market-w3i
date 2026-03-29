@@ -52,3 +52,7 @@ dist/
 
 #ignore etherscan
 /etherscan/
+
+#ignore anvil state files
+anvil-auto-state.json
+
