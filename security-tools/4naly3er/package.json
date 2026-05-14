@@ -4,7 +4,7 @@
   "description": "Static Solidity Analyzer",
   "main": "index.ts",
   "author": "picodes",
-  "license": "Unlicensed",
+  "license": "GPL-3.0-only",
   "private": true,
   "scripts": {
     "analyze": "ts-node src/index.ts"
