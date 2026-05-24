@@ -41,6 +41,7 @@ Initial mock support covers exactly:
 - mUSDT
 
 The deployed mock ERC20s already exist in this repo and are currently deployed via `script/DeployMocksAndMint.s.sol`.
+The fixed-rate mock swap is deployed separately via `script/DeployMockSwap.s.sol` using those token addresses.
 
 ## Onchain mock scope
 Build one simple fixed-rate swap contract for:
@@ -182,18 +183,18 @@ Required helper logic:
 - if allowance is nonzero but insufficient, first approve `0`, wait for confirmation, then approve the required amount
 
 ## Step-by-step execution
-1. Freeze API contract
+1. [x] Freeze API contract
 - Write exact request params and response fields for each supported endpoint.
 - Do not build beyond the subset the frontend actually uses.
 - Explicitly document which response fields are required by the frontend versus optional compatibility fields.
 
-2. Implement mock swap contract
+2. [x] Implement mock swap contract
 - Add fixed-rate config.
 - Add quote and swap methods.
 - Handle ETH sentinel translation offchain, not in the contract.
 - Add deterministic fee configuration.
 
-3. Add Foundry tests
+3. [x] Add Foundry tests
 - decimals handling
 - min return checks
 - unsupported pairs
@@ -202,56 +203,61 @@ Required helper logic:
 - fee application correctness
 - zero-first approval integration guidance for mUSDT flows where relevant
 
-4. Add deploy script
-- deploy mock swap contract
-- optionally seed token and ETH liquidity
-- print backend-ready env values
-- print token addresses and contract addresses in a backend-friendly env format
+4. [x] Add deploy scripts
+- keep `script/DeployMocksAndMint.s.sol` scoped to mock token deployment and recipient minting
+- use `script/DeployMockSwap.s.sol` to deploy the mock swap contract
+- optionally seed token and ETH liquidity in the swap deploy step
+- print backend-ready env values from the swap deploy step
 
-5. Initialize backend app
+5. [x] Initialize backend app
 - Node + TypeScript or plain Node
 - env loading
 - health endpoint
 - token registry and rate table config
 - current local runtime baseline is Node.js 20.10.0 and npm 10.2.3, which is compatible with this backend work
 
-6. Implement Spot Price mock
+6. [x] Implement Spot Price mock
 - support both GET and POST variants if needed
 - return prices from the same rate table used by swap logic
 - support the listing-grid conversion flow efficiently for many listings / few unique currencies
 
-7. Implement Classic Quote mock
+7. [x] Implement Classic Quote mock
 - accept `src`, `dst`, `amount`
 - return deterministic `dstAmount`
 - include only the fields the frontend needs first
 - treat the result as indicative only, not execution-locked
 
-8. Implement Classic Swap mock
+8. [x] Implement Classic Swap mock
 - accept `src`, `dst`, `amount`, `from`, `slippage`
 - build tx payload to call the mock swap contract
 - set `value` correctly for ETH input
 - make sure max input and minimum acceptable output protections are represented consistently
 
-9. Implement approve helpers
+9. [x] Implement approve helpers
 - spender must be the mock swap contract in mock mode
 - handle zero-first approval flow for mUSDT in frontend/backend guidance
 
-10. Wire frontend to backend only
+10. [ ] Wire frontend to backend only
 - listing prices from Spot Price endpoint
 - buy execution from Quote and Swap endpoints
 - never call 1inch directly from the browser
+- Blocked in this workspace because the frontend lives in a separate repo owned by the FE.
+- This step ends with a concrete handoff description to the FE rather than a code change in this repo.
 
-11. Add production proxy mode
+11. [x] Add production proxy mode
 - same endpoints
 - same backend base path
 - real 1inch behind the service
 - requote on final confirmation before returning final swap construction
+ - Basic pass-through is implemented; live upstream validation still requires a real 1inch API key.
 
-12. Deploy backend
+12. [ ] Deploy backend
 - local first
 - then production on the existing IONOS-managed environment used by the team
+- Local validation is complete.
+- Production rollout in IONOS is still pending confirmation from the FE on the target runtime and deployment shape.
 
-13. Wrapper-contract phase (follow-up, not required for first delivery)
+13. [ ] Wrapper-contract phase (follow-up, not required for first delivery)
 - design a wrapper / settlement contract for max-spend plus refund behavior
 - use it to improve the exact-purchase UX when exact-output routing is unavailable
 
@@ -279,3 +285,14 @@ Recommended production direction:
 - After each step, validate before widening scope.
 - Do not expand to unsupported 1inch endpoints unless the frontend needs them.
 - Treat this file as the current source of truth for agreed architecture decisions.
+
+## Final coordination items
+- The frontend integration cannot be completed in this repo because the frontend lives in a separate repository.
+- Before closing this implementation phase, send the FE a handoff description for the frontend changes that are required.
+- That handoff should state that the frontend must call this backend only and must never call 1inch directly from the browser.
+- That handoff should state that listing grids must use the Spot Price endpoints only, with local conversion for visible listings.
+- That handoff should state that checkout preview must use `GET /swap/v6.1/:chainId/quote` only for the selected listing.
+- That handoff should state that final execution must call `GET /swap/v6.1/:chainId/swap` immediately before wallet submission.
+- That handoff should state that ERC20 approval flow must use the backend allowance and approve helper endpoints, with zero-first handling for `mUSDT` when allowance is nonzero but insufficient.
+- That handoff should include the backend base URL per environment once deployment details are finalized.
+- IONOS production deployment details remain pending FE confirmation and should not be treated as final until that confirmation arrives.

@@ -341,6 +341,8 @@ This script deploys and installs `DummyUpgradeFacet` as a minimal upgrade target
 
 For local/testnet convenience there is [script/DeployMocksAndMint.s.sol](script/DeployMocksAndMint.s.sol).
 
+If you also want the fixed-rate swap backend target, deploy it separately with [script/DeployMockSwap.s.sol](script/DeployMockSwap.s.sol) after the mock tokens are deployed.
+
 ---
 
 ## Tests
