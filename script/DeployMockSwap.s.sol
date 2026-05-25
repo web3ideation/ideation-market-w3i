@@ -16,12 +16,14 @@ import {MockUSDTLike_6} from "../src/mocks/MockUSDTLike_6.sol";
 /// @dev Expects token addresses in env vars so token deployment stays separate from swap deployment.
 contract DeployMockSwap is Script {
     address internal constant NATIVE_SENTINEL = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    uint256 internal constant DEFAULT_ETH_LIQUIDITY = 0.5 ether;
 
-    uint256 internal constant LIQUIDITY_18 = 5_000_000;
-    uint256 internal constant LIQUIDITY_6 = 10_000_000;
-    uint256 internal constant LIQUIDITY_8 = 2_500;
-    uint256 internal constant LIQUIDITY_2 = 5_000_000;
-    uint256 internal constant LIQUIDITY_ETH = 1_000 ether;
+    // Seed oversized mock balances so the backend can quote and swap without
+    // frequently tripping over test liquidity ceilings.
+    uint256 internal constant LIQUIDITY_18 = 1_000_000_000;
+    uint256 internal constant LIQUIDITY_6 = 1_000_000_000;
+    uint256 internal constant LIQUIDITY_8 = 1_000_000;
+    uint256 internal constant LIQUIDITY_2 = 1_000_000_000;
 
     uint256 internal constant USD_SCALE = 1e8;
     uint256 internal constant ETH_USD = 2_500 * USD_SCALE;
@@ -32,7 +34,7 @@ contract DeployMockSwap is Script {
     uint256 internal constant USDT_USD = 1 * USD_SCALE;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envUint("DEV_PRIVATE_KEY");
+        uint256 ethLiquidity = vm.envOr("MOCK_SWAP_ETH_LIQUIDITY_WEI", uint256(DEFAULT_ETH_LIQUIDITY));
 
         MockERC20_18 t18 = MockERC20_18(vm.envAddress("MOCK_TOKEN_MERC20"));
         MockUSDC_6 usdc = MockUSDC_6(vm.envAddress("MOCK_TOKEN_MUSDC"));
@@ -40,7 +42,7 @@ contract DeployMockSwap is Script {
         MockEURS_2 eurs = MockEURS_2(vm.envAddress("MOCK_TOKEN_MEURS"));
         MockUSDTLike_6 usdt = MockUSDTLike_6(vm.envAddress("MOCK_TOKEN_MUSDT"));
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         MockFixedRateSwap swapper = new MockFixedRateSwap();
 
@@ -50,7 +52,7 @@ contract DeployMockSwap is Script {
         eurs.mint(address(swapper), LIQUIDITY_2 * 1e2);
         usdt.mint(address(swapper), LIQUIDITY_6 * 1e6);
 
-        (bool funded,) = payable(address(swapper)).call{value: LIQUIDITY_ETH}("");
+        (bool funded,) = payable(address(swapper)).call{value: ethLiquidity}("");
         require(funded, "Failed to seed ETH liquidity");
 
         _configureAllPairs(swapper, address(t18), address(usdc), address(wbtc), address(eurs), address(usdt));
@@ -64,6 +66,7 @@ contract DeployMockSwap is Script {
         console.log("MOCK_TOKEN_MWBTC:", address(wbtc));
         console.log("MOCK_TOKEN_MEURS:", address(eurs));
         console.log("MOCK_TOKEN_MUSDT:", address(usdt));
+        console.log("MOCK_SWAP_FUNDED_ETH_WEI:", ethLiquidity);
 
         vm.stopBroadcast();
     }

@@ -243,6 +243,9 @@ Required helper logic:
 - never call 1inch directly from the browser
 - Blocked in this workspace because the frontend lives in a separate repo owned by the FE.
 - This step ends with a concrete handoff description to the FE rather than a code change in this repo.
+- Current handoff document: `mock-api/FRONTEND_HANDOFF.md`.
+- [x] FE handoff draft created in `mock-api/FRONTEND_HANDOFF.md`.
+- [ ] Actual frontend rewiring still has to happen in the separate FE repository.
 
 11. [x] Add production proxy mode
 - same endpoints
@@ -252,10 +255,12 @@ Required helper logic:
  - Basic pass-through is implemented; live upstream validation still requires a real 1inch API key.
 
 12. [ ] Deploy backend
-- local first
-- then production on the existing IONOS-managed environment used by the team
+- [x] local first
+- [ ] production on the existing IONOS-managed environment used by the team
 - Local validation is complete.
+- Local `.env`-based startup is now implemented and documented in `mock-api/README.md`.
 - Production rollout in IONOS is still pending confirmation from the FE on the target runtime and deployment shape.
+- Live production proxy validation against real 1inch still requires a real API key and final deployment target details.
 
 13. [ ] Wrapper-contract phase (follow-up, not required for first delivery)
 - design a wrapper / settlement contract for max-spend plus refund behavior
@@ -289,6 +294,7 @@ Recommended production direction:
 ## Final coordination items
 - The frontend integration cannot be completed in this repo because the frontend lives in a separate repository.
 - Before closing this implementation phase, send the FE a handoff description for the frontend changes that are required.
+- The current draft handoff is in `mock-api/FRONTEND_HANDOFF.md`.
 - That handoff should state that the frontend must call this backend only and must never call 1inch directly from the browser.
 - That handoff should state that listing grids must use the Spot Price endpoints only, with local conversion for visible listings.
 - That handoff should state that checkout preview must use `GET /swap/v6.1/:chainId/quote` only for the selected listing.
@@ -296,3 +302,5 @@ Recommended production direction:
 - That handoff should state that ERC20 approval flow must use the backend allowance and approve helper endpoints, with zero-first handling for `mUSDT` when allowance is nonzero but insufficient.
 - That handoff should include the backend base URL per environment once deployment details are finalized.
 - IONOS production deployment details remain pending FE confirmation and should not be treated as final until that confirmation arrives.
+- There are no further backend code changes required in this repo before sending the FE the current handoff.
+- The remaining items before full FE integration are finalized backend base URLs, production deployment details, and the actual frontend code changes in the separate FE repo.

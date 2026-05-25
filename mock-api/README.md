@@ -5,6 +5,7 @@ This folder will contain the backend service that exposes a frontend-compatible 
 Primary docs:
 - `API_CONTRACT.md`: frozen frontend-facing request and response contract for the supported subset
 - `IMPLEMENTATION_PLAN.md`: execution order and design notes for building the backend
+- `FRONTEND_HANDOFF.md`: concrete FE integration brief for the separate frontend repository
 
 Planned responsibilities:
 - Mock `Spot Price API` responses for Sepolia using fixed rates
@@ -37,6 +38,51 @@ Quick start:
 - fill the mock token addresses from the token deploy output and `MOCK_SWAP_ADDRESS` from the swap deploy output
 - run `yarn install`
 - run `yarn dev`
+
+Local deployment flow:
+1. Deploy the mock tokens:
+
+	```bash
+	forge script script/DeployMocksAndMint.s.sol:DeployMocksAndMint \
+	  --rpc-url "$SEPOLIA_RPC_URL" --broadcast
+	```
+
+2. Export the deployed token addresses and deploy the mock swap:
+
+	```bash
+	export MOCK_TOKEN_MERC20=0x...
+	export MOCK_TOKEN_MUSDC=0x...
+	export MOCK_TOKEN_MWBTC=0x...
+	export MOCK_TOKEN_MEURS=0x...
+	export MOCK_TOKEN_MUSDT=0x...
+
+	forge script script/DeployMockSwap.s.sol:DeployMockSwap \
+	  --rpc-url "$SEPOLIA_RPC_URL" --broadcast
+	```
+
+3. Copy `.env.example` to `.env` and fill in:
+	- `MOCK_RPC_URL`
+	- `MOCK_SWAP_ADDRESS`
+	- `MOCK_TOKEN_MERC20`
+	- `MOCK_TOKEN_MUSDC`
+	- `MOCK_TOKEN_MWBTC`
+	- `MOCK_TOKEN_MEURS`
+	- `MOCK_TOKEN_MUSDT`
+
+4. Install and start the backend:
+
+	```bash
+	yarn install
+	yarn dev
+	```
+
+5. Verify the local process:
+
+	```bash
+	curl http://127.0.0.1:3000/healthz
+	```
+
+The app loads `.env` automatically at runtime.
 
 Deployment target options:
 - local dev with `yarn dev`
