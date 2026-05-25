@@ -87,3 +87,30 @@ The app loads `.env` automatically at runtime.
 Deployment target options:
 - local dev with `yarn dev`
 - production deployment on an existing IONOS-managed Node/VPS environment
+
+Docker deployment:
+1. Build the image:
+
+	```bash
+	docker build -t ideation-market-mock-api ./mock-api
+	```
+
+2. Run it with the backend env file:
+
+	```bash
+	docker run --rm \
+	  --env-file mock-api/.env \
+	  -p 3000:3000 \
+	  ideation-market-mock-api
+	```
+
+3. Verify the containerized service:
+
+	```bash
+	curl http://127.0.0.1:3000/healthz
+	```
+
+Notes:
+- Do not bake secrets into the image.
+- Provide runtime configuration through environment variables or the deployment platform's secret mechanism.
+- The Docker image is now the expected production packaging format for the IONOS deployment path.

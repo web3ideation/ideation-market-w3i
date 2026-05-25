@@ -259,7 +259,9 @@ Required helper logic:
 - [ ] production on the existing IONOS-managed environment used by the team
 - Local validation is complete.
 - Local `.env`-based startup is now implemented and documented in `mock-api/README.md`.
-- Production rollout in IONOS is still pending confirmation from the FE on the target runtime and deployment shape.
+- The FE confirmed the current IONOS deployment shape is Docker.
+- Docker deployment assets now exist in `mock-api/Dockerfile` and `mock-api/.dockerignore`.
+- Production rollout in IONOS is no longer blocked on runtime-shape uncertainty; it is now blocked on actual container deployment, final backend base URL, and production secrets.
 - Live production proxy validation against real 1inch still requires a real API key and final deployment target details.
 
 13. [ ] Wrapper-contract phase (follow-up, not required for first delivery)
@@ -283,7 +285,7 @@ Local machine status already verified:
 
 Recommended production direction:
 - deploy this backend into the team's existing IONOS-managed environment rather than introducing a separate hosting platform unless the team explicitly wants that
-- coordinate with the FullstackEngineer on whether the target environment runs Node directly, behind PM2/systemd, behind Nginx, or via containers
+- current confirmed target shape: Docker on the existing IONOS-managed environment
 
 ## Notes for future agent sessions
 - Start from this file and execute one numbered step at a time.
@@ -301,6 +303,6 @@ Recommended production direction:
 - That handoff should state that final execution must call `GET /swap/v6.1/:chainId/swap` immediately before wallet submission.
 - That handoff should state that ERC20 approval flow must use the backend allowance and approve helper endpoints, with zero-first handling for `mUSDT` when allowance is nonzero but insufficient.
 - That handoff should include the backend base URL per environment once deployment details are finalized.
-- IONOS production deployment details remain pending FE confirmation and should not be treated as final until that confirmation arrives.
+- IONOS uses a Docker-based deployment path according to the FE.
 - There are no further backend code changes required in this repo before sending the FE the current handoff.
-- The remaining items before full FE integration are finalized backend base URLs, production deployment details, and the actual frontend code changes in the separate FE repo.
+- The remaining items before full FE integration are finalized backend base URLs, actual container rollout on IONOS, the real 1inch API key, and the frontend code changes in the separate FE repo.
