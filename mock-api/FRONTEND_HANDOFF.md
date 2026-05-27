@@ -86,11 +86,13 @@ the same mechanism the current FE project already uses today.
 Do not introduce a second secret-handling pattern just for this integration.
 
 Examples:
-- local mock backend base URL: `TBD`
-- deployed mock backend base URL: `TBD`
-- production backend base URL: `TBD`
+- local mock backend base URL: `http://127.0.0.1:3000`
+- deployed mock backend base URL: `TBD` after deployment is finalized
+- production backend base URL: `TBD` after deployment is finalized
 
 These values should be provided once backend deployment is finalized.
+
+If the FE and backend are served from different origins, the backend deployment must set `CORS_ALLOWED_ORIGINS` to the FE origin list.
 
 ## Notes
 

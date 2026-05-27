@@ -9,6 +9,8 @@ const mockConfig: MockConfig = {
   mode: "mock",
   port: 0,
   oneInchBaseUrl: "https://api.1inch.dev",
+  corsAllowAll: false,
+  corsAllowedOrigins: [],
   chainId: "11155111",
   chainIdNumber: 11155111,
   rpcUrl: "http://127.0.0.1:8545",
@@ -21,6 +23,8 @@ const productionConfig: ProductionConfig = {
   mode: "production",
   port: 0,
   oneInchBaseUrl: "https://api.1inch.dev",
+  corsAllowAll: false,
+  corsAllowedOrigins: [],
   apiKey: "test-api-key",
 };
 
@@ -36,6 +40,49 @@ test("GET /healthz returns mock runtime metadata", async () => {
       mode: "mock",
       chainId: "11155111",
     });
+  });
+});
+
+test("mock mode allows localhost browser origins by default", async () => {
+  const app = createApp(mockConfig, { mockService: createMockService() });
+
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/healthz`, {
+      headers: { Origin: "http://localhost:5173" },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("access-control-allow-origin"),
+      "http://localhost:5173",
+    );
+  });
+});
+
+test("production mode only allows configured browser origins", async () => {
+  const app = createApp({
+    ...productionConfig,
+    corsAllowedOrigins: ["https://app.example.com"],
+  });
+
+  await withServer(app, async (baseUrl) => {
+    const allowedResponse = await fetch(`${baseUrl}/healthz`, {
+      headers: { Origin: "https://app.example.com" },
+    });
+    assert.equal(allowedResponse.status, 200);
+    assert.equal(
+      allowedResponse.headers.get("access-control-allow-origin"),
+      "https://app.example.com",
+    );
+
+    const deniedResponse = await fetch(`${baseUrl}/healthz`, {
+      headers: { Origin: "https://evil.example.com" },
+    });
+    assert.equal(deniedResponse.status, 200);
+    assert.equal(
+      deniedResponse.headers.get("access-control-allow-origin"),
+      null,
+    );
   });
 });
 

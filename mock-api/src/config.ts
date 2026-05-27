@@ -22,6 +22,8 @@ interface BaseConfig {
   mode: RuntimeMode;
   port: number;
   oneInchBaseUrl: string;
+  corsAllowAll: boolean;
+  corsAllowedOrigins: string[];
 }
 
 export interface MockConfig extends BaseConfig {
@@ -45,12 +47,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const mode = parseMode(env.API_MODE);
   const port = parseInteger(env.PORT ?? "3000", "PORT");
   const oneInchBaseUrl = env.ONEINCH_BASE_URL ?? "https://api.1inch.dev";
+  const { corsAllowAll, corsAllowedOrigins } = parseCorsConfig(
+    env.CORS_ALLOWED_ORIGINS,
+  );
 
   if (mode === "production") {
     return {
       mode,
       port,
       oneInchBaseUrl,
+      corsAllowAll,
+      corsAllowedOrigins,
       apiKey: requireEnv(env.ONEINCH_API_KEY, "ONEINCH_API_KEY"),
     };
   }
@@ -61,6 +68,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     mode,
     port,
     oneInchBaseUrl,
+    corsAllowAll,
+    corsAllowedOrigins,
     chainId,
     chainIdNumber: parseInteger(chainId, "MOCK_CHAIN_ID"),
     rpcUrl: requireEnv(env.MOCK_RPC_URL, "MOCK_RPC_URL"),
@@ -187,4 +196,27 @@ function parseInteger(value: string, name: string): number {
   }
 
   return Number.parseInt(value, 10);
+}
+
+function parseCorsConfig(value: string | undefined): {
+  corsAllowAll: boolean;
+  corsAllowedOrigins: string[];
+} {
+  const normalized = value?.trim();
+
+  if (!normalized) {
+    return { corsAllowAll: false, corsAllowedOrigins: [] };
+  }
+
+  if (normalized === "*") {
+    return { corsAllowAll: true, corsAllowedOrigins: [] };
+  }
+
+  return {
+    corsAllowAll: false,
+    corsAllowedOrigins: normalized
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  };
 }

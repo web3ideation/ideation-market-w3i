@@ -1,5 +1,6 @@
 import "dotenv/config";
 
+import cors, { type CorsOptions } from "cors";
 import express, {
   type NextFunction,
   type Request,
@@ -35,7 +36,9 @@ export function createApp(
       ? (options.mockService ?? new MockApiService(config as MockConfig))
       : null;
   const fetchImpl = options.fetchImpl ?? fetch;
+  const corsOptions = createCorsOptions(config);
 
+  app.use(cors(corsOptions));
   app.use(express.json());
 
   app.get("/healthz", (_req, res) => {
@@ -283,6 +286,40 @@ function getOptionalQueryString(req: Request, key: string): string | undefined {
 
 function getBooleanCompatibilityFlag(req: Request, key: string): boolean {
   return req.query[key] === "true";
+}
+
+function createCorsOptions(config: AppConfig): CorsOptions {
+  return {
+    origin(origin, callback) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (config.corsAllowAll || config.corsAllowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      if (config.mode === "mock" && isLocalOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, false);
+    },
+  };
+}
+
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const hostname = new URL(origin).hostname.replace(/^\[|\]$/g, "");
+    return (
+      hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isMainModule(moduleUrl: string): boolean {

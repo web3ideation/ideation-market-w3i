@@ -30,6 +30,7 @@ Current scaffold:
 - `GET /healthz` for local runtime checks
 - Mock-mode implementations for the frozen Spot Price, Quote, Swap, and approve helper routes
 - Production-mode pass-through for the same routes using server-side 1inch auth
+- CORS support for browser-based FE integration, with explicit allowlists for deployed cross-origin setups
 
 Quick start:
 - copy `.env.example` to `.env`
@@ -68,6 +69,7 @@ Local deployment flow:
 	- `MOCK_TOKEN_MWBTC`
 	- `MOCK_TOKEN_MEURS`
 	- `MOCK_TOKEN_MUSDT`
+	- `CORS_ALLOWED_ORIGINS` if the FE runs on a different origin than the backend
 
 4. Install and start the backend:
 
@@ -83,6 +85,11 @@ Local deployment flow:
 	```
 
 The app loads `.env` automatically at runtime.
+
+CORS behavior:
+- In mock mode, localhost browser origins are allowed by default for local FE development.
+- In deployed cross-origin setups, set `CORS_ALLOWED_ORIGINS` to a comma-separated list of FE origins.
+- Use `CORS_ALLOWED_ORIGINS=*` only if you intentionally want the backend callable from any browser origin.
 
 Deployment target options:
 - local dev with `yarn dev`
