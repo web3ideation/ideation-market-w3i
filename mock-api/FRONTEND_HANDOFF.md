@@ -97,6 +97,6 @@ If the FE and backend are served from different origins, the backend deployment 
 ## Notes
 
 - Native ETH externally uses the sentinel `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`.
-- The backend handles translation between that sentinel and internal native-token handling.
+- The backend handles translation between that sentinel and internal native-token handling (address(0)).
 - The frontend should not add separate 1inch auth handling; production auth is injected server-side by this backend.
 - The 1inch API key must remain server-side only and must never be exposed in browser code, public env files, or client bundles.
