@@ -49,7 +49,6 @@ contract MockFixedRateSwap {
     event TokenWithdrawn(address indexed token, address indexed to, uint256 amount);
     event ETHWithdrawn(address indexed to, uint256 amount);
 
-    bytes4 private constant APPROVE_SELECTOR = 0x095ea7b3;
     bytes4 private constant TRANSFER_SELECTOR = 0xa9059cbb;
     bytes4 private constant TRANSFER_FROM_SELECTOR = 0x23b872dd;
 
@@ -127,9 +126,10 @@ contract MockFixedRateSwap {
             uint256 availableETH = address(this).balance;
             if (availableETH < amountOut) {
                 revert MockFixedRateSwap__InsufficientLiquidity(address(0), amountOut, availableETH);
+            } else {
+                (bool success,) = recipient.call{value: amountOut}("");
+                if (!success) revert MockFixedRateSwap__ETHTransferFailed(recipient, amountOut);
             }
-            (bool success,) = recipient.call{value: amountOut}("");
-            if (!success) revert MockFixedRateSwap__ETHTransferFailed(recipient, amountOut);
         } else {
             uint256 availableToken = _balanceOf(dstToken, address(this));
             if (availableToken < amountOut) {
@@ -143,29 +143,31 @@ contract MockFixedRateSwap {
 
     function withdrawToken(address token, address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert MockFixedRateSwap__InvalidAddress();
+        uint256 availableToken = _balanceOf(token, address(this));
+        if (availableToken < amount) {
+            revert MockFixedRateSwap__InsufficientLiquidity(token, amount, availableToken);
+        }
         _safeTransfer(token, to, amount);
         emit TokenWithdrawn(token, to, amount);
     }
 
     function withdrawETH(address payable to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert MockFixedRateSwap__InvalidAddress();
+        uint256 availableETH = address(this).balance;
+        if (availableETH < amount) {
+            revert MockFixedRateSwap__InsufficientLiquidity(address(0), amount, availableETH);
+        }
         (bool success,) = to.call{value: amount}("");
         if (!success) revert MockFixedRateSwap__ETHTransferFailed(to, amount);
         emit ETHWithdrawn(to, amount);
     }
 
-    function spender() external view returns (address) {
-        return address(this);
-    }
+    function availableLiquidity(address token) external view returns (uint256 balance) {
+        if (token == address(0)) {
+            return address(this).balance;
+        }
 
-    function buildApproveCall(uint256 amount)
-        external
-        view
-        returns (address target, bytes memory data, uint256 value)
-    {
-        target = address(this);
-        data = abi.encodeWithSelector(APPROVE_SELECTOR, address(this), amount);
-        value = 0;
+        return _balanceOf(token, address(this));
     }
 
     function _balanceOf(address token, address account) internal view returns (uint256 balance) {

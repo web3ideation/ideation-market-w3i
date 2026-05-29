@@ -177,4 +177,9 @@ contract MockFixedRateSwapTest is Test {
         assertEq(usdc.balanceOf(treasury), treasuryBefore + withdrawAmount);
         assertEq(treasury.balance, 1 ether);
     }
+
+    function testAvailableLiquidityReturnsContractBalances() public view {
+        assertEq(swap.availableLiquidity(address(0)), address(swap).balance);
+        assertEq(swap.availableLiquidity(address(usdc)), usdc.balanceOf(address(swap)));
+    }
 }
